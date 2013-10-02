@@ -21,7 +21,7 @@ APP_ID_NETFLIX = "Netflix"
 APP_ID_TICTACTOE = "TicTacToe"
 APP_ID_GOOGLE_MUSIC = "GoogleMusic"
 APP_ID_PLAY_MOVIES = "PlayMovies"
-
+APP_ID_HULU_PLUS = "Hulu_Plus"
 
 
 def start_app(host, app_id, data=None):
