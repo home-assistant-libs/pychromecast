@@ -1,13 +1,17 @@
-import pychromecast
+"""
+Examples of how PyChromecast can be used.
+"""
+
 import time
+
+from . import pychromecast
 
 host = "192.168.1.120"
 
-# Start the ChromeCast on the home screen so
-# the example makes more sense.
+# Switch the ChromeCast to the home screen..
 pychromecast.quit_app(host)
 
-# Give it some time
+# .. and give it some time to do so.
 time.sleep(4)
 
 # Example using the class
