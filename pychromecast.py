@@ -22,6 +22,7 @@ APP_ID_TICTACTOE = "TicTacToe"
 APP_ID_GOOGLE_MUSIC = "GoogleMusic"
 APP_ID_PLAY_MOVIES = "PlayMovies"
 APP_ID_HULU_PLUS = "Hulu_Plus"
+# TODO: add Pandora, HBO
 
 
 def start_app(host, app_id, data=None):
@@ -30,9 +31,10 @@ def start_app(host, app_id, data=None):
         If your TV is not on will turn it on unless app_id == APP_ID_HOME. """
 
     if data is None:
-        data = {"":""}
+        data = {"": ""}
 
     CC_SESSION.post(_craft_url(host, app_id), data=data)
+
 
 def quit_app(host, app_id=None):
     """ Quits specified application if it is running.
@@ -43,18 +45,21 @@ def quit_app(host, app_id=None):
 
     CC_SESSION.delete(_craft_url(host, app_id))
 
+
 def play_youtube_video(host, video_id):
     """ Starts the YouTube app if it is not running and plays
         specified video. """
 
     start_app(host, APP_ID_YOUTUBE, {"v": video_id})
 
+
 def play_youtube_playlist(host, playlist_id):
     """ Starts the YouTube app if it is not running and plays
         specified playlist. """
 
     start_app(host, APP_ID_YOUTUBE,
-                {"listType":"playlist", "list":playlist_id})
+              {"listType": "playlist", "list": playlist_id})
+
 
 def get_device_status(host):
     """ Returns the device status as a named tuple. """
@@ -74,27 +79,27 @@ def get_device_status(host):
     except:
         raise PyChromecastException("Error parsing device status XML")
 
-
     friendly_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                        "friendlyName", "Unknown Chromecast")
+                                      "friendlyName", "Unknown Chromecast")
     model_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                        "modelName", "Unknown model name")
+                                   "modelName", "Unknown model name")
     manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                        "manufacturer", "Unknown manufacturer")
+                                     "manufacturer", "Unknown manufacturer")
 
     api_version = (int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                        "major", -1)),
+                                         "major", -1)),
                    int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                        "minor", -1)))
+                                         "minor", -1)))
 
     return DeviceStatus(friendly_name, model_name, manufacturer, api_version)
+
 
 def get_app_status(host, app_id=None):
     """ Returns the status of the specified app
         or else the current running app. """
     # /apps/ will redirect to the active app
     url = (FORMAT_APP_PATH.format(host, app_id) if app_id
-                        else FORMAT_BASE_URL.format(host) + "/apps/")
+           else FORMAT_BASE_URL.format(host) + "/apps/")
 
     try:
         status_el = ET.fromstring(CC_SESSION.get(url).text)
@@ -109,18 +114,20 @@ def get_app_status(host, app_id=None):
         raise PyChromecastException("Error parsing app status XML")
 
     name = _read_xml_element(status_el, XML_NS_DIAL,
-                                    "name", "Unknown application")
+                             "name", "Unknown application")
     state = _read_xml_element(status_el, XML_NS_DIAL,
-                                    "state", "unknown")
+                              "state", "unknown")
 
     return AppStatus(name, state, options)
-
 
 
 class PyChromecast(object):
     """ Class to connect to a ChromeCast. """
 
     def __init__(self, host, app_id=None):
+        self._app_id = None
+        self.app = None
+
         self.host = host
 
         self.device = get_device_status(host)
@@ -139,7 +146,6 @@ class PyChromecast(object):
     @app_id.setter
     def app_id(self, value):
         """ Sets app_id and fetches the app status. """
-        # pylint: disable=attribute-defined-outside-init
         self._app_id = value
 
         self.refresh_app_status()
@@ -152,7 +158,6 @@ class PyChromecast(object):
 
     def refresh_app_status(self):
         """ Queries the Chromecast for the status of this app. """
-        # pylint: disable=attribute-defined-outside-init
         self.app = get_app_status(self.host, self._app_id)
 
     def start_app(self, data=None):
@@ -184,15 +189,17 @@ CC_SESSION = requests.Session()
 CC_SESSION.headers['content-type'] = 'application/json'
 
 DeviceStatus = namedtuple("DeviceStatus",
-                ["friendly_name","model_name","manufacturer","api_version"])
-AppStatus = namedtuple("AppStatus",
-                ["name","state","options"])
+                          ["friendly_name", "model_name",
+                           "manufacturer", "api_version"])
+AppStatus = namedtuple("AppStatus", ["name", "state", "options"])
+
 
 def _craft_url(host, app_id=None):
     """ Helper method to create a ChromeCast url given
         a host and an optional app_id. """
     return (FORMAT_APP_PATH.format(host, app_id) if app_id
-                                    else FORMAT_BASE_URL.format(host))
+            else FORMAT_BASE_URL.format(host))
+
 
 def _read_xml_element(element, xml_ns, tag_name, default=""):
     """ Helper method to read text from an element. """
@@ -201,6 +208,7 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
 
     except Exception:
         return default
+
 
 class PyChromecastException(Exception):
     """ Base exception for PyChromecast. """
