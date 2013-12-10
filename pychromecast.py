@@ -22,7 +22,8 @@ APP_ID_TICTACTOE = "TicTacToe"
 APP_ID_GOOGLE_MUSIC = "GoogleMusic"
 APP_ID_PLAY_MOVIES = "PlayMovies"
 APP_ID_HULU_PLUS = "Hulu_Plus"
-# TODO: add Pandora, HBO
+APP_ID_HBO = "HBO_App"
+APP_ID_PANDORA = "Pandora_App"
 
 
 def start_app(host, app_id, data=None):
