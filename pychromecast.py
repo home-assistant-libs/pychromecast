@@ -72,27 +72,22 @@ def get_device_status(host):
         device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
         api_version_el = status_el.find(XML_NS_UPNP_DEVICE + "specVersion")
 
-    except requests.exceptions.RequestException as error:
-        # If the host is incorrect and thus triggers a
-        # RequestException reraise it
-        raise error
+        friendly_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
+                                          "friendlyName", "Unknown Chromecast")
+        model_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
+                                       "modelName", "Unknown model name")
+        manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
+                                         "manufacturer", "Unknown manufacturer")
 
-    except:
-        raise PyChromecastException("Error parsing device status XML")
+        api_version = (int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
+                                             "major", -1)),
+                       int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
+                                             "minor", -1)))
 
-    friendly_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                      "friendlyName", "Unknown Chromecast")
-    model_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                   "modelName", "Unknown model name")
-    manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                     "manufacturer", "Unknown manufacturer")
+        return DeviceStatus(friendly_name, model_name, manufacturer, api_version)
 
-    api_version = (int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                         "major", -1)),
-                   int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                         "minor", -1)))
-
-    return DeviceStatus(friendly_name, model_name, manufacturer, api_version)
+    except (requests.exceptions.RequestException, ET.ParseError):
+        return None
 
 
 def get_app_status(host, app_id=None):
@@ -106,20 +101,15 @@ def get_app_status(host, app_id=None):
         status_el = ET.fromstring(CC_SESSION.get(url).text)
         options = status_el.find(XML_NS_DIAL + "options").attrib
 
-    except requests.exceptions.RequestException as error:
-        # If the host is incorrect and thus triggers
-        # a RequestException reraise it
-        raise error
+        name = _read_xml_element(status_el, XML_NS_DIAL,
+                                 "name", "Unknown application")
+        state = _read_xml_element(status_el, XML_NS_DIAL,
+                                  "state", "unknown")
 
-    except:
-        raise PyChromecastException("Error parsing app status XML")
+        return AppStatus(name, state, options)
 
-    name = _read_xml_element(status_el, XML_NS_DIAL,
-                             "name", "Unknown application")
-    state = _read_xml_element(status_el, XML_NS_DIAL,
-                              "state", "unknown")
-
-    return AppStatus(name, state, options)
+    except (requests.exceptions.RequestException, ET.ParseError):
+        return None
 
 
 class PyChromecast(object):
