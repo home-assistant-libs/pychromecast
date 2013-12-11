@@ -9,21 +9,57 @@ So what can it do? It can open YouTube movies and playlists.
 """
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+import json
 
 import requests
 
 
-# Retrieved from https://clients3.google.com/cast/chromecast/device/config
-APP_ID_HOME = "00000000-0000-0000-0000-000000000000"
-# APP_ID_CHROMECAST = "ChromeCast" # shows white screen with error ??
-APP_ID_YOUTUBE = "YouTube"
-APP_ID_NETFLIX = "Netflix"
-APP_ID_TICTACTOE = "TicTacToe"
-APP_ID_GOOGLE_MUSIC = "GoogleMusic"
-APP_ID_PLAY_MOVIES = "PlayMovies"
-APP_ID_HULU_PLUS = "Hulu_Plus"
-APP_ID_HBO = "HBO_App"
-APP_ID_PANDORA = "Pandora_App"
+FRIENDLY_NAMES = {
+    "00000000-0000-0000-0000-000000000000": "Idle Screen",
+    "GoogleMusic": "Google Music",
+    "PlayMovies": "Play Movies",
+    "Hulu_Plus": "Hulu Plus",
+    "HBO_App": "HBO",
+    "Pandora_App": "Pandora",
+    "edaded98-5119-4c8a-afc1-de722da03562": "RedBull.tv",
+    "1812335e-441c-4e1e-a61a-312ca1ead90e": "Viki",
+    "06ee44ee-e7e3-4249-83b6-f5d0b6f07f34": "Plex QA",
+    "06ee44ee-e7e3-4249-83b6-f5d0b6f07f34_1": "Plex",
+    "2be788b9-b7e0-4743-9069-ea876d97ac20": "Vevo",
+    "aa35235e-a960-4402-a87e-807ae8b2ac79": "Avia",
+    "Revision3_App": "Revision3",
+    "Songza_App": "Songza",
+    "a7f3283b-8034-4506-83e8-4e79ab1ad794_2": "RealPlayer Cloud",
+    "18a8aeaa-8e3d-4c24-b05d-da68394a3476_1": "Beyondpod",
+    "Post_TV_App": "Washington Post"   
+}
+
+
+def get_possible_app_ids():
+    """ Returns all possible app ids. """
+    
+    try:
+        data = json.loads(CC_SESSION.get(
+            "https://clients3.google.com/cast/chromecast/device/config"
+            ).text[4:])
+
+        return [app['app_name'] for app in data['applications']]
+
+    except ValueError:
+        # If json fails to parse
+        return []
+
+
+def get_friendly_name(app_id):
+    """ Return a friendly name if we have one, else the app id. """
+    if app_id in FRIENDLY_NAMES:
+        return FRIENDLY_NAMES[app_id]
+
+    elif app_id.endswith("_App"):
+        return app_id[:-4]
+
+    else:
+        return app_id
 
 
 def start_app(host, app_id, data=None):
