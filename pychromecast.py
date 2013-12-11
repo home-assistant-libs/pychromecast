@@ -136,15 +136,16 @@ def get_device_status(host):
         model_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
                                        "modelName", "Unknown model name")
         manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                         "manufacturer", "Unknown manufacturer")
+                                         "manufacturer",
+                                         "Unknown manufacturer")
 
-        api_version = (int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                             "major", -1)),
-                       int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
-                                             "minor", -1)))
+        api_version = (int(_read_xml_element(api_version_el,
+                                             XML_NS_UPNP_DEVICE, "major", -1)),
+                       int(_read_xml_element(api_version_el,
+                                             XML_NS_UPNP_DEVICE, "minor", -1)))
 
         return DeviceStatus(friendly_name, model_name, manufacturer,
-            api_version)
+                            api_version)
 
     except (requests.exceptions.RequestException, ET.ParseError):
         return None
