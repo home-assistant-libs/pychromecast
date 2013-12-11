@@ -53,13 +53,13 @@ FRIENDLY_NAMES = {
     "Songza_App": "Songza",
     "a7f3283b-8034-4506-83e8-4e79ab1ad794_2": "RealPlayer Cloud",
     "18a8aeaa-8e3d-4c24-b05d-da68394a3476_1": "Beyondpod",
-    "Post_TV_App": "Washington Post"   
+    "Post_TV_App": "Washington Post"
 }
 
 
 def get_possible_app_ids():
     """ Returns all possible app ids. """
-    
+
     try:
         data = json.loads(CC_SESSION.get(
             "https://clients3.google.com/cast/chromecast/device/config"
@@ -143,7 +143,8 @@ def get_device_status(host):
                        int(_read_xml_element(api_version_el, XML_NS_UPNP_DEVICE,
                                              "minor", -1)))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer, api_version)
+        return DeviceStatus(friendly_name, model_name, manufacturer,
+            api_version)
 
     except (requests.exceptions.RequestException, ET.ParseError):
         return None
