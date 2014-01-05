@@ -100,7 +100,10 @@ def quit_app(host, app_id=None):
         If no app_id specified will quit current running app. """
 
     if not app_id:
-        app_id = get_app_status(host).name
+        status = get_app_status(host)
+
+        if status:
+            app_id = status.name
 
     if app_id:
         CC_SESSION.delete(_craft_url(host, app_id))
