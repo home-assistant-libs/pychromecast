@@ -63,7 +63,7 @@ def get_possible_app_ids():
     try:
         data = json.loads(CC_SESSION.get(
             "https://clients3.google.com/cast/chromecast/device/config"
-            ).text[4:])
+            ).content[4:])
 
         return [app['app_name'] for app in data['applications']]
 
@@ -129,7 +129,7 @@ def get_device_status(host):
 
     try:
         status_el = ET.fromstring(CC_SESSION.get(
-            FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml").text)
+            FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml").content)
 
         device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
         api_version_el = status_el.find(XML_NS_UPNP_DEVICE + "specVersion")
@@ -162,7 +162,7 @@ def get_app_status(host, app_id=None):
            else FORMAT_BASE_URL.format(host) + "/apps/")
 
     try:
-        status_el = ET.fromstring(CC_SESSION.get(url).text)
+        status_el = ET.fromstring(CC_SESSION.get(url).content)
         options = status_el.find(XML_NS_DIAL + "options").attrib
 
         name = _read_xml_element(status_el, XML_NS_DIAL,
