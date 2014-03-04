@@ -4,30 +4,32 @@ Examples of how PyChromecast can be used.
 
 import time
 
-from . import pychromecast
+import pychromecast
 
-host = "192.168.1.120"
 
-# Switch the ChromeCast to the home screen..
-pychromecast.quit_app(host)
+host = "192.168.1.9"
 
-# .. and give it some time to do so.
-time.sleep(4)
-
-# Example using the class
 cast = pychromecast.PyChromecast(host)
 print cast.device
-print "Home screen:", cast.app
+print "Current app:", cast.app
 
-cast.app_id = pychromecast.APP_ID_YOUTUBE
-print "YouTube status:", cast.app
+# Make sure an app is running that supports RAMP protocol
+if not cast.app or pychromecast.PROTOCOL_RAMP not in cast.app.service_protocols:
+    pychromecast.play_youtube_video(host, "kxopViU98Xo")
 
-cast.start_app()
 
-print "YouTube status after opening:", cast.app
+ramp = None
+while not ramp:
+    time.sleep(1)
 
-# If we are too fast in giving commands the ChromeCast doesn't listen
-time.sleep(6)
+    ramp = cast.get_protocol(pychromecast.PROTOCOL_RAMP)
 
-# Example using the methods
-pychromecast.play_youtube_video(host, "kxopViU98Xo")
+print "Ramp:", ramp
+ramp.playpause()
+
+time.sleep(1)  # Give the twisted engine some time to send command
+
+print "Ramp:", ramp
+
+exit()
+
