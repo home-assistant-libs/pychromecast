@@ -11,8 +11,6 @@ from .dial import start_app, quit_app, get_device_status, get_app_status
 from .websocket import PROTOCOL_RAMP, RAMP_ENABLED, create_websocket_client
 from .error import ConnectionError
 
-logging.basicConfig(level=logging.INFO)
-
 APP_ID = {
     "HOME": "00000000-0000-0000-0000-000000000000",
     "YOUTUBE": "YouTube",
