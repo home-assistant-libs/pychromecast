@@ -1,0 +1,7 @@
+Twisted==13.2.0
+argparse==1.2.1
+autobahn==0.8.4-2
+distribute==0.6.24
+requests==2.2.1
+wsgiref==0.1.2
+zope.interface==4.1.0

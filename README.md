@@ -9,10 +9,13 @@ Allows to remote control the Chromecast from Python. It currently supports:
 
 *: only supported by apps that support the RAMP-protocol.
 
+Dependencies
+------------
+
+PyChromecast depends on the Python packages requests, autobahn and twisted. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+
 How to use
 ----------
-
-PyChromecast depends on the Python packages requests, autobahn and twisted. Make sure you have these dependencies installed using `pip install requests autobahn twisted`.
 
     >> import time
     >> import pychromecast
