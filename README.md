@@ -2,6 +2,7 @@ pychromecast
 ============
 
 Allows to remote control the Chromecast from Python. It currently supports:
+ - Auto discovering connected Chromecasts on the network
  - Read Chromecast device status
  - Read application status
  - Read the status of the current content being played*
@@ -20,7 +21,7 @@ How to use
     >> import time
     >> import pychromecast
 
-    >> cast = pychromecast.PyChromecast("192.168.1.9")
+    >> cast = pychromecast.PyChromecast()
     >> print cast.device
     DeviceStatus(friendly_name='Living Room', model_name='Eureka Dongle', manufacturer='Google Inc.', api_version=(1, 0))
 
