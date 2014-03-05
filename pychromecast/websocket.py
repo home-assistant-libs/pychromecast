@@ -257,7 +257,7 @@ class BaseSubprotocol(object):
     @property
     def is_active(self):
         """ Returns if this subprotocol is active. """
-        return self.factory is not None
+        return self.factory and self.factory.client
 
 
 class CommandSubprotocol(BaseSubprotocol):
