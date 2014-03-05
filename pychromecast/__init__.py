@@ -7,9 +7,10 @@ import logging
 import json
 import requests
 
+from .upnp import discover_chromecasts
 from .dial import start_app, quit_app, get_device_status, get_app_status
 from .websocket import PROTOCOL_RAMP, RAMP_ENABLED, create_websocket_client
-from .error import ConnectionError
+from .error import ConnectionError, NoChromecastFoundError
 
 APP_ID = {
     "HOME": "00000000-0000-0000-0000-000000000000",
@@ -50,30 +51,50 @@ def get_possible_app_ids():
         return []
 
 
-def play_youtube_video(host, video_id):
+def play_youtube_video(video_id, host=None):
     """ Starts the YouTube app if it is not running and plays
         specified video. """
+
+    if not host:
+        host = _auto_select_chromecast()
 
     start_app(host, APP_ID["YOUTUBE"], {"v": video_id})
 
 
-def play_youtube_playlist(host, playlist_id):
+def play_youtube_playlist(playlist_id, host=None):
     """ Starts the YouTube app if it is not running and plays
         specified playlist. """
+
+    if not host:
+        host = _auto_select_chromecast()
 
     start_app(host, APP_ID["YOUTUBE"],
               {"listType": "playlist", "list": playlist_id})
 
 
+def _auto_select_chromecast():
+    """
+    Discovers local Chromecasts and returns first one found.
+    Raises exception if none can be found.
+    """
+    ips = discover_chromecasts(1)
+
+    if ips:
+        return ips[0]
+    else:
+        raise NoChromecastFoundError("Unable to detect Chromecast")
+
+
 class PyChromecast(object):
     """ Class to interface with a ChromeCast. """
 
-    def __init__(self, host):
+    def __init__(self, host=None):
         self.logger = logging.getLogger(__name__)
-        self.host = host
+
+        self.host = host if host else _auto_select_chromecast()
 
         self.logger.info("Querying device status")
-        self.device = get_device_status(host)
+        self.device = get_device_status(self.host)
 
         if not self.device:
             raise ConnectionError("Could not connect to {}".format(host))
