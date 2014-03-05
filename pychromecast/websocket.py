@@ -108,6 +108,18 @@ def create_websocket_client(app_status):
     client = ChromecastWebSocketClient(conn_data['URL'],
                                        app_status.service_protocols)
 
+    # The client is based on Twisted. Make sure twisted is running.
+    # If it is running wake Twisted up so it acknowledges our new client.
+    if reactor.running:  # pylint: disable=no-member
+        reactor.wakeUp()  # pylint: disable=no-member
+
+    else:
+        bgthread = threading.Thread(
+            target=lambda: reactor.run(installSignalHandlers=False))
+        
+        bgthread.setDaemon(True)
+        bgthread.start()
+
     return client
 
 
@@ -136,21 +148,6 @@ class ChromecastWebSocketClient(WebSocketClientFactory):
 
         self.client = None
         self.connection = connectWS(self)
-
-        # The client is based on Twisted. Make sure twisted is running.
-        # If it is running wake Twisted up so it acknowledges our new client.
-        if reactor.running:  # pylint: disable=no-member
-            reactor.wakeUp()  # pylint: disable=no-member
-
-        else:
-            def twisted_background():
-                """ Start the twisted reactor in the background """
-                # pylint: disable=no-member
-                reactor.run(installSignalHandlers=False)
-
-            bgthread = threading.Thread(target=twisted_background)
-            bgthread.daemon = True
-            bgthread.start()
 
     def buildProtocol(self, addr):
         """ Build a new Websocket protocol. """
