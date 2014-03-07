@@ -7,14 +7,11 @@ import threading
 import datetime as dt
 import json
 import logging
+import socket
 
 import requests
 
-from twisted.internet import reactor
-
-from autobahn.twisted.websocket import (WebSocketClientProtocol,
-                                        WebSocketClientFactory,
-                                        connectWS)
+from ws4py.client.threadedclient import WebSocketClient
 
 from . import error
 
@@ -108,27 +105,17 @@ def create_websocket_client(app_status):
     client = ChromecastWebSocketClient(conn_data['URL'],
                                        app_status.service_protocols)
 
-    # The client is based on Twisted. Make sure twisted is running.
-    # If it is running wake Twisted up so it acknowledges our new client.
-    if reactor.running:  # pylint: disable=no-member
-        reactor.wakeUp()  # pylint: disable=no-member
-
-    else:
-        bgthread = threading.Thread(
-            target=lambda: reactor.run(installSignalHandlers=False))
-        
-        bgthread.setDaemon(True)
-        bgthread.start()
+    client.connect()
 
     return client
 
 
 # pylint: disable=too-many-public-methods
-class ChromecastWebSocketClient(WebSocketClientFactory):
+class ChromecastWebSocketClient(WebSocketClient):
     """ A Client to remote control a Chromecast via the RAMP protocol. """
 
     def __init__(self, url, supported_protocols):
-        WebSocketClientFactory.__init__(self, url)
+        WebSocketClient.__init__(self, url)
 
         self.logger = logging.getLogger(__name__)
 
@@ -146,107 +133,63 @@ class ChromecastWebSocketClient(WebSocketClientFactory):
                 self.logger.warning(
                     "Unsupported protocol: {}".format(protocol))
 
-        self.client = None
-        self.connection = connectWS(self)
-
-    def buildProtocol(self, addr):
-        """ Build a new Websocket protocol. """
-        proto = ChromecastWebSocketProtocol()
-        proto.factory = self  # pylint: disable=attribute-defined-outside-init
-        return proto
-
-    def onClientConnected(self, client):
-        """ Called when the client gets connected. """
-        self.client = client
-
-        for handler in self.handlers.values():
-            handler.factory = self
-
-    def onClientDisconnected(self):
-        """ Called when the client gets disconnected. """
-        self.client.factory = None
-        self.client = None
-
-        for handler in self.handlers.values():
-            handler.factory = None
-
-    def sendChromecastMessage(self, protocol, data):
-        """ Sends a message to the Chromecast. """
-        if not self.client:
-            raise error.ConnectionError(
-                "WebsocketClient is not connected anymore.")
-
-        if _DEBUG:
-            self.logger.info("Sending {}".format(data))
-
-        self.client.sendMessage(json.dumps([protocol, data]).encode("utf8"))
-        reactor.wakeUp()  # pylint: disable=no-member
-
-    def exit(self):
-        """ Quit the client. """
-        self.connection.disconnect()
-
-        # Remove circle references
-        for handler in self.handlers.values():
-            handler.factory = None
-
-
-# pylint: disable=attribute-defined-outside-init, no-init
-class ChromecastWebSocketProtocol(WebSocketClientProtocol):
-    """ Implements the RAMP-protocol. """
-
-    def onOpen(self):
-        """ When the connection is opened. """
-        self.factory.onClientConnected(self)
-
-    def onClose(self, wasClean, code, reason):
-        """ When the connection is closed. """
-        self.factory.onClientDisconnected()
-
-    def onMessage(self, payload, isBinary):
+    def received_message(self, message):
         """ When a new message is received. """
-        # We do not speak binary
-        if isBinary:
-            return
+        # We do not support binary message
+        if message.is_binary:
+            return False
 
         try:
-            protocol, data = json.loads(payload.decode('utf8'))
+            protocol, data = json.loads(message.data.decode('utf8'))
         except ValueError:
             # If error while parsing JSON
+            # if unpack error: more then 2 items in the list
             logging.getLogger(__name__).exception(
                 "Error parsing incoming message: {}".format(
-                    payload.decode("utf8")))
+                    message.data.decode("utf8")))
 
             return
 
         if _DEBUG:
             logging.getLogger(__name__).info("Receiving {}".format(data))
 
-        handler = self.factory.handlers.get(protocol)
+        handler = self.handlers.get(protocol)
 
         if handler:
-            handler.receiveMessage(data)
+            handler._receive_protocol(data)  # pylint: disable=protected-access
         else:
             logging.getLogger(__name__).warning(
                 "Unknown protocol received: {}, {}".format(protocol, data))
 
+    def exit(self):
+        """ Quit the client. """
+        self.close_connection()
+        self.handlers.clear()
 
+
+# pylint: disable=too-few-public-methods
 class BaseSubprotocol(object):
     """ Abstract implementation for a subprotocol. """
 
-    def __init__(self, protocol, factory):
+    def __init__(self, protocol, client):
         self.protocol = protocol
-        self.factory = factory
+        self.client = client
         self.logger = logging.getLogger(__name__)
 
-    def sendMessage(self, data):
+    def _send_protocol(self, data):
         """ Default handler for sending messages as subprotocol. """
-        if self.is_active:
-            self.factory.sendChromecastMessage(self.protocol, data)
-        else:
-            raise error.ConnectionError("Not connected.")
+        if _DEBUG:
+            self.logger.info("Sending {}".format(data))
 
-    def receiveMessage(self, data):
+        try:
+            self.client.send(json.dumps([self.protocol, data]).encode("utf8"))
+
+        except (socket.error, RuntimeError):
+            # socket.error if socket is not connected
+            # RuntimeError if socket was terminated
+            raise error.ConnectionError("Error communicating with Chromecast")
+
+    def _receive_protocol(self, data):
         """ Default handler for receiving messages as subprotocol. """
         self.logger.warning(
             "Unhandled {} message: {}".format(self.protocol, data))
@@ -254,37 +197,37 @@ class BaseSubprotocol(object):
     @property
     def is_active(self):
         """ Returns if this subprotocol is active. """
-        return self.factory and self.factory.client
+        return not self.client.terminated
 
 
 class CommandSubprotocol(BaseSubprotocol):
     """ Implements the Command subprotocol. """
 
-    def __init__(self, factory):
-        BaseSubprotocol.__init__(self, PROTOCOL_COMMAND, factory)
+    def __init__(self, client):
+        BaseSubprotocol.__init__(self, PROTOCOL_COMMAND, client)
 
-    def receiveMessage(self, data):
+    def _receive_protocol(self, data):
         """ Handles an incoming COMMAND message. """
 
         if data[COMMAND_ATTR_TYPE] == COMMAND_TYPE_PING:
-            self.sendMessage({COMMAND_ATTR_TYPE: COMMAND_TYPE_PONG})
+            self._send_protocol({COMMAND_ATTR_TYPE: COMMAND_TYPE_PONG})
         else:
-            BaseSubprotocol.receiveMessage(self, data)
+            BaseSubprotocol._receive_protocol(self, data)
 
 
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes, attribute-defined-outside-init
 class RampSubprotocol(BaseSubprotocol):
     """ Implements the Ramp subprotocol. """
 
-    def __init__(self, factory):
-        BaseSubprotocol.__init__(self, PROTOCOL_RAMP, factory)
+    def __init__(self, client):
+        BaseSubprotocol.__init__(self, PROTOCOL_RAMP, client)
 
         self.command_id = 0
         self.commands = {}
 
         self._update_status({})
 
-    def receiveMessage(self, data):
+    def _receive_protocol(self, data):
         """ Handles an incoming Ramp message. """
         message_type = data[RAMP_ATTR_TYPE]
 
@@ -317,17 +260,15 @@ class RampSubprotocol(BaseSubprotocol):
                 cmd_event.set()
 
         else:
-            BaseSubprotocol.receiveMessage(self, data)
+            BaseSubprotocol._receive_protocol(self, data)
 
-    def sendMessage(self, data, blocking=False):
+    # pylint: disable=arguments-differ
+    def _send_ramp(self, data, blocking=False):
         """
         Sends a RAMP message.
         Set blocking=True to wait till the Chromecast sends a response
         to the command.
         """
-        if not self.is_active:
-            raise error.ConnectionError("Not connected.")
-
         data[RAMP_ATTR_CMD_ID] = self.command_id
 
         event = threading.Event() if blocking else None
@@ -335,7 +276,7 @@ class RampSubprotocol(BaseSubprotocol):
         # Save type to match later with response
         self.commands[self.command_id] = (data[RAMP_ATTR_TYPE], event)
 
-        self.factory.sendChromecastMessage(PROTOCOL_RAMP, data)
+        self._send_protocol(data)
 
         self.command_id += 1
 
@@ -349,12 +290,12 @@ class RampSubprotocol(BaseSubprotocol):
 
     def play(self):
         """ Send the PLAY-command to the RAMP-target. """
-        self.sendMessage({RAMP_ATTR_TYPE: RAMP_TYPE_PLAY})
+        self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_PLAY})
 
     def pause(self):
         """ Send the PAUSE-command to the RAMP-target. """
         # The STOP command actually pauses the media
-        self.sendMessage({RAMP_ATTR_TYPE: RAMP_TYPE_STOP})
+        self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_STOP})
 
     def playpause(self):
         """ Plays if paused, pauses if playing. """
@@ -365,8 +306,8 @@ class RampSubprotocol(BaseSubprotocol):
 
     def seek(self, seconds):
         """ Seek within the content played at RAMP-target. """
-        self.sendMessage({RAMP_ATTR_TYPE: RAMP_TYPE_PLAY,
-                          RAMP_ATTR_POSITION: seconds})
+        self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_PLAY,
+                         RAMP_ATTR_POSITION: seconds})
 
     def rewind(self):
         """ Rewinds current media item. """
@@ -380,12 +321,12 @@ class RampSubprotocol(BaseSubprotocol):
     def set_volume(self, volume):
         """ Set volume at the RAMP-target. """
         # volume is double between 0 and 1
-        self.sendMessage({RAMP_ATTR_TYPE: RAMP_TYPE_VOLUME,
-                          RAMP_ATTR_VOLUME: volume})
+        self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_VOLUME,
+                         RAMP_ATTR_VOLUME: volume})
 
     def refresh(self):
         """ Refresh data at the RAMP-target. """
-        self.sendMessage({RAMP_ATTR_TYPE: RAMP_TYPE_INFO})
+        self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_INFO})
 
     def _update_status(self, status):
         """ Updates the RAMP status. """
