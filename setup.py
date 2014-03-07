@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='PyChromecast',
-    version='0.2',
+    version='0.3',
     license='MIT',
     url='https://github.com/balloob/pychromecast',
     author='Paulus Schoutsen',
@@ -13,7 +13,7 @@ setup(
     zip_safe=False,
     include_package_data=True,
     platforms='any',
-    install_requires=['requests', 'autobahn', 'twisted'],
+    install_requires=['requests', 'ws4py'],
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
