@@ -13,7 +13,7 @@ Allows to remote control the Chromecast from Python. It currently supports:
 Dependencies
 ------------
 
-PyChromecast depends on the Python packages requests, autobahn and twisted. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+PyChromecast depends on the Python packages requests and ws4py. Make sure you have these dependencies installed using `pip install -r requirements.txt`
 
 How to use
 ----------
@@ -45,8 +45,6 @@ At this point in time the RAMP protocol is the only protocol that is implemented
 
 Known issues
 ------------
-
-If the Ramp client disconnects or your Python script exits right after issuing a command the command might not be send. This is because Twisted is event-driven and might not be ready yet to handle the sending of the command.
 
 Since Google has opened up the Chromecast SDK not all apps seem to be reachable using the DIAL-api. Therefore not all apps are exposed via the app attribute.
 
