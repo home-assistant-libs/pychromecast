@@ -9,7 +9,9 @@ import requests
 
 from .upnp import discover_chromecasts
 from .dial import start_app, quit_app, get_device_status, get_app_status
-from .websocket import PROTOCOL_RAMP, RAMP_ENABLED, create_websocket_client
+from .websocket import (PROTOCOL_RAMP, RAMP_ENABLED, RAMP_STATE_UNKNOWN,
+                        RAMP_STATE_PLAYING, RAMP_STATE_STOPPED,
+                        create_websocket_client)
 from .error import ConnectionError, NoChromecastFoundError
 
 APP_ID = {
@@ -99,7 +101,10 @@ class PyChromecast(object):
         if not self.device:
             raise ConnectionError("Could not connect to {}".format(host))
 
-        self.app = self.websocket_client = None
+        self.app = None
+        self.websocket_client = None
+        self._refresh_timer = None
+        self._refresh_lock = threading.Lock()
 
         self.refresh()
 
@@ -121,27 +126,52 @@ class PyChromecast(object):
             return None
 
     def refresh(self):
-        """ Queries the Chromecast for the current status. """
+        """
+        Queries the Chromecast for the current status.
+        Starts a websocket client if possible.
+        """
         self.logger.info("Refreshing app status")
+
+        # If we are refreshing but a refresh was planned, cancel that one
+        with self._refresh_lock:
+            if self._refresh_timer:
+                self._refresh_timer.cancel()
+                self._refresh_timer = None
+
+        cur_app = self.app
+        cur_ws = self.websocket_client
 
         self.app = app = get_app_status(self.host)
 
-        if app:
-            if self.app.service_protocols:
-                try:
-                    self.websocket_client = create_websocket_client(app)
+        is_diff_app = (not cur_app and app or cur_app and not app or
+                       cur_app.app_id != app.app_id)
 
-                except ConnectionError:
-                    self.websocket_client = None
+        # Clean up websocket if:
+        #  - there is a different app and a connection exists
+        #  - if it is the same app but the connection is terminated
+        if cur_ws and (is_diff_app or cur_ws.terminated):
 
-            # The ramp service does not always immediately show up
-            # Check if app is known to be RAMP controllable, then plan refresh
-            elif app.app_id in RAMP_ENABLED:
+            if not cur_ws.terminated:
+                cur_ws.close_connection()
 
+            self.websocket_client = cur_ws = None
+
+        # Create a new websocket client if there is no connection
+        if not cur_ws:
+
+            try:
+                # If the current app is not capable of a websocket client
+                # This method will return None so nothing is lost
+                self.websocket_client = cur_ws = create_websocket_client(app)
+
+            except ConnectionError:
+                pass
+
+            # Ramp service does not always immediately show up in the app
+            # status. If we do not have a websocket client but the app is
+            # known to be RAMP controllable, then plan refresh.
+            if not cur_ws and app.app_id in RAMP_ENABLED:
                 self._delayed_refresh()
-
-        else:
-            self.websocket_client = None
 
     def start_app(self, app_id, data=None):
         """ Start an app on the Chromecast. """
@@ -163,7 +193,12 @@ class PyChromecast(object):
 
     def _delayed_refresh(self):
         """ Give the ChromeCast time to start the app, then refresh app. """
-        threading.Timer(5, self.refresh).start()
+        with self._refresh_lock:
+            if self._refresh_timer:
+                self._refresh_timer.cancel()
+
+            self._refresh_timer = threading.Timer(5, self.refresh)
+            self._refresh_timer.start()
 
     def __str__(self):
         return "PyChromecast({}, {}, {}, {}, api={}.{})".format(

@@ -117,14 +117,18 @@ class ChromecastWebSocketClient(WebSocketClient):
     def __init__(self, url, supported_protocols):
         WebSocketClient.__init__(self, url)
 
+        self.supported_protocols = supported_protocols
         self.logger = logging.getLogger(__name__)
+        self.handlers = {}
 
-        self.handlers = {PROTOCOL_COMMAND: CommandSubprotocol(self)}
+    def opened(self):
+        """ When connection is opened initiate the protocol handlers. """
+        self.handlers[PROTOCOL_COMMAND] = CommandSubprotocol(self)
 
         _known_prot = KNOWN_PROTOCOLS
 
         # Instantiate supported subprotocols.
-        for protocol in supported_protocols:
+        for protocol in self.supported_protocols:
             handler = _known_prot.get(protocol)
 
             if handler:
@@ -133,8 +137,17 @@ class ChromecastWebSocketClient(WebSocketClient):
                 self.logger.warning(
                     "Unsupported protocol: {}".format(protocol))
 
+    def closed(self, code, reason=None):
+        """ Clear protocol handlers when connection is lost. """
+        # Clear reference to client
+        for handler in self.handlers.values():
+            handler.client = None
+
+        self.handlers.clear()
+
     def received_message(self, message):
         """ When a new message is received. """
+
         # We do not support binary message
         if message.is_binary:
             return False
@@ -161,11 +174,6 @@ class ChromecastWebSocketClient(WebSocketClient):
             logging.getLogger(__name__).warning(
                 "Unknown protocol received: {}, {}".format(protocol, data))
 
-    def exit(self):
-        """ Quit the client. """
-        self.close_connection()
-        self.handlers.clear()
-
 
 # pylint: disable=too-few-public-methods
 class BaseSubprotocol(object):
@@ -181,12 +189,14 @@ class BaseSubprotocol(object):
         if _DEBUG:
             self.logger.info("Sending {}".format(data))
 
+        if not self.client:
+            raise error.ConnectionError("Not connected to Chromecast")
+
         try:
             self.client.send(json.dumps([self.protocol, data]).encode("utf8"))
 
-        except (socket.error, RuntimeError):
-            # socket.error if socket is not connected
-            # RuntimeError if socket was terminated
+        except socket.error:
+            # if an error occured sending data over the socket
             raise error.ConnectionError("Error communicating with Chromecast")
 
     def _receive_protocol(self, data):
