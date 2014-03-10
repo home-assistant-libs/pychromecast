@@ -143,8 +143,12 @@ class PyChromecast(object):
 
         self.app = app = get_app_status(self.host)
 
-        is_diff_app = (not cur_app and app or cur_app and not app or
-                       cur_app.app_id != app.app_id)
+        # If no previous app and no new app there is nothing to do
+        if not cur_app and not app:
+            is_diff_app = False
+        else:
+            is_diff_app = (not cur_app and app or cur_app and not app or
+                           cur_app.app_id != app.app_id)
 
         # Clean up websocket if:
         #  - there is a different app and a connection exists
@@ -157,7 +161,7 @@ class PyChromecast(object):
             self.websocket_client = cur_ws = None
 
         # Create a new websocket client if there is no connection
-        if not cur_ws:
+        if not cur_ws and app:
 
             try:
                 # If the current app is not capable of a websocket client
