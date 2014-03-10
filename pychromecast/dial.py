@@ -94,7 +94,7 @@ def get_app_status(host, app_id=None):
         if req.status_code == 204:
             return None
 
-        status_el = ET.fromstring(req.text)
+        status_el = ET.fromstring(req.text.encode("UTF-8"))
         options = status_el.find(XML_NS_DIAL + "options").attrib
 
         app_id = _read_xml_element(status_el, XML_NS_DIAL,
