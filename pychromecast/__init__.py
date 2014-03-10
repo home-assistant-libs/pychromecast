@@ -143,6 +143,10 @@ class PyChromecast(object):
 
         self.app = app = get_app_status(self.host)
 
+        # If no previous app and no new app there is nothing to do
+        if not cur_app and not app:
+            return
+
         is_diff_app = (not cur_app and app or cur_app and not app or
                        cur_app.app_id != app.app_id)
 
