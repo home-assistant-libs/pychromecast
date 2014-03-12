@@ -60,7 +60,7 @@ class PyChromecast(object):
         self.device = get_device_status(self.host)
 
         if not self.device:
-            raise ConnectionError("Could not connect to {}".format(host))
+            raise ConnectionError("Could not connect to {}".format(self.host))
 
         self.app = None
         self.websocket_client = None

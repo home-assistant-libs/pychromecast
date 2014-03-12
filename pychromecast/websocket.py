@@ -334,6 +334,16 @@ class RampSubprotocol(BaseSubprotocol):
         self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_VOLUME,
                          RAMP_ATTR_VOLUME: volume})
 
+    def volume_up(self):
+        """ Increases volume. """
+        if self.volume < 1:
+            self.set_volume(min(self.volume+.1, 1))
+
+    def volume_down(self):
+        """ Decreases volume. """
+        if self.volume > 0:
+            self.set_volume(max(self.volume-.1, 0))
+
     def refresh(self):
         """ Refresh data at the RAMP-target. """
         self._send_ramp({RAMP_ATTR_TYPE: RAMP_TYPE_INFO})

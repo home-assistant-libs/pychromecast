@@ -40,7 +40,7 @@ def get_possible_app_ids():
         data = json.loads(req.text[4:])
 
         return [app['app_id'] for app in data['applications']] + \
-               data["enabled_app_ids"]
+            data["enabled_app_ids"]
 
     except ValueError:
         # If json fails to parse

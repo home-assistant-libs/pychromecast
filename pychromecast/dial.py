@@ -56,7 +56,7 @@ def get_device_status(host):
         req = CC_SESSION.get(
             FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml")
 
-        status_el = ET.fromstring(req.text.encode("UTF-8")) 
+        status_el = ET.fromstring(req.text.encode("UTF-8"))
 
         device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
         api_version_el = status_el.find(XML_NS_UPNP_DEVICE + "specVersion")
