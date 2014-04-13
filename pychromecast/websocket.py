@@ -8,6 +8,8 @@ import datetime as dt
 import json
 import logging
 import socket
+import weakref
+import atexit
 
 import requests
 
@@ -80,6 +82,7 @@ RAMP_STATE_STOPPED = 1
 RAMP_VALUE_TRUE = "true"
 RAMP_VALUE_FALSE = "false"
 
+_OPEN_CLIENTS = []
 
 def create_websocket_client(app_status):
     """
@@ -93,7 +96,7 @@ def create_websocket_client(app_status):
         return None
 
     req = requests.post(app_status.service_url,
-                        data=bytearray("{}"),
+                        data="{}".encode("ascii"),
                         headers={"Content-Type": "application/json"})
 
     if req.status_code != 200:
@@ -107,7 +110,18 @@ def create_websocket_client(app_status):
 
     client.connect()
 
+    atexit.register(_clean_open_clients)
+
     return client
+
+
+def _clean_open_clients():
+    """ Called on exit of Python to close open clients. """
+    for client_weakref in list(_OPEN_CLIENTS):
+        client = client_weakref()
+
+        if client and not client.terminated:
+            client.close_connection()
 
 
 # pylint: disable=too-many-public-methods
@@ -120,9 +134,12 @@ class ChromecastWebSocketClient(WebSocketClient):
         self.supported_protocols = supported_protocols
         self.logger = logging.getLogger(__name__)
         self.handlers = {}
+        self._weakref = weakref.ref(self)
 
     def opened(self):
         """ When connection is opened initiate the protocol handlers. """
+        _OPEN_CLIENTS.append(self._weakref)
+
         self.handlers[PROTOCOL_COMMAND] = CommandSubprotocol(self)
 
         _known_prot = KNOWN_PROTOCOLS
@@ -140,6 +157,8 @@ class ChromecastWebSocketClient(WebSocketClient):
     def closed(self, code, reason=None):
         """ Clear protocol handlers when connection is lost. """
         # Clear reference to client
+        _OPEN_CLIENTS.remove(self._weakref)
+
         for handler in self.handlers.values():
             handler.client = None
 

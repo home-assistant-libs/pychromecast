@@ -1,7 +1,7 @@
 pychromecast
 ============
 
-Allows to remote control the Chromecast from Python. It currently supports:
+Allows to remote control the Chromecast from Python 2 and 3. It currently supports:
  - Auto discovering connected Chromecasts on the network
  - Read Chromecast device status
  - Read application status

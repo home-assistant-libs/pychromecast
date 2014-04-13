@@ -3,9 +3,13 @@ Module that implements UPNP protocol to discover Chromecasts
 """
 import select
 import socket
-import urlparse
 import logging
 import datetime as dt
+
+try:  # Python 2
+    import urlparse
+except ImportError: # Python 3
+    import urllib.parse as urlparse
 
 DISCOVER_TIMEOUT = 10
 
@@ -39,7 +43,7 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        sock.sendto(SSDP_REQUEST, (SSDP_ADDR, SSDP_PORT))
+        sock.sendto(SSDP_REQUEST.encode("ascii"), (SSDP_ADDR, SSDP_PORT))
 
         sock.setblocking(0)
 
@@ -54,7 +58,7 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
             ready = select.select([sock], [], [], seconds_left)[0]
 
             if ready:
-                response = sock.recv(1024)
+                response = sock.recv(1024).decode("ascii")
 
                 found_ip = found_st = None
 
