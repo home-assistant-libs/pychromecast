@@ -1,2 +1,2 @@
-ws4py==0.3.2
-requests==2.2.1
+ws4py>=0.3.0
+requests>=2.0
