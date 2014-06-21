@@ -11,7 +11,7 @@ from .dial import start_app, quit_app, get_device_status, get_app_status
 from .websocket import (PROTOCOL_RAMP, RAMP_ENABLED, RAMP_STATE_UNKNOWN,
                         RAMP_STATE_PLAYING, RAMP_STATE_STOPPED,
                         create_websocket_client)
-from .error import ConnectionError, NoChromecastFoundError
+from .error import *
 
 
 def play_youtube_video(video_id, host=None):
@@ -47,14 +47,82 @@ def _auto_select_chromecast():
     else:
         raise NoChromecastFoundError("Unable to detect Chromecast")
 
+def get_all_chromecasts():
+    """
+    Returns a list of all chromecasts on the network as PyChromecast 
+    objects.
+    """
+    ips = discover_chromecasts()
+    cc_list = []
+    for ip in ips:
+        try:
+            cc_list.append(PyChromecast(host=ip))
+        except ConnectionError:
+            pass
+    return cc_list
+
+def filter_chromecasts(**filters):
+    """
+    Return the set of chromecasts as PyChromecast Objects
+    filter is a list of options to filter the chromecasts by.  
+
+    ex:  filter_chromecasts(friendly_name = "Living Room")
+
+    May return an empty list if no chromecasts were found matching
+    the filter criteria
+
+    Filters include DeviceStatus items:
+        friendly_name, model_name, manufacturer, api_version
+    Or AppStatus items:
+        app_id, description, state, service_url, service_protocols (list)
+    Or ip address:
+        ip
+    """
+    cc_list = set(get_all_chromecasts())
+    excluded_cc=set()
+
+    if 'ip' in filters:
+        for cc in cc_list:
+            if cc.host != filter['ip']:
+                excluded_cc.add(cc)
+        filters.pop('ip')
+
+    for k, v in filters.items():
+        for cc in cc_list:
+            for tup in [ cc.device, cc.app ]:
+                if hasattr(tup, k):
+                    if v != getattr(tup, k):
+                        excluded_cc.add(cc)
+
+    filtered_cc = cc_list - excluded_cc
+    return list(filtered_cc)
+
+def get_single_chromecast(**filter):
+    """
+    Same as get_chromecasts but only if filter matches exactly one
+    ChromeCast
+
+    Returns a Chromecast matching exactly the fitler specified.
+    """
+    results = filter_chromecasts(**filter)
+    if len(results) > 1:
+        raise MultipleChromecastsFoundError(
+            'More than one Chromecast was found specifying '
+            'the filter criteria: {}'.format(filter))
+    elif not results:            
+        raise NoChromecastFoundError(
+            'No Chromecasts matching filter critera were found:'
+            ' {}'.format(filter))
+    else:
+        return results[0]                
 
 class PyChromecast(object):
     """ Class to interface with a ChromeCast. """
 
-    def __init__(self, host=None):
+    def __init__(self, host):
         self.logger = logging.getLogger(__name__)
 
-        self.host = host if host else _auto_select_chromecast()
+        self.host = host
 
         self.logger.info("Querying device status")
         self.device = get_device_status(self.host)
