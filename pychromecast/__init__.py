@@ -107,22 +107,22 @@ def filter_chromecasts(**filters):
     filtered_cc = cc_list - excluded_cc
     return list(filtered_cc)
 
-def get_single_chromecast(**filter):
+def get_single_chromecast(**filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast
 
     Returns a Chromecast matching exactly the fitler specified.
     """
-    results = filter_chromecasts(**filter)
+    results = filter_chromecasts(**filters)
     if len(results) > 1:
         raise MultipleChromecastsFoundError(
             'More than one Chromecast was found specifying '
-            'the filter criteria: {}'.format(filter))
+            'the filter criteria: {}'.format(filters))
     elif not results:            
         raise NoChromecastFoundError(
             'No Chromecasts matching filter critera were found:'
-            ' {}'.format(filter))
+            ' {}'.format(filters))
     else:
         return results[0]                
 
