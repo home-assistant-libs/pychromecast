@@ -241,6 +241,7 @@ class PyChromecast(object):
                 self._refresh_timer.cancel()
 
             self._refresh_timer = threading.Timer(5, self.refresh)
+            self._refresh_timer.daemon = True
             self._refresh_timer.start()
 
     def __str__(self):
