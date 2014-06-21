@@ -47,6 +47,16 @@ def _auto_select_chromecast():
     else:
         raise NoChromecastFoundError("Unable to detect Chromecast")
 
+def get_chromecasts_with_friendly_name():
+    """
+    Returns a dictionary of chromecasts with the friendly name as
+    the key.  The value is the pychromecast object itself.
+    """
+    cc_list = get_all_chromecasts()
+    cc_dict = { cc.device.friendly_name : cc for cc in cc_list }
+    return cc_dict
+    
+
 def get_all_chromecasts():
     """
     Returns a list of all chromecasts on the network as PyChromecast 

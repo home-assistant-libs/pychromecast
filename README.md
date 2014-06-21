@@ -21,6 +21,9 @@ How to use
     >> import time
     >> import pychromecast
 
+    >> pychromecast.get_chromecasts_with_friendly_name().keys()
+    ['Dev', 'Living Room', 'Den', 'Bedroom']
+
     >> cast = pychromecast.get_single_chromecast(friendly_name="Living Room")
     >> print cast.device
     DeviceStatus(friendly_name='Living Room', model_name='Eureka Dongle', manufacturer='Google Inc.', api_version=(1, 0))
