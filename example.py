@@ -6,7 +6,7 @@ import time
 
 import pychromecast as pc
 
-cast = pc.PyChromecast()
+cast = pc.get_single_chromecast(friendly_name='Living Room')
 print cast.device
 print "Current app:", cast.app
 
@@ -24,7 +24,7 @@ while not ramp:
     ramp = cast.get_protocol(pc.PROTOCOL_RAMP)
 
 # Give ramp some time to init
-time.sleep(1)
+time.sleep(10)
 
 print "Ramp:", ramp
 

@@ -6,13 +6,14 @@ import time
 
 import pychromecast
 
-cast = pychromecast.PyChromecast()
+if __name__ == "__main__":
+    cast = pychromecast.get_chromecast(strict=False)
 
-while True:
-    cast.refresh()
+    while True:
+        cast.refresh()
 
-    if cast.app_id == pychromecast.APP_ID['HOME']:
-        print "Hey, we are on the home screen :( Starting YouTube.."
-        pychromecast.play_youtube_video("kxopViU98Xo", cast.host)
+        if cast.app_id == pychromecast.APP_ID['HOME']:
+            print "Hey, we are on the home screen :( Starting YouTube.."
+            pychromecast.play_youtube_video("kxopViU98Xo", ip=cast.host)
 
-    time.sleep(10)
+        time.sleep(10)

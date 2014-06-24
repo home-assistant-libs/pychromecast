@@ -15,6 +15,13 @@ class NoChromecastFoundError(PyChromecastError):
     pass
 
 
+class MultipleChromecastsFoundError(PyChromecastError):
+    """
+    When getting a singular chromecast results in getting multiple chromecasts.
+    """
+    pass
+
+
 class ConnectionError(PyChromecastError):
     """ When a connection error occurs within PyChromecast. """
     pass
