@@ -19,19 +19,19 @@ from .error import (
     )
 
 
-def play_youtube_video(video_id, host=None):
+def play_youtube_video(video_id, **filters):
     """ Starts the YouTube app if it is not running and plays
         specified video. """
 
-    host = get_chromecast(strict=False, ip=host).host
+    host = get_chromecast(strict=False, **filters).host
     start_app(host, APP_ID["YOUTUBE"], {"v": video_id})
 
 
-def play_youtube_playlist(playlist_id, host=None):
+def play_youtube_playlist(playlist_id, **filters):
     """ Starts the YouTube app if it is not running and plays
         specified playlist. """
 
-    host = get_chromecast(strict=False, ip=host).host
+    host = get_chromecast(strict=False, **filters).host
     start_app(host, APP_ID["YOUTUBE"],
               {"listType": "playlist", "list": playlist_id})
 
