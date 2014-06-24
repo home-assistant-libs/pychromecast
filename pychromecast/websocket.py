@@ -84,6 +84,7 @@ RAMP_VALUE_FALSE = "false"
 
 _OPEN_CLIENTS = []
 
+
 def create_websocket_client(app_status):
     """
     Creates and returns a RAMP client based on the supplied app status.

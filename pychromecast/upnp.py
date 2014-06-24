@@ -8,7 +8,7 @@ import datetime as dt
 
 try:  # Python 2
     import urlparse
-except ImportError: # Python 3
+except ImportError:  # Python 3
     import urllib.parse as urlparse
 
 DISCOVER_TIMEOUT = 10
