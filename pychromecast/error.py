@@ -22,6 +22,6 @@ class MultipleChromecastsFoundError(PyChromecastError):
     pass
 
 
-class ConnectionError(PyChromecastError):
+class ChromecastConnectionError(PyChromecastError):
     """ When a connection error occurs within PyChromecast. """
     pass

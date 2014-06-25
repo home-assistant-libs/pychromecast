@@ -101,7 +101,7 @@ def create_websocket_client(app_status):
                         headers={"Content-Type": "application/json"})
 
     if req.status_code != 200:
-        raise error.ConnectionError(
+        raise error.ChromecastConnectionError(
             "Could not retrieve websocket url ({}).".format(req.status_code))
 
     conn_data = json.loads(req.text)
@@ -210,14 +210,16 @@ class BaseSubprotocol(object):
             self.logger.info("Sending {}".format(data))
 
         if not self.client:
-            raise error.ConnectionError("Not connected to Chromecast")
+            raise error.ChromecastConnectionError(
+                "Not connected to Chromecast")
 
         try:
             self.client.send(json.dumps([self.protocol, data]).encode("utf8"))
 
         except socket.error:
             # if an error occured sending data over the socket
-            raise error.ConnectionError("Error communicating with Chromecast")
+            raise error.ChromecastConnectionError(
+                "Error communicating with Chromecast")
 
     def _receive_protocol(self, data):
         """ Default handler for receiving messages as subprotocol. """
@@ -395,6 +397,7 @@ class RampSubprotocol(BaseSubprotocol):
         if self.time_progress:
             timediff = dt.datetime.now() - self.last_updated
 
+            # pylint: disable=maybe-no-member
             return min(self._current_time + timediff.seconds, self.duration)
 
         else:

@@ -50,6 +50,7 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
         while True:
             time_diff = calc_now() - start
 
+            # pylint: disable=maybe-no-member
             seconds_left = timeout - time_diff.seconds
 
             if seconds_left <= 0:
