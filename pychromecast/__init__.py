@@ -27,7 +27,7 @@ def _get_all_chromecasts():
     for ip_address in ips:
         try:
             cc_list.append(Chromecast(host=ip_address))
-        except ConnectionError:
+        except ChromecastConnectionError:
             pass
     return cc_list
 
@@ -129,7 +129,7 @@ class Chromecast(object):
         self.device = get_device_status(self.host)
 
         if not self.device:
-            raise ConnectionError("Could not connect to {}".format(self.host))
+            raise ChromecastConnectionError("Could not connect to {}".format(self.host))
 
         self.app = None
         self.websocket_client = None
@@ -198,7 +198,7 @@ class Chromecast(object):
                 # This method will return None so nothing is lost
                 self.websocket_client = cur_ws = create_websocket_client(app)
 
-            except ConnectionError:
+            except ChromecastConnectionError:
                 pass
 
             # Ramp service does not always immediately show up in the app
