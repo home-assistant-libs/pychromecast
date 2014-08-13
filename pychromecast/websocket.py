@@ -382,7 +382,12 @@ class RampSubprotocol(BaseSubprotocol):
         self.artist = con_inf.get(RAMP_STATUS_CONTENT_INFO_ATTR_ARTIST)
         self.album = con_inf.get(RAMP_STATUS_CONTENT_INFO_ATTR_ALBUM_TITLE)
         self._current_time = status.get(RAMP_STATUS_ATTR_CURRENT_TIME, 0)
-        self.duration = status.get(RAMP_STATUS_ATTR_DURATION, 0)
+        self.duration = status.get(RAMP_STATUS_ATTR_DURATION)
+
+        # Newer version of YouTube just returns null as value
+        if self.duration is None:
+            self.duration = 0
+
         self.image_url = status.get(RAMP_STATUS_ATTR_IMAGE_URL)
         self.time_progress = status.get(RAMP_ATTR_TIME_PROGRESS, False)
 
@@ -397,8 +402,16 @@ class RampSubprotocol(BaseSubprotocol):
         if self.time_progress:
             timediff = dt.datetime.now() - self.last_updated
 
-            # pylint: disable=maybe-no-member
-            return min(self._current_time + timediff.seconds, self.duration)
+            # If we have a duration, make sure the current_time does not
+            # go further then it.
+            if self.duration > 0:
+                # pylint: disable=maybe-no-member
+                return min(
+                    self._current_time + timediff.seconds, self.duration)
+
+            else:
+                # pylint: disable=maybe-no-member
+                return self._current_time + timediff.seconds
 
         else:
             return self._current_time

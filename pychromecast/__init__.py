@@ -129,7 +129,8 @@ class Chromecast(object):
         self.device = get_device_status(self.host)
 
         if not self.device:
-            raise ChromecastConnectionError("Could not connect to {}".format(self.host))
+            raise ChromecastConnectionError(
+                "Could not connect to {}".format(self.host))
 
         self.app = None
         self.websocket_client = None
