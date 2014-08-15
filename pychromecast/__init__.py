@@ -8,6 +8,7 @@ import logging
 from .config import APP_ID, get_possible_app_ids, get_app_config
 from .upnp import discover_chromecasts
 from .dial import start_app, quit_app, get_device_status, get_app_status
+from .remotedebug import crd_open_url
 from .websocket import (PROTOCOL_RAMP, RAMP_ENABLED, RAMP_STATE_UNKNOWN,
                         RAMP_STATE_PLAYING, RAMP_STATE_STOPPED,
                         create_websocket_client)
@@ -216,6 +217,11 @@ class Chromecast(object):
         start_app(self.host, app_id, data)
 
         self._delayed_refresh()
+
+    def crd_open_url(self, url):
+        """For whitelisted devices, navigate to URL."""
+        self.logger.info("Developer Mode URL navigate: {}".format(url))
+        return crd_open_url(self.host, url)
 
     def quit_app(self):
         """ Tells the Chromecast to quit current app_id. """
