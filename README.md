@@ -50,13 +50,3 @@ Known issues
 ------------
 
 Since Google has opened up the Chromecast SDK not all apps seem to be reachable using the DIAL-api. Therefore not all apps are exposed via the app attribute.
-
-Whitelisted Development Devices
--------------------------------
-
-If you sign up for (Googles Chromecast Development program)[https://developers.google.com/cast/] you can enter your device's serial number and turn on the debugging interface.  Pychromecast can use this debugging interface to load arbitrary URLs with cast.crd_open_url.
-
-     >> devices = pychromecast.get_chromecasts_as_dict()
-     >> devices['castdevicename'].crd_open_url("https://github.com/balloob/pychromecast")
-
-where 'castdevicename' is the name of your chromecast device.

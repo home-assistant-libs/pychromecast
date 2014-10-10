@@ -219,11 +219,6 @@ class Chromecast(object):
 
         self._delayed_refresh()
 
-    def crd_open_url(self, url):
-        """For whitelisted devices, navigate to URL."""
-        self.logger.info("Developer Mode URL navigate: {}".format(url))
-        return crd_open_url(self.host, url)
-
     def quit_app(self):
         """ Tells the Chromecast to quit current app_id. """
         self.logger.info("Quiting current app")
