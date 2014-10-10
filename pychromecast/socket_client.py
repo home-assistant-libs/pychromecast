@@ -277,7 +277,9 @@ class SocketClient(threading.Thread):
             self._open_channels.append(destination_id)
 
             self.send_message(destination_id, NS_CONNECTION,
-                              {MESSAGE_TYPE: TYPE_CONNECT, 'origin': {}},
+                              {MESSAGE_TYPE: TYPE_CONNECT,
+                               'origin': {},
+                               'userAgent': 'PyChromecast'},
                               no_add_request_id=True)
 
     def _disconnect_channel(self, destination_id):
@@ -359,6 +361,11 @@ class ReceiverController(BaseController):
     def stop_app(self):
         """ Stops the current running app on the Chromecast. """
         self.send_message({MESSAGE_TYPE: 'STOP'}, inc_session_id=True)
+
+    def set_volume(self, volume):
+        """ Allows to set volume. Should be value between 0..1 """
+        self.send_message({MESSAGE_TYPE: 'SET_VOLUME',
+                           'volume': {'level': volume}})
 
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """

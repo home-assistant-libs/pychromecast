@@ -140,7 +140,8 @@ class Chromecast(object):
 
         self.socket_client.receiver_controller.register_status_listener(self)
 
-        # Forward these method
+        # Forward these methods
+        self.set_volume = self.socket_client.receiver_controller.set_volume
         self.play_media = self.socket_client.media_controller.play_media
         self.register_handler = self.socket_client.register_handler
 
