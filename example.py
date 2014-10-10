@@ -1,37 +1,54 @@
 """
-Examples of how PyChromecast can be used.
+Example that shows how the new Python 2 socket client can be used.
 """
+
 from __future__ import print_function
 import time
+import sys
+import logging
 
 import pychromecast as pc
 
+if '--show-debug' in sys.argv:
+    logging.basicConfig(level=logging.DEBUG)
+
 cast = pc.get_chromecast()
 print(cast.device)
-print("Current app:", cast.app)
-
-# Make sure an app is running that supports RAMP protocol
-if not cast.app or pc.PROTOCOL_RAMP not in cast.app.service_protocols:
-    pc.play_youtube_video("kxopViU98Xo", cast=cast)
-    cast.refresh()
-
-ramp = cast.get_protocol(pc.PROTOCOL_RAMP)
-
-# It can take some time to setup websocket connection
-# if we just switched to a new channel
-while not ramp:
-    time.sleep(1)
-    ramp = cast.get_protocol(pc.PROTOCOL_RAMP)
-
-# Give ramp some time to init
-time.sleep(10)
-
-print("Ramp:", ramp)
-
-print("Toggling play status")
-ramp.playpause()
-
-# Give some time to get new status
 time.sleep(1)
+print(cast.status)
 
-print("Ramp:", ramp)
+if not cast.is_idle:
+    print("Killing current running app")
+    cast.quit_app()
+    time.sleep(5)
+
+print("Playing media")
+cast.play_media(
+    ("http://commondatastorage.googleapis.com/gtv-videos-bucket/"
+     "sample/BigBuckBunny.mp4"), pc.STREAM_TYPE_BUFFERED, "video/mp4")
+
+t = 0
+
+while True:
+    try:
+        t += 1
+
+        if t > 10 and t % 3 == 0:
+            print("Media status", cast.media_controller.status)
+
+        if t == 15:
+            print("Sending pause command")
+            cast.media_controller.pause()
+        elif t == 20:
+            print("Sending play command")
+            cast.media_controller.play()
+        elif t == 25:
+            print("Sending stop command")
+            cast.media_controller.stop()
+        elif t == 27:
+            cast.quit_app()
+            break
+
+        time.sleep(1)
+    except KeyboardInterrupt:
+        break

@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='PyChromecast',
-    version='0.5.1',
+    version='0.6',
     license='MIT',
     url='https://github.com/balloob/pychromecast',
     author='Paulus Schoutsen',

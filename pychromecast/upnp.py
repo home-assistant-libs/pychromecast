@@ -6,6 +6,7 @@ import socket
 import logging
 import datetime as dt
 
+# pylint: disable=import-error
 try:  # Python 2
     import urlparse
 except ImportError:  # Python 3

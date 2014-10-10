@@ -25,3 +25,18 @@ class MultipleChromecastsFoundError(PyChromecastError):
 class ChromecastConnectionError(PyChromecastError):
     """ When a connection error occurs within PyChromecast. """
     pass
+
+
+class NotConnected(PyChromecastError):
+    """
+    Raised when a command is invoked while not connected to a Chromecast.
+    """
+    pass
+
+
+class UnsupportedNamespace(PyChromecastError):
+    """
+    Raised when trying to send a message with a namespace that is not
+    supported by the current running app.
+    """
+    pass
