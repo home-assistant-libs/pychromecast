@@ -18,7 +18,7 @@ CC_SESSION.headers['content-type'] = 'application/json'
 def reboot(host):
     """ Reboots the chromecast. """
     CC_SESSION.post(FORMAT_BASE_URL.format(host) + "/setup/reboot",
-                    data='{"params":"now"}')
+                    data='{"params":"now"}', timeout=10)
 
 
 def get_device_status(host):
@@ -26,7 +26,8 @@ def get_device_status(host):
 
     try:
         req = CC_SESSION.get(
-            FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml")
+            FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml",
+            timeout=10)
 
         status_el = ET.fromstring(req.text.encode("UTF-8"))
 
