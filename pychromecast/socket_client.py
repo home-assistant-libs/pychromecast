@@ -1,23 +1,26 @@
+"""
+Module to interact with the ChromeCast via protobuf-over-socket.
+
+Big thanks goes out to Fred Clift <fred@clift.org> who build the first
+version of this code: https://github.com/minektur/chromecast-python-poc.
+Without him this would not have been possible.
+"""
 import logging
 import socket
 import ssl
-import time
-from struct import pack, unpack
 import json
 import threading
 from collections import namedtuple
+from struct import pack, unpack
 
-import cast_channel_pb2
-from config import APP_ID
+from . import cast_channel_pb2
+from .controllers import BaseController
+from .controllers.media import MediaController
+from .error import ChromecastConnectionError, UnsupportedNamespace
 
-NAMESPACE = {
-    'connection': 'urn:x-cast:com.google.cast.tp.connection',
-    'receiver': 'urn:x-cast:com.google.cast.receiver',
-    'cast': 'urn:x-cast:com.google.cast.media',
-    'heartbeat': 'urn:x-cast:com.google.cast.tp.heartbeat',
-    'message': 'urn:x-cast:com.google.cast.player.message',
-    'media': "urn:x-cast:com.google.cast.media",
-}
+NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
+NS_RECEIVER = 'urn:x-cast:com.google.cast.receiver'
+NS_HEARTBEAT = 'urn:x-cast:com.google.cast.tp.heartbeat'
 
 PLATFORM_DESTINATION_ID = "receiver-0"
 
@@ -30,21 +33,21 @@ TYPE_CLOSE = "CLOSE"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_LAUNCH = "LAUNCH"
 TYPE_LOAD = "LOAD"
-TYPE_MEDIA_STATUS = "MEDIA_STATUS"
 
+APP_ID = 'appId'
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
 
-STREAM_TYPE_BUFFERED = "BUFFERED"
 
-
-def json_from_message(message):
+def _json_from_message(message):
+    """ Parses a PB2 message into JSON format. """
     return json.loads(message.payload_utf8)
 
 
-def message_to_string(message, data=None):
+def _message_to_string(message, data=None):
+    """ Gives a string representation of a PB2 message. """
     if data is None:
-        data = json_from_message(message)
+        data = _json_from_message(message)
 
     return "Message {} from {} to {}: {}".format(
         message.namespace, message.source_id, message.destination_id, data)
@@ -55,18 +58,14 @@ CastStatus = namedtuple('CastStatus',
                          'namespaces', 'session_id', 'transport_id',
                          'status_text'])
 
-MediaStatus = namedtuple('MediaStatus',
-                         ['current_time', 'content_id', 'content_type',
-                          'duration', 'stream_type', 'media_session_id',
-                          'playback_rate', 'player_state',
-                          'supported_media_commands', 'volume_level',
-                          'volume_muted'])
 
-
+# pylint: disable=too-many-instance-attributes
 class SocketClient(threading.Thread):
+    """ Class to interact with a Chromecast through a socket. """
 
     def __init__(self, host):
         super(SocketClient, self).__init__()
+        self.daemon = True
 
         self.logger = logging.getLogger(__name__)
 
@@ -74,7 +73,7 @@ class SocketClient(threading.Thread):
         self.stop = threading.Event()
 
         self.source_id = "sender-0"
-        self.app_id = None
+        self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
 
@@ -88,43 +87,43 @@ class SocketClient(threading.Thread):
 
         self._open_channels = []
 
+        self.receiver_controller = ReceiverController()
+        self.media_controller = MediaController()
+
         # Initialize the socket
         self.socket = ssl.wrap_socket(socket.socket())
 
         try:
-            # TODO add timeout
+            self.socket.settimeout(10)
             self.socket.connect((self.host, 8009))
         except socket.error:
-            # TODO
-            pass
+            self.logger.exception(
+                "Error setting up connection with Chromecast")
 
-        # Setup handlers
-        HeartbeatController(self)
-        self.receiver_controller = ReceiverController(self)
-        self.media_controller = MediaController(self)
+            raise ChromecastConnectionError(
+                "Error setting up connection with Chromecast")
+
+        self.register_handler(HeartbeatController())
+        self.register_handler(self.receiver_controller)
+        self.register_handler(self.media_controller)
 
         self.receiver_controller.register_status_listener(self)
 
-        self.receiver_controller.update_status()
+    def register_handler(self, handler):
+        """ Register a new namespace handler. """
+        self._handlers[handler.namespace] = handler
 
-        # Start listening
-        self.start()
+        handler.registered(self)
 
-    @property
-    def is_connected(self):
-        return self.socket is not None
-
-    def register_handler(self, namespace, handler):
-        self._handlers[namespace] = handler
-
-    def on_new_status(self, cast_status):
+    def new_cast_status(self, cast_status):
+        """ Called when a new cast status has been received. """
         new_channel = self.destination_id != cast_status.transport_id
 
         if new_channel:
             # Disconnect old channel
             self._disconnect_channel(self.destination_id)
 
-        self.app_id = cast_status.app_id
+        self.app_namespaces = cast_status.namespaces
         self.destination_id = cast_status.transport_id
         self.session_id = cast_status.session_id
 
@@ -147,24 +146,31 @@ class SocketClient(threading.Thread):
         return self._request_id
 
     def run(self):
+        """ Start polling the socket. """
+        self.receiver_controller.update_status()
+
         while not self.stop.is_set():
             message = self._read_message()
 
-            data = json_from_message(message)
+            data = _json_from_message(message)
 
             if message.namespace in self._handlers:
 
-                if message.namespace != NAMESPACE['heartbeat']:
+                if message.namespace != NS_HEARTBEAT:
                     self.logger.debug("Received: {}".format(
-                        message_to_string(message, data)))
+                        _message_to_string(message, data)))
 
-                self._handlers[message.namespace].receive_message(
+                handled = self._handlers[message.namespace].receive_message(
                     message, data)
+
+                if not handled:
+                    self.logger.warning("Message unhandled: {}".format(
+                        _message_to_string(message, data)))
 
             else:
                 self.logger.error(
                     "Received unknown namespace: {}".format(
-                        message_to_string(message, data)))
+                        _message_to_string(message, data)))
 
             if REQUEST_ID in data:
                 event = self._request_callbacks.pop(data[REQUEST_ID], None)
@@ -181,6 +187,7 @@ class SocketClient(threading.Thread):
         self.socket.close()
 
     def _read_message(self):
+        """ Reads a message from the socket and converts it to a message. """
         # first 4 bytes is Big-Endian payload length
         payload_info = ""
 
@@ -196,14 +203,18 @@ class SocketClient(threading.Thread):
             frag = self.socket.recv(2048)
             payload += frag
 
+        # pylint: disable=no-member
         message = cast_channel_pb2.CastMessage()
         message.ParseFromString(payload)
 
         return message
 
+    # pylint: disable=too-many-arguments
     def send_message(self, destination_id, namespace, data,
                      inc_session_id=False, wait_for_response=False,
                      no_add_request_id=False):
+        """ Send a message to the Chromecast. """
+
         # namespace is a string containing namespace
         # data is a dict that will be converted to json
         # wait_for_response only works if we have a request id
@@ -218,6 +229,7 @@ class SocketClient(threading.Thread):
         if inc_session_id:
             data[SESSION_ID] = self.session_id
 
+        # pylint: disable=no-member
         msg = cast_channel_pb2.CastMessage()
 
         msg.protocol_version = msg.CASTV2_1_0
@@ -230,9 +242,10 @@ class SocketClient(threading.Thread):
         #prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
 
-        if msg.namespace != NAMESPACE['heartbeat']:
+        # Log all messages except heartbeat
+        if msg.namespace != NS_HEARTBEAT:
             self.logger.debug(
-                "Sending: {}".format(message_to_string(msg, data)))
+                "Sending: {}".format(_message_to_string(msg, data)))
 
         self.socket.sendall(be_size + msg.SerializeToString())
 
@@ -242,105 +255,113 @@ class SocketClient(threading.Thread):
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               wait_for_response=False):
+        """ Helper method to send a message to the platform. """
         self.send_message(PLATFORM_DESTINATION_ID, namespace, message,
                           inc_session_id, wait_for_response)
 
     def send_app_message(self, namespace, message, inc_session_id=False,
                          wait_for_response=False):
+        """ Helper method to send a message to current running app. """
+        if namespace not in self.app_namespaces:
+            raise UnsupportedNamespace(
+                ("Namespace {} is not supported by current app. "
+                 "Supported are {}").format(namespace,
+                                            ", ".join(self.app_namespaces)))
+
         self.send_message(self.destination_id, namespace, message,
                           inc_session_id, wait_for_response)
 
     def _ensure_channel_connected(self, destination_id):
+        """ Ensure we opened a channel to destination_id. """
         if destination_id not in self._open_channels:
             self._open_channels.append(destination_id)
 
-            self.send_message(destination_id, NAMESPACE['connection'],
+            self.send_message(destination_id, NS_CONNECTION,
                               {MESSAGE_TYPE: TYPE_CONNECT, 'origin': {}},
                               no_add_request_id=True)
 
     def _disconnect_channel(self, destination_id):
+        """ Disconnect a channel with destination_id. """
         if destination_id in self._open_channels:
-            self.send_message(destination_id, NAMESPACE['connection'],
+            self.send_message(destination_id, NS_CONNECTION,
                               {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
                               no_add_request_id=True)
 
             self._open_channels.remove(destination_id)
 
 
-class BaseController(object):
-    def __init__(self, namespace, socket_client, target_platform=False):
-        self.namespace = namespace
-        self._socket_client = socket_client
-        self.target_platform = target_platform
-
-        self.logger = logging.getLogger(__name__)
-
-        socket_client.register_handler(namespace, self)
-
-    def channel_connected(self):
-        pass
-
-    def send_message(self, data, inc_session_id=False,
-                     wait_for_response=False):
-        if self.target_platform:
-            self._socket_client.send_platform_message(
-                self.namespace, data, inc_session_id, wait_for_response)
-
-        else:
-            self._socket_client.send_app_message(
-                self.namespace, data, inc_session_id, wait_for_response)
-
-    def receive_message(self, message, data):
-        self.logger.debug("Message unhandled: {}".format(
-            message_to_string(message, data)))
-
-    def tear_down(self):
-        self._socket_client = None
-
-
 class HeartbeatController(BaseController):
-    def __init__(self, socket_client):
+    """ Controller to respond to heartbeat messages. """
+
+    def __init__(self):
         super(HeartbeatController, self).__init__(
-            NAMESPACE['heartbeat'], socket_client, target_platform=True)
+            NS_HEARTBEAT, target_platform=True)
 
     def receive_message(self, message, data):
+        """ Called when a heartbeat message is received. """
         if data[MESSAGE_TYPE] == TYPE_PING:
             self._socket_client.send_message(
                 PLATFORM_DESTINATION_ID, self.namespace,
                 {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
 
+            return True
+
         else:
-            super(HeartbeatController, self).receive_message(message, data)
+            return False
 
 
 class ReceiverController(BaseController):
-    def __init__(self, socket_client):
+    """ Controller to interact with the Chromecast platform. """
+
+    def __init__(self):
         super(ReceiverController, self).__init__(
-            NAMESPACE['receiver'], socket_client, target_platform=True)
+            NS_RECEIVER, target_platform=True)
+
+        self.status = None
 
         self._status_listeners = []
 
+    @property
+    def app_id(self):
+        """ Convenience method to retrieve current app id. """
+        return self.status.app_id if self.status else None
+
     def receive_message(self, message, data):
+        """ Called when a receiver-message has been received. """
         if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 
+            return True
+
         else:
-            super(ReceiverController, self).receive_message(message, data)
+            return False
 
     def register_status_listener(self, listener):
+        """ Register a status listener for when a new Chromecast status
+            has been received. Listeners will be called with
+            listener.new_channel(status) """
         self._status_listeners.append(listener)
 
-    def update_status(self):
-        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS})
+    def update_status(self, blocking=False):
+        """ Sends a message to the Chromecast to update the status. """
+        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS},
+                          wait_for_response=blocking)
 
-    def launch_app(self, app_id, block_till_launched=True):
-        self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, 'appId': app_id},
-                          wait_for_response=block_till_launched)
+    def launch_app(self, app_id, force_launch=False, block_till_launched=True):
+        """ Launches an app on the Chromecast.
+
+            Will only launch if it is not currently running unless
+            force_launc=True. """
+        if force_launch or self.app_id != app_id:
+            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
+                              wait_for_response=block_till_launched)
 
     def stop_app(self):
+        """ Stops the current running app on the Chromecast. """
         self.send_message({MESSAGE_TYPE: 'STOP'}, inc_session_id=True)
 
     def _process_get_status(self, data):
+        """ Processes a received STATUS message and notifies listeners. """
         if not 'status' in data:
             return
 
@@ -352,170 +373,29 @@ class ReceiverController(BaseController):
         except KeyError:
             app_data = {}
 
-        status = CastStatus(
+        self.status = CastStatus(
             data.get('isActiveInput', False),
             data.get('isStandBy', True),
             volume_data.get('level', 1.0),
             volume_data.get('muted', False),
-            app_data.get('appId'),
+            app_data.get(APP_ID),
             app_data.get('displayName'),
             [item['name'] for item in app_data.get('namespaces', [])],
-            app_data.get('sessionId'),
+            app_data.get(SESSION_ID),
             app_data.get('transportId'),
             app_data.get('status_text', '')
             )
 
-        self.logger.debug("Received: {}".format(status))
+        self.logger.debug("Received: {}".format(self.status))
 
         for listener in self._status_listeners:
-            listener.on_new_status(status)
+            try:
+                listener.new_cast_status(self.status)
+            except Exception:  # pylint: disable=broad-except
+                pass
 
     def tear_down(self):
+        """ Called when controller is destroyed. """
         super(ReceiverController, self).tear_down()
 
         self._status_listeners[:] = []
-
-
-class MediaController(BaseController):
-    def __init__(self, socket_client):
-        super(MediaController, self).__init__(
-            NAMESPACE['media'], socket_client)
-
-        self.media_session_id = 0
-        self.status = None
-
-    def channel_connected(self):
-        self.update_status()
-
-    def receive_message(self, message, data):
-        if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
-            self._process_media_status(data)
-
-        else:
-            super(MediaController, self).receive_message(message, data)
-
-    def update_status(self):
-        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS})
-
-    def _send_command(self, command):
-        if self.status is None or self.status.media_session_id is None:
-            return
-
-        command['mediaSessionId'] = self.status.media_session_id
-
-        self.send_message(command)
-
-    def play(self):
-        self._send_command({MESSAGE_TYPE: 'PLAY'})
-
-    def pause(self):
-        self._send_command({MESSAGE_TYPE: 'PAUSE'})
-
-        """
-{'requestId': 3,
- 'status': [{'currentTime': 122.836466,
-             'mediaSessionId': 9,
-             'playbackRate': 1,
-             'playerState': 'PAUSED',
-             'supportedMediaCommands': 15,
-             'volume': {'level': 1, 'muted': False}}],
- 'type': 'MEDIA_STATUS'}
-        """
-
-    def stop(self):
-        self._send_command({MESSAGE_TYPE: 'STOP'})
-
-        """
-{'requestId': 3,
- 'status': [{'currentTime': 0,
-             'idleReason': 'CANCELLED',
-             'mediaSessionId': 8,
-             'playbackRate': 1,
-             'playerState': 'IDLE',
-             'supportedMediaCommands': 15,
-             'volume': {'level': 1, 'muted': False}}],
- 'type': 'MEDIA_STATUS'}
-        """
-
-    def _process_media_status(self, data):
-        if 'status' in data:
-            status_data = data.get('status', [{}])[0]
-            media_data = status_data.get('media', {})
-            volume_data = status_data.get('volume', {})
-
-            self.status = MediaStatus(
-                status_data.get('currentTime', 0),
-                media_data.get('contentId'),
-                media_data.get('contentType'),
-                media_data.get('duration', 0),
-                media_data.get('streamType'),
-                status_data.get('mediaSessionId'),
-                status_data.get('playbackRate', 1),
-                status_data.get('playerState'),
-                status_data.get('supportedMediaCommands'),
-                volume_data.get('level', 1.0),
-                volume_data.get('muted', False)
-                )
-
-        else:
-            self.status = None
-
-        self.logger.debug("Media:Received status {}".format(self.status))
-
-    def play_media(self, url, stream_type, content_type, title=None,
-                   thumb=None, current_time=0, autoplay=True):
-
-        if self._socket_client.app_id != APP_ID['DEFAULT_MEDIA_RECEIVER']:
-            self._socket_client.receiver_controller.launch_app(
-                APP_ID['DEFAULT_MEDIA_RECEIVER'])
-
-        msg = {
-            'media': {
-                'contentId': url,
-                'streamType': stream_type,
-                'contentType': content_type,
-                #'metadata': {'type': 2,
-                #             'metadataType': 0,
-                #             'title': 'Main title PyChromecast!! :-)',
-                #             'subtitle': "Subtitle"}
-            },
-            MESSAGE_TYPE: TYPE_LOAD,
-            'currentTime': current_time,
-            'autoplay': autoplay,
-            #'customData': {}
-        }
-
-        #if title:
-        #    msg['customData']['payload']['title'] = title
-
-        #if thumb:
-        #    msg['customData']['payload']['thumb'] = thumb
-
-        self.send_message(msg, inc_session_id=True)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-
-    client = SocketClient("192.168.1.9")
-
-    i = 0
-
-    try:
-        while True:
-            i += 1
-            if i == 5:
-                #client.media_controller.update_status()
-                #client.media_controller.seek(10)
-                pass
-                #client.receiver_controller.launch_app("CC1AD845")
-                #client.media_controller.play_media(
-                #    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-                #    STREAM_TYPE_BUFFERED, "video/mp4")
-
-
-            time.sleep(1)
-    except KeyboardInterrupt:
-        client.stop.set()
-
-    time.sleep(1)

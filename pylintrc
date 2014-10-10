@@ -1,0 +1,7 @@
+[MASTER]
+ignore=cast_channel_pb2.py
+
+disable=locally-disabled
+
+[EXCEPTIONS]
+overgeneral-exceptions=Exception,PyChromecastError
