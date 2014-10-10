@@ -103,7 +103,7 @@ class MediaController(BaseController):
         """ Processes a STATUS message. """
         if 'status' in data and len(data['status']) > 0:
             status_data = data['status'][0]
-            media_data = status_data.get('media', {})
+            media_data = status_data.get('media') or {}
             volume_data = status_data.get('volume', {})
 
             self.status = MediaStatus(
