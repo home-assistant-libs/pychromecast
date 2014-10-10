@@ -19,7 +19,7 @@ MediaStatus = namedtuple('MediaStatus',
                           'duration', 'stream_type', 'idle_reason',
                           'media_session_id', 'playback_rate', 'player_state',
                           'supported_media_commands', 'volume_level',
-                          'volume_muted'])
+                          'volume_muted', "media_customData"])
 
 MESSAGE_TYPE = 'type'
 
@@ -118,7 +118,8 @@ class MediaController(BaseController):
                 status_data.get('playerState'),
                 status_data.get('supportedMediaCommands'),
                 volume_data.get('level', 1.0),
-                volume_data.get('muted', False)
+                volume_data.get('muted', False),
+                media_data.get('customData')
                 )
 
         else:
@@ -153,7 +154,7 @@ class MediaController(BaseController):
             MESSAGE_TYPE: TYPE_LOAD,
             'currentTime': current_time,
             'autoplay': autoplay,
-            #'customData': {}
+            'customData': {}
         }
 
         if title:
