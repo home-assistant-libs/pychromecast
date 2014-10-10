@@ -29,6 +29,7 @@ TYPE_PLAY = "PLAY"
 TYPE_PAUSE = "PAUSE"
 TYPE_STOP = "STOP"
 TYPE_LOAD = "LOAD"
+TYPE_SEEK = "SEEK"
 
 
 class MediaController(BaseController):
@@ -74,7 +75,7 @@ class MediaController(BaseController):
 
         command['mediaSessionId'] = self.status.media_session_id
 
-        self.send_message(command)
+        self.send_message(command, inc_session_id=True)
 
     def play(self):
         """ Send the PLAY command. """
@@ -87,6 +88,16 @@ class MediaController(BaseController):
     def stop(self):
         """ Send the STOP command. """
         self._send_command({MESSAGE_TYPE: TYPE_STOP})
+
+    def rewind(self):
+        """ Starts playing the media from the beginning. """
+        self.seek(0)
+
+    def seek(self, position):
+        """ Seek the media to a specific location. """
+        self._send_command({MESSAGE_TYPE: TYPE_SEEK,
+                            "currentTime": position,
+                            "resumeState": "PLAYBACK_START"})
 
     def _process_media_status(self, data):
         """ Processes a STATUS message. """
