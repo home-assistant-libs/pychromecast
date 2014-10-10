@@ -7,12 +7,12 @@ import time
 import sys
 import logging
 
-import pychromecast as pc
+import pychromecast
 
 if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
 
-cast = pc.get_chromecast()
+cast = pychromecast.get_chromecast()
 print(cast.device)
 time.sleep(1)
 print(cast.status)
@@ -25,7 +25,8 @@ if not cast.is_idle:
 print("Playing media")
 cast.play_media(
     ("http://commondatastorage.googleapis.com/gtv-videos-bucket/"
-     "sample/BigBuckBunny.mp4"), pc.STREAM_TYPE_BUFFERED, "video/mp4")
+     "sample/BigBuckBunny.mp4"), pychromecast.STREAM_TYPE_BUFFERED,
+     "video/mp4")
 
 t = 0
 
