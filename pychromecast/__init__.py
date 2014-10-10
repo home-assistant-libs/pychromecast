@@ -62,7 +62,7 @@ def get_chromecasts(**filters):
 
     for key, val in filters.items():
         for chromecast in cc_list:
-            for tup in [chromecast.device, chromecast.app]:
+            for tup in [chromecast.device, chromecast.status]:
                 if hasattr(tup, key) and val != getattr(tup, key):
                     excluded_cc.add(chromecast)
 
