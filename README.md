@@ -67,6 +67,21 @@ After you have defined your controller you will have to add an instance to a Chr
 
 For more options see the [BaseController](https://github.com/balloob/pychromecast/blob/master/pychromecast/controllers/__init__.py). For an example of a fully implemented controller see the [MediaController](https://github.com/balloob/pychromecast/blob/master/pychromecast/controllers/media.py).
 
+Exploring existing namespaces
+-------------------------------
+So you've got PyChromecast running and decided it is time to add support to your favorite app. No worries, the following instructions will have you covered in exploring the possibilities.
+
+The following instructions require the use of the [Google Chrome browser](https://www.google.com/chrome/) and the [Google Cast plugin](https://chrome.google.com/webstore/detail/google-cast/boadgeojelhgndaghljhdicfkmllpafd).
+
+ * In Chrome, go to `chrome://net-internals/#capture`
+ * Enable the checkbox 'Include the actual bytes sent/received.'
+ * Open a new tab, browse to your favorite application on the web that has Chromecast support and start casting.
+ * Go back to the tab that is capturing events and click on stop.
+ * From the dropdown click on events. This will show you a table with events that happened while you were recording.
+ * In the filter box enter the text `Tr@n$p0rt`. This should give one SOCKET connection as result: the connection with your Chromecast.
+ * Go through the results and collect the JSON that is exchanged.
+ * Now write a controller that is able to mimic this behavior :-)
+
 Thanks
 ------
 I would like to thank [Fred Clift](https://github.com/minektur) for laying the socket client ground work. Without him it would not have been possible!
