@@ -187,6 +187,21 @@ class Chromecast(object):
         """ Reboots the Chromecast. """
         reboot(self.host)
 
+    def volume_up(self):
+        """ Increment volume by 0.1 unless it is already maxed.
+        Returns the new volume.
+
+        """
+        volume = self.status.volume_level
+        return self.set_volume(volume + 0.1)
+
+    def volume_down(self):
+        """ Decrement the volume by 0.1 unless it is already 0.
+        Returns the new volume.
+        """
+        volume = self.status.volume_level
+        return self.set_volume(volume - 0.1)
+
     def __del__(self):
         self.socket_client.stop.set()
 

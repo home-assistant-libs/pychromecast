@@ -363,9 +363,14 @@ class ReceiverController(BaseController):
         self.send_message({MESSAGE_TYPE: 'STOP'}, inc_session_id=True)
 
     def set_volume(self, volume):
-        """ Allows to set volume. Should be value between 0..1 """
+        """ Allows to set volume. Should be value between 0..1.
+        Returns the new volume.
+
+        """
+        volume = min(max(0, round(volume, 1)), 1)
         self.send_message({MESSAGE_TYPE: 'SET_VOLUME',
                            'volume': {'level': volume}})
+        return volume
 
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """
