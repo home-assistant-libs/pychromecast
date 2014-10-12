@@ -13,9 +13,17 @@ if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
 
 cast = pychromecast.get_chromecast()
+print()
 print(cast.device)
 time.sleep(1)
+print()
 print(cast.status)
+print()
+print(cast.media_controller.status)
+print()
+
+if '--show-status-only' in sys.argv:
+    sys.exit()
 
 if not cast.is_idle:
     print("Killing current running app")
@@ -25,8 +33,7 @@ if not cast.is_idle:
 print("Playing media")
 cast.play_media(
     ("http://commondatastorage.googleapis.com/gtv-videos-bucket/"
-     "sample/BigBuckBunny.mp4"), pychromecast.STREAM_TYPE_BUFFERED,
-     "video/mp4")
+     "sample/BigBuckBunny.mp4"), "video/mp4")
 
 t = 0
 

@@ -134,8 +134,8 @@ class MediaController(BaseController):
                 pass
 
     # pylint: disable=too-many-arguments
-    def play_media(self, url, stream_type, content_type, title=None,
-                   thumb=None, current_time=0, autoplay=True):
+    def play_media(self, url, content_type, title=None, thumb=None,
+                   current_time=0, autoplay=True, stream_type=STREAM_TYPE_BUFFERED):
         """ Plays media on the Chromecast. Start default media receiver if not
             already started. """
 
