@@ -9,11 +9,11 @@ setup(
     author='Paulus Schoutsen',
     author_email='paulus@paulusschoutsen.nl',
     description='Python module to talk to Google Chromecast.',
-    packages=['pychromecast'],
+    packages=find_packages(),
     zip_safe=False,
     include_package_data=True,
     platforms='any',
-    install_requires=['requests', 'ws4py'],
+    install_requires=['requests', 'protobuf'],
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
