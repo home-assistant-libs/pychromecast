@@ -16,12 +16,14 @@ from .dial import get_device_status, reboot
 from .controllers.media import STREAM_TYPE_BUFFERED
 
 
-def _get_all_chromecasts():
+def _get_all_chromecasts(filters):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
     """
-    ips = discover_chromecasts()
+    discover_args = {k: v for k, v in filters.iteritems()
+                     if k in ['max_devices', 'timeout']}
+    ips = discover_chromecasts(**discover_args)
     cc_list = []
     for ip_address in ips:
         try:
@@ -48,7 +50,7 @@ def get_chromecasts(**filters):
     Or ip address:
         ip
     """
-    cc_list = set(_get_all_chromecasts())
+    cc_list = set(_get_all_chromecasts(filters))
     excluded_cc = set()
 
     if not filters:
