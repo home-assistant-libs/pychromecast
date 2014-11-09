@@ -10,13 +10,19 @@ import socket
 import ssl
 import json
 import threading
+import time
 from collections import namedtuple
 from struct import pack, unpack
+from ssl import SSLError
 
 from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
-from .error import ChromecastConnectionError, UnsupportedNamespace
+from .error import (
+    ChromecastConnectionError,
+    UnsupportedNamespace,
+    NotConnected
+)
 
 NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
 NS_RECEIVER = 'urn:x-cast:com.google.cast.receiver'
@@ -63,45 +69,60 @@ CastStatus = namedtuple('CastStatus',
 class SocketClient(threading.Thread):
     """ Class to interact with a Chromecast through a socket. """
 
-    def __init__(self, host):
+    def __init__(self, host, tries=None):
         super(SocketClient, self).__init__()
+
         self.daemon = True
 
         self.logger = logging.getLogger(__name__)
 
+        self.tries = tries
         self.host = host
+
         self.stop = threading.Event()
 
-        self.source_id = "sender-0"
-        self.app_namespaces = []
-        self.destination_id = None
-        self.session_id = None
+        self.initialize_connection()
 
-        self._request_id = 0
+    def initialize_connection(self):
+        tries = self.tries
 
-        # dict mapping namespace on Controller objects
-        self._handlers = {}
+        while tries is None or tries > 1:
+            self.connecting = True
 
-        # dict mapping requestId on threading.Event objects
-        self._request_callbacks = {}
+            self.source_id = "sender-0"
+            self.app_namespaces = []
+            self.destination_id = None
+            self.session_id = None
 
-        self._open_channels = []
+            self._request_id = 0
 
-        self.receiver_controller = ReceiverController()
-        self.media_controller = MediaController()
+            # dict mapping namespace on Controller objects
+            self._handlers = {}
 
-        # Initialize the socket
-        self.socket = ssl.wrap_socket(socket.socket())
+            # dict mapping requestId on threading.Event objects
+            self._request_callbacks = {}
 
-        try:
-            self.socket.settimeout(10)
-            self.socket.connect((self.host, 8009))
-        except socket.error:
-            self.logger.exception(
-                "Error setting up connection with Chromecast")
+            self._open_channels = []
 
-            raise ChromecastConnectionError(
-                "Error setting up connection with Chromecast")
+            self.receiver_controller = ReceiverController()
+            self.media_controller = MediaController()
+
+            if tries is None or tries > 1:
+                try:
+                    self.socket = ssl.wrap_socket(socket.socket())
+                    self.socket.settimeout(10)
+                    self.socket.connect((self.host, 8009))
+                    self.connecting = False
+                    self.logger.debug("Connected!")
+                    break
+                except socket.error:
+                    self.connecting = True
+                    self.logger.exception("Failed to connect, retrying in 5s")
+                    time.sleep(5)
+                    if tries:
+                        tries -= 1
+            else:
+                raise ChromecastConnectionError("Failed to connect")
 
         self.register_handler(HeartbeatController())
         self.register_handler(self.receiver_controller)
@@ -150,7 +171,12 @@ class SocketClient(threading.Thread):
         self.receiver_controller.update_status()
 
         while not self.stop.is_set():
-            message = self._read_message()
+            try:
+                message = self._read_message()
+            except socket.error:
+                self.logger.exception("Chromecast is disconnected, retrying")
+                self.initialize_connection()
+                continue
 
             data = _json_from_message(message)
 
@@ -247,7 +273,10 @@ class SocketClient(threading.Thread):
             self.logger.debug(
                 "Sending: {}".format(_message_to_string(msg, data)))
 
-        self.socket.sendall(be_size + msg.SerializeToString())
+        if not self.connecting:
+            self.socket.sendall(be_size + msg.SerializeToString())
+        else:
+            raise NotConnected("Chromecast is connecting...")
 
         if not no_add_request_id and wait_for_response:
             self._request_callbacks[request_id] = threading.Event()
