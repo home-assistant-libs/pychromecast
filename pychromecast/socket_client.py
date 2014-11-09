@@ -81,6 +81,9 @@ class SocketClient(threading.Thread):
 
         self.stop = threading.Event()
 
+        self.receiver_controller = ReceiverController()
+        self.media_controller = MediaController()
+
         self.initialize_connection()
 
     def initialize_connection(self):
@@ -103,9 +106,6 @@ class SocketClient(threading.Thread):
             self._request_callbacks = {}
 
             self._open_channels = []
-
-            self.receiver_controller = ReceiverController()
-            self.media_controller = MediaController()
 
             if tries is None or tries > 1:
                 try:
