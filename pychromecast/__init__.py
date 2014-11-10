@@ -192,14 +192,14 @@ class Chromecast(object):
         Returns the new volume.
 
         """
-        volume = self.status.volume_level
+        volume = round(self.status.volume_level, 1)
         return self.set_volume(volume + 0.1)
 
     def volume_down(self):
         """ Decrement the volume by 0.1 unless it is already 0.
         Returns the new volume.
         """
-        volume = self.status.volume_level
+        volume = round(self.status.volume_level, 1)
         return self.set_volume(volume - 0.1)
 
     def __del__(self):
