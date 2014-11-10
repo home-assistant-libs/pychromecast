@@ -27,6 +27,14 @@ class ChromecastConnectionError(PyChromecastError):
     pass
 
 
+class PyChromecastStopped(PyChromecastError):
+    """ Raised when a command is invoked while the Chromecast's socket_client
+    is stopped.
+
+    """
+    pass
+
+
 class NotConnected(PyChromecastError):
     """
     Raised when a command is invoked while not connected to a Chromecast.

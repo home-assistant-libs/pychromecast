@@ -13,7 +13,6 @@ import threading
 import time
 from collections import namedtuple
 from struct import pack, unpack
-from ssl import SSLError
 
 from . import cast_channel_pb2
 from .controllers import BaseController
@@ -21,7 +20,8 @@ from .controllers.media import MediaController
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
-    NotConnected
+    NotConnected,
+    PyChromecastStopped
 )
 
 NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
@@ -107,22 +107,23 @@ class SocketClient(threading.Thread):
 
             self._open_channels = []
 
-            if tries is None or tries > 1:
-                try:
-                    self.socket = ssl.wrap_socket(socket.socket())
-                    self.socket.settimeout(10)
-                    self.socket.connect((self.host, 8009))
-                    self.connecting = False
-                    self.logger.debug("Connected!")
-                    break
-                except socket.error:
-                    self.connecting = True
-                    self.logger.exception("Failed to connect, retrying in 5s")
-                    time.sleep(5)
-                    if tries:
-                        tries -= 1
-            else:
-                raise ChromecastConnectionError("Failed to connect")
+            try:
+                self.socket = ssl.wrap_socket(socket.socket())
+                self.socket.settimeout(10)
+                self.socket.connect((self.host, 8009))
+                self.connecting = False
+                self.logger.debug("Connected!")
+                break
+            except socket.error:
+                self.connecting = True
+                self.logger.exception("Failed to connect, retrying in 5s")
+                time.sleep(5)
+                if tries:
+                    tries -= 1
+        else:
+            self.stop.set()
+            self.logger.exception("Failed to connect. No retries.")
+            raise ChromecastConnectionError("Failed to connect")
 
         self.register_handler(HeartbeatController())
         self.register_handler(self.receiver_controller)
@@ -174,8 +175,9 @@ class SocketClient(threading.Thread):
             try:
                 message = self._read_message()
             except socket.error:
-                self.logger.exception("Chromecast is disconnected, retrying")
-                self.initialize_connection()
+                if not self.connecting:
+                    self.logger.exception("Connecting to chromecast...")
+                    self.initialize_connection()
                 continue
 
             data = _json_from_message(message)
@@ -273,6 +275,8 @@ class SocketClient(threading.Thread):
             self.logger.debug(
                 "Sending: {}".format(_message_to_string(msg, data)))
 
+        if self.stop.is_set():
+            raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting:
             self.socket.sendall(be_size + msg.SerializeToString())
         else:
