@@ -367,7 +367,7 @@ class ReceiverController(BaseController):
         Returns the new volume.
 
         """
-        volume = min(max(0, round(volume, 1)), 1)
+        volume = min(max(0, volume), 1)
         self.send_message({MESSAGE_TYPE: 'SET_VOLUME',
                            'volume': {'level': volume}})
         return volume
