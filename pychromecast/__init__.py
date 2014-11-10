@@ -47,6 +47,11 @@ def get_chromecasts(tries=None, **filters):
         app_id, description, state, service_url, service_protocols (list)
     Or ip address:
         ip
+
+    Tries is specified if you want to limit the number of times the
+    underlying socket associated with your Chromecast objects will
+    retry connecting if connection is lost or it fails to connect
+    in the first place.
     """
     cc_list = set(_get_all_chromecasts(tries=tries))
     excluded_cc = set()
@@ -74,6 +79,11 @@ def get_chromecasts_as_dict(tries=None, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
+
+    Tries is specified if you want to limit the number of times the
+    underlying socket associated with your Chromecast objects will
+    retry connecting if connection is lost or it fails to connect
+    in the first place.
     """
     # pylint: disable=star-args
     return {cc.device.friendly_name: cc
@@ -88,6 +98,11 @@ def get_chromecast(strict=False, tries=None, **filters):
     Returns a Chromecast matching exactly the fitler specified.
 
     If strict, return one and only one chromecast
+
+    Tries is specified if you want to limit the number of times the
+    underlying socket associated with your Chromecast objects will
+    retry connecting if connection is lost or it fails to connect
+    in the first place.
     """
 
     # If we have filters or are operating in strict mode we have to scan
