@@ -16,7 +16,7 @@ from .dial import get_device_status, reboot
 from .controllers.media import STREAM_TYPE_BUFFERED
 
 
-def _get_all_chromecasts():
+def _get_all_chromecasts(tries=None):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
@@ -25,13 +25,13 @@ def _get_all_chromecasts():
     cc_list = []
     for ip_address in ips:
         try:
-            cc_list.append(Chromecast(host=ip_address))
+            cc_list.append(Chromecast(host=ip_address, tries=tries))
         except ChromecastConnectionError:
             pass
     return cc_list
 
 
-def get_chromecasts(**filters):
+def get_chromecasts(tries=None, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -48,7 +48,7 @@ def get_chromecasts(**filters):
     Or ip address:
         ip
     """
-    cc_list = set(_get_all_chromecasts())
+    cc_list = set(_get_all_chromecasts(tries=tries))
     excluded_cc = set()
 
     if not filters:
@@ -70,16 +70,17 @@ def get_chromecasts(**filters):
     return list(filtered_cc)
 
 
-def get_chromecasts_as_dict(**filters):
+def get_chromecasts_as_dict(tries=None, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
     """
     # pylint: disable=star-args
-    return {cc.device.friendly_name: cc for cc in get_chromecasts(**filters)}
+    return {cc.device.friendly_name: cc
+            for cc in get_chromecasts(tries=tries, **filters)}
 
 
-def get_chromecast(strict=False, **filters):
+def get_chromecast(strict=False, tries=None, **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
@@ -93,9 +94,10 @@ def get_chromecast(strict=False, **filters):
     # for all Chromecasts to ensure there is only 1 matching chromecast.
     # If no filters given and not strict just use the first dicsovered one.
     if filters or strict:
-        results = get_chromecasts(**filters)
+        results = get_chromecasts(tries=tries, **filters)
     else:
-        results = [Chromecast(ip) for ip in discover_chromecasts(1)]
+        results = [Chromecast(ip, tries=tries)
+                   for ip in discover_chromecasts(1)]
 
     if len(results) > 1:
         if strict:
@@ -121,7 +123,7 @@ def get_chromecast(strict=False, **filters):
 class Chromecast(object):
     """ Class to interface with a ChromeCast. """
 
-    def __init__(self, host):
+    def __init__(self, host, tries=None):
         self.logger = logging.getLogger(__name__)
 
         self.host = host
@@ -136,7 +138,7 @@ class Chromecast(object):
         self.status = None
         self.media_status = None
 
-        self.socket_client = socket_client.SocketClient(host)
+        self.socket_client = socket_client.SocketClient(host, tries)
 
         self.socket_client.receiver_controller.register_status_listener(self)
 
