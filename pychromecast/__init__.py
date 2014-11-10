@@ -53,6 +53,8 @@ def get_chromecasts(tries=None, **filters):
     retry connecting if connection is lost or it fails to connect
     in the first place.
     """
+    logger = logging.getLogger(__name__)
+
     cc_list = set(_get_all_chromecasts(tries=tries))
     excluded_cc = set()
 
@@ -72,6 +74,11 @@ def get_chromecasts(tries=None, **filters):
                     excluded_cc.add(chromecast)
 
     filtered_cc = cc_list - excluded_cc
+
+    for cc in excluded_cc:
+        logger.debug("Stopping excluded chromecast {}".format(cc))
+        cc.socket_client.stop.set()
+
     return list(filtered_cc)
 
 
