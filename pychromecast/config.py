@@ -32,7 +32,7 @@ def get_app_config(app_id):
     try:
         req = requests.get(
             ("https://clients3.google.com/"
-             "cast/chromecast/device/app?a={}").format(app_id))
+             "cast/chromecast/device/app?a={0}").format(app_id))
 
         return json.loads(req.text[4:]) if req.status_code == 200 else {}
 

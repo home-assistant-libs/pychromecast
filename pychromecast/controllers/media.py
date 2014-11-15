@@ -125,7 +125,7 @@ class MediaController(BaseController):
         else:
             self.status = None
 
-        self.logger.debug("Media:Received status {}".format(self.status))
+        self.logger.debug("Media:Received status {0}".format(self.status))
 
         for listener in self._status_listeners:
             try:
