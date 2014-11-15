@@ -20,10 +20,10 @@ SSDP_MX = 1
 SSDP_ST = "urn:dial-multiscreen-org:service:dial:1"
 
 SSDP_REQUEST = 'M-SEARCH * HTTP/1.1\r\n' + \
-               'HOST: {}:{:d}\r\n'.format(SSDP_ADDR, SSDP_PORT) + \
+               'HOST: {0}:{1:d}\r\n'.format(SSDP_ADDR, SSDP_PORT) + \
                'MAN: "ssdp:discover"\r\n' + \
-               'MX: {:d}\r\n'.format(SSDP_MX) + \
-               'ST: {}\r\n'.format(SSDP_ST) + \
+               'MX: {0:d}\r\n'.format(SSDP_MX) + \
+               'ST: {0}\r\n'.format(SSDP_ST) + \
                '\r\n'
 
 

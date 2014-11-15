@@ -49,7 +49,7 @@ def _message_to_string(message, data=None):
     if data is None:
         data = _json_from_message(message)
 
-    return "Message {} from {} to {}: {}".format(
+    return "Message {0} from {1} to {2}: {3}".format(
         message.namespace, message.source_id, message.destination_id, data)
 
 CastStatus = namedtuple('CastStatus',
@@ -157,19 +157,19 @@ class SocketClient(threading.Thread):
             if message.namespace in self._handlers:
 
                 if message.namespace != NS_HEARTBEAT:
-                    self.logger.debug("Received: {}".format(
+                    self.logger.debug("Received: {0}".format(
                         _message_to_string(message, data)))
 
                 handled = self._handlers[message.namespace].receive_message(
                     message, data)
 
                 if not handled:
-                    self.logger.warning("Message unhandled: {}".format(
+                    self.logger.warning("Message unhandled: {0}".format(
                         _message_to_string(message, data)))
 
             else:
                 self.logger.error(
-                    "Received unknown namespace: {}".format(
+                    "Received unknown namespace: {0}".format(
                         _message_to_string(message, data)))
 
             if REQUEST_ID in data:
@@ -245,7 +245,7 @@ class SocketClient(threading.Thread):
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
             self.logger.debug(
-                "Sending: {}".format(_message_to_string(msg, data)))
+                "Sending: {0}".format(_message_to_string(msg, data)))
 
         self.socket.sendall(be_size + msg.SerializeToString())
 
@@ -264,8 +264,8 @@ class SocketClient(threading.Thread):
         """ Helper method to send a message to current running app. """
         if namespace not in self.app_namespaces:
             raise UnsupportedNamespace(
-                ("Namespace {} is not supported by current app. "
-                 "Supported are {}").format(namespace,
+                ("Namespace {0} is not supported by current app. "
+                 "Supported are {0}").format(namespace,
                                             ", ".join(self.app_namespaces)))
 
         self.send_message(self.destination_id, namespace, message,
@@ -398,7 +398,7 @@ class ReceiverController(BaseController):
             app_data.get('status_text', '')
             )
 
-        self.logger.debug("Received: {}".format(self.status))
+        self.logger.debug("Received: {0}".format(self.status))
 
         for listener in self._status_listeners:
             try:

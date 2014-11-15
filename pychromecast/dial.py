@@ -9,7 +9,7 @@ import requests
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
-FORMAT_BASE_URL = "http://{}:8008"
+FORMAT_BASE_URL = "http://{0}:8008"
 
 CC_SESSION = requests.Session()
 CC_SESSION.headers['content-type'] = 'application/json'
@@ -23,6 +23,11 @@ def reboot(host):
 
 def get_device_status(host):
     """ Returns the device status as a named tuple. """
+
+    if hasattr(ET, 'ParseError'):
+        EXCEPTIONS_TO_CATCH = (requests.exceptions.RequestException, ET.ParseError)
+    else:
+        EXCEPTIONS_TO_CATCH = (requests.exceptions.RequestException)
 
     try:
         req = CC_SESSION.get(
@@ -50,7 +55,7 @@ def get_device_status(host):
         return DeviceStatus(friendly_name, model_name, manufacturer,
                             api_version)
 
-    except (requests.exceptions.RequestException, ET.ParseError):
+    except EXCEPTIONS_TO_CATCH:
         return None
 
 
