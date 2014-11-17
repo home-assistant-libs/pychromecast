@@ -1,4 +1,4 @@
-pychromecast
+pychromecast [![Build Status](https://travis-ci.org/balloob/pychromecast.svg?branch=master)](https://travis-ci.org/balloob/pychromecast)
 ============
 
 **Python 3 support is currently broken. Use version 0.5.1.1 on PyPy for Python 3 support.**

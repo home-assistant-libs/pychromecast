@@ -1,5 +1,6 @@
 [MASTER]
 ignore=cast_channel_pb2.py
+reports=no
 
 disable=locally-disabled
 
