@@ -40,3 +40,11 @@ class UnsupportedNamespace(PyChromecastError):
     supported by the current running app.
     """
     pass
+
+
+class ControllerNotRegistered(PyChromecastError):
+    """
+    Raised when trying to interact with a controller while it is
+    not registered with a ChromeCast object.
+    """
+    pass

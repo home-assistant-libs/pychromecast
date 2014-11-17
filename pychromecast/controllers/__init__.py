@@ -3,7 +3,7 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 import logging
 
-from ..error import NotConnected, UnsupportedNamespace
+from ..error import NotConnected, UnsupportedNamespace, ControllerNotRegistered
 
 
 class BaseController(object):
@@ -38,6 +38,8 @@ class BaseController(object):
 
     def launch(self):
         """ If set, launches app related to the controller. """
+        self._check_registered()
+
         self._socket_client.receiver_controller.launch_app(
             self.supporting_app_id)
 
@@ -62,8 +64,7 @@ class BaseController(object):
 
         Will raise a NotConnected exception if not connected.
         """
-        if self._socket_client is None:
-            raise NotConnected()
+        self._check_registered()
 
         if not self.target_platform and \
            self.namespace not in self._socket_client.app_namespaces:
@@ -89,3 +90,9 @@ class BaseController(object):
     def tear_down(self):
         """ Called when we are shutting down. """
         self._socket_client = None
+
+    def _check_registered(self):
+        if self._socket_client is None:
+            raise ControllerNotRegistered((
+                "Trying to use the controller without it being registered "
+                "with a Cast object."))

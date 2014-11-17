@@ -168,7 +168,7 @@ class SocketClient(threading.Thread):
                         _message_to_string(message, data)))
 
             else:
-                self.logger.error(
+                self.logger.warning(
                     "Received unknown namespace: {}".format(
                         _message_to_string(message, data)))
 
@@ -346,6 +346,7 @@ class ReceiverController(BaseController):
 
     def update_status(self, blocking=False):
         """ Sends a message to the Chromecast to update the status. """
+        self.logger.info("Receiver:Updating status")
         self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS},
                           wait_for_response=blocking)
 
@@ -354,12 +355,22 @@ class ReceiverController(BaseController):
 
             Will only launch if it is not currently running unless
             force_launc=True. """
+        # If this is called too quickly after launch, we don't have the info.
+        # We need the info if we are not force launching to check running app.
+        if not force_launch and self.app_id is None:
+            self.update_status(True)
+
         if force_launch or self.app_id != app_id:
+            self.logger.info("Receiver:Launching app %s", app_id)
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
                               wait_for_response=block_till_launched)
+        else:
+            self.logger.info(
+                "Not launching app %s - already running", app_id)
 
     def stop_app(self):
         """ Stops the current running app on the Chromecast. """
+        self.logger.info("Receiver:Stopping current app")
         self.send_message({MESSAGE_TYPE: 'STOP'}, inc_session_id=True)
 
     def set_volume(self, volume):
@@ -368,6 +379,7 @@ class ReceiverController(BaseController):
 
         """
         volume = min(max(0, volume), 1)
+        self.logger.info("Receiver:setting volume to %.1f", volume)
         self.send_message({MESSAGE_TYPE: 'SET_VOLUME',
                            'volume': {'level': volume}})
         return volume
