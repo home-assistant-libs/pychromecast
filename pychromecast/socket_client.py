@@ -89,7 +89,7 @@ class SocketClient(threading.Thread):
     def initialize_connection(self):
         tries = self.tries
 
-        while tries is None or tries > 1:
+        while tries is None or tries > 0:
             self.connecting = True
 
             self.source_id = "sender-0"
