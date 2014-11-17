@@ -3,20 +3,43 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 import logging
 
-from ..error import NotConnected
+from ..error import NotConnected, UnsupportedNamespace
 
 
 class BaseController(object):
     """ ABC for namespace controllers. """
 
-    def __init__(self, namespace, target_platform=False):
+    def __init__(self, namespace, supporting_app_id=None,
+                 target_platform=False):
+        """
+        Initialize the controller.
+
+        namespace:         the namespace this controller will act on
+        supporting_app_id: app to be launched if app is running with
+                           unsupported namespace.
+        target_platform:   set to True if you target the platform instead of
+                           current app.
+        """
         self.namespace = namespace
+        self.supporting_app_id = supporting_app_id
         self.target_platform = target_platform
 
         self._socket_client = None
         self._message_func = None
 
         self.logger = logging.getLogger(__name__)
+
+    @property
+    def is_active(self):
+        """ True if the controller is connected to a socket client and the
+            Chromecast is running an app that supports this controller. """
+        return (self._socket_client is not None and
+                self.namespace in self._socket_client.app_namespaces)
+
+    def launch_app(self):
+        """ If set, launches app related to the controller. """
+        self._socket_client.receiver_controller.launch_app(
+            self.supporting_app_id)
 
     def registered(self, socket_client):
         """ Called when a controller is registered. """
@@ -41,6 +64,16 @@ class BaseController(object):
         """
         if self._socket_client is None:
             raise NotConnected()
+
+        if not self.target_platform and \
+           self.namespace not in self._socket_client.app_namespaces:
+            if self.supporting_app_id is not None:
+                self.launch_app()
+
+            else:
+                raise UnsupportedNamespace(
+                    ("Namespace {} is not supported by running"
+                     "application.").format(self.namespace))
 
         self._message_func(
             self.namespace, data, inc_session_id, wait_for_response)

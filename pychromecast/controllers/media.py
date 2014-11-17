@@ -77,6 +77,24 @@ class MediaController(BaseController):
 
         self.send_message(command, inc_session_id=True)
 
+    @property
+    def is_playing(self):
+        """ Returns if the Chromecast is playing. """
+        return (self.status is not None and
+                self.status.player_state == MEDIA_PLAYER_STATE_PLAYING)
+
+    @property
+    def is_paused(self):
+        """ Returns if the Chromecast is paused. """
+        return (self.status is not None and
+                self.status.player_state == MEDIA_PLAYER_STATE_PAUSED)
+
+    @property
+    def is_idle(self):
+        """ Returns if the Chromecast is idle on a media supported app. """
+        return (self.status is not None and
+                self.status.player_state == MEDIA_PLAYER_STATE_IDLE)
+
     def play(self):
         """ Send the PLAY command. """
         self._send_command({MESSAGE_TYPE: TYPE_PLAY})
@@ -135,7 +153,8 @@ class MediaController(BaseController):
 
     # pylint: disable=too-many-arguments
     def play_media(self, url, content_type, title=None, thumb=None,
-                   current_time=0, autoplay=True, stream_type=STREAM_TYPE_BUFFERED):
+                   current_time=0, autoplay=True,
+                   stream_type=STREAM_TYPE_BUFFERED):
         """ Plays media on the Chromecast. Start default media receiver if not
             already started. """
 

@@ -150,7 +150,7 @@ class Chromecast(object):
     @property
     def is_idle(self):
         """ Returns if there is currently an app running. """
-        return self.status is None or self.status.app_id == APP_BACKDROP
+        return self.status is None or self.status.is_stand_by
 
     @property
     def app_id(self):
