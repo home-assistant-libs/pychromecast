@@ -87,6 +87,9 @@ class SocketClient(threading.Thread):
         # dict mapping namespace on Controller objects
         self._handlers = {}
 
+        # dict mapping requestId on threading.Event objects
+        self._request_callbacks = {}
+
         self.source_id = "sender-0"
 
         self.initialize_connection()
@@ -103,7 +106,10 @@ class SocketClient(threading.Thread):
 
             self._request_id = 0
 
-            # dict mapping requestId on threading.Event objects
+            # Make sure nobody is blocking.
+            for event in self._request_callbacks.values():
+                event.set()
+
             self._request_callbacks = {}
 
             self._open_channels = []
