@@ -165,10 +165,10 @@ class MediaController(BaseController):
                 'contentId': url,
                 'streamType': stream_type,
                 'contentType': content_type,
-                #'metadata': {'type': 2,
-                #             'metadataType': 0,
-                #             'title': 'Main title PyChromecast!! :-)',
-                #             'subtitle': "Subtitle"}
+                # 'metadata': {'type': 2,
+                #              'metadataType': 0,
+                #              'title': 'Main title PyChromecast!! :-)',
+                #              'subtitle': "Subtitle"}
             },
             MESSAGE_TYPE: TYPE_LOAD,
             'currentTime': current_time,

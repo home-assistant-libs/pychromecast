@@ -197,7 +197,7 @@ class SocketClient(threading.Thread):
 
         read_len = unpack(">I", payload_info)[0]
 
-        #now read the payload
+        # now read the payload
         payload = ""
         while len(payload) < read_len:
             frag = self.socket.recv(2048)
@@ -239,7 +239,7 @@ class SocketClient(threading.Thread):
         msg.namespace = namespace
         msg.payload_utf8 = json.dumps(data, ensure_ascii=False).encode("utf8")
 
-        #prepend message with Big-Endian 4 byte payload size
+        # prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
@@ -374,10 +374,11 @@ class ReceiverController(BaseController):
 
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """
-        if not 'status' in data:
+        data = data.get('status')
+
+        if data is None:
             return
 
-        data = data['status']
         volume_data = data.get('volume', {})
 
         try:

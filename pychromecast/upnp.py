@@ -6,10 +6,13 @@ import socket
 import logging
 import datetime as dt
 
-# pylint: disable=import-error
-try:  # Python 2
+try:
+    # Python 2
+    # pylint: disable=import-error
     import urlparse
-except ImportError:  # Python 3
+except ImportError:
+    # Python 3
+    # pylint: disable=import-error,no-name-in-module
     import urllib.parse as urlparse
 
 DISCOVER_TIMEOUT = 10

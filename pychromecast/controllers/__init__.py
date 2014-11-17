@@ -36,7 +36,7 @@ class BaseController(object):
         return (self._socket_client is not None and
                 self.namespace in self._socket_client.app_namespaces)
 
-    def launch_app(self):
+    def launch(self):
         """ If set, launches app related to the controller. """
         self._socket_client.receiver_controller.launch_app(
             self.supporting_app_id)
@@ -68,7 +68,7 @@ class BaseController(object):
         if not self.target_platform and \
            self.namespace not in self._socket_client.app_namespaces:
             if self.supporting_app_id is not None:
-                self.launch_app()
+                self.launch()
 
             else:
                 raise UnsupportedNamespace(
