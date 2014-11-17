@@ -41,6 +41,10 @@ How to use
     >> mc.pause()
     >> time.sleep(5)
     >> mc.play()
+    >> from pychromecast.controllers.youtube import YouTubeController
+    >> yt = YouTubeController()
+    >> cast.register_handler(yt)
+    >> yt.play_video("L0MK7qz13bU")
 
 Adding support for extra namespaces
 -----------------------------------

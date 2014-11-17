@@ -8,11 +8,15 @@ import sys
 import logging
 
 import pychromecast
+import pychromecast.controllers.youtube as youtube
 
 if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
 
 cast = pychromecast.get_chromecast()
+yt = youtube.YouTubeController()
+cast.register_handler(yt)
+
 print()
 print(cast.device)
 time.sleep(1)
@@ -54,6 +58,11 @@ while True:
             print("Sending stop command")
             cast.media_controller.stop()
         elif t == 27:
+            print("Switching to YouTube")
+            yt.play_video("L0MK7qz13bU")
+        elif t == 38:
+            cast.media_controller.pause()
+        elif t == 45:
             cast.quit_app()
             break
 

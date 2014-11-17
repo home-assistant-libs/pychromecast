@@ -92,6 +92,7 @@ class BaseController(object):
         self._socket_client = None
 
     def _check_registered(self):
+        """ Helper method to see if we are registered with a Cast object. """
         if self._socket_client is None:
             raise ControllerNotRegistered((
                 "Trying to use the controller without it being registered "
