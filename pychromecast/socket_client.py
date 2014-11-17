@@ -83,6 +83,7 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
+        self.source_id = "sender-0"
 
         self.initialize_connection()
 
@@ -92,7 +93,6 @@ class SocketClient(threading.Thread):
         while tries is None or tries > 0:
             self.connecting = True
 
-            self.source_id = "sender-0"
             self.app_namespaces = []
             self.destination_id = None
             self.session_id = None
