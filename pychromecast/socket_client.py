@@ -84,6 +84,14 @@ class SocketClient(threading.Thread):
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
 
+        self.app_namespaces = []
+        self.destination_id = None
+        self.session_id = None
+        self.connecting = True
+        self.socket = None
+        self._open_channels = []
+        self._request_id = 0
+
         # dict mapping namespace on Controller objects
         self._handlers = {}
 
@@ -95,6 +103,7 @@ class SocketClient(threading.Thread):
         self.initialize_connection()
 
     def initialize_connection(self):
+        """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
         while tries is None or tries > 0:

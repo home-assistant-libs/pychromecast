@@ -75,9 +75,9 @@ def get_chromecasts(tries=None, **filters):
 
     filtered_cc = cc_list - excluded_cc
 
-    for cc in excluded_cc:
-        logger.debug("Stopping excluded chromecast {}".format(cc))
-        cc.socket_client.stop.set()
+    for cast in excluded_cc:
+        logger.debug("Stopping excluded chromecast {}".format(cast))
+        cast.socket_client.stop.set()
 
     return list(filtered_cc)
 
