@@ -123,7 +123,7 @@ class SocketClient(threading.Thread):
                     tries -= 1
         else:
             self.stop.set()
-            self.logger.exception("Failed to connect. No retries.")
+            self.logger.error("Failed to connect. No retries.")
             raise ChromecastConnectionError("Failed to connect")
 
         self.register_handler(HeartbeatController())
