@@ -83,6 +83,10 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
+
+        # dict mapping namespace on Controller objects
+        self._handlers = {}
+
         self.source_id = "sender-0"
 
         self.initialize_connection()
@@ -98,9 +102,6 @@ class SocketClient(threading.Thread):
             self.session_id = None
 
             self._request_id = 0
-
-            # dict mapping namespace on Controller objects
-            self._handlers = {}
 
             # dict mapping requestId on threading.Event objects
             self._request_callbacks = {}
