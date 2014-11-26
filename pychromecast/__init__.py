@@ -63,7 +63,7 @@ def get_chromecasts(tries=None, **filters):
 
     if 'ip' in filters:
         for chromecast in cc_list:
-            if chromecast.host != filter['ip']:
+            if chromecast.host != filters['ip']:
                 excluded_cc.add(chromecast)
         filters.pop('ip')
 
