@@ -4,7 +4,7 @@ python:
   - "3.4"
 install:
   - pip install -r requirements.txt
-  - pip install pep8 pylint
+  - pip install flake8 pylint
 script:
-  - pep8 --exclude cast_channel_pb2.py pychromecast
+  - flake8 --exclude cast_channel_pb2.py pychromecast
   - pylint pychromecast
