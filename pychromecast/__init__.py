@@ -3,6 +3,7 @@ PyChromecast: remote control your Chromecast
 """
 from __future__ import print_function
 
+import socket
 from collections import namedtuple
 import threading
 import logging
@@ -11,7 +12,7 @@ import logging
 from .config import *
 from .error import *
 from . import socket_client
-from .upnp import discover_chromecasts
+from .discovery import discover_chromecasts
 from .dial import get_device_status, reboot
 from .controllers.media import STREAM_TYPE_BUFFERED
 
@@ -21,9 +22,9 @@ def _get_all_chromecasts(tries=None):
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
     """
-    ips = discover_chromecasts()
+    hosts = discover_chromecasts()
     cc_list = []
-    for ip_address in ips:
+    for ip_address, port in hosts:
         try:
             cc_list.append(Chromecast(host=ip_address, tries=tries))
         except ChromecastConnectionError:
@@ -148,7 +149,8 @@ class Chromecast(object):
     def __init__(self, host, tries=None):
         self.logger = logging.getLogger(__name__)
 
-        self.host = host
+        # Resolve host to IP address
+        self.host = socket.gethostbyname(host)
 
         self.logger.info("Querying device status")
         self.device = get_device_status(self.host)
