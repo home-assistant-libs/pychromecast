@@ -4,17 +4,15 @@ PyChromecast: remote control your Chromecast
 from __future__ import print_function
 
 import socket
-from collections import namedtuple
-import threading
 import logging
 
 # pylint: disable=wildcard-import
-from .config import *
-from .error import *
+from .config import *  # noqa
+from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts
 from .dial import get_device_status, reboot
-from .controllers.media import STREAM_TYPE_BUFFERED
+from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 
 def _get_all_chromecasts(tries=None):
