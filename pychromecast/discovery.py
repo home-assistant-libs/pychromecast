@@ -18,12 +18,17 @@ class CastListener(object):
         return list(self.services.values())
 
     def remove_service(self, zconf, typ, name):
-        self.services.pop(name)
+        self.services.pop(name, None)
 
     def add_service(self, zconf, typ, name):
-        service = zconf.get_service_info(typ, name)
+        service = None
+        tries = 0
+        while service is None and tries < 4:
+            service = zconf.get_service_info(typ, name)
+            tries += 1
 
-        self.services[name] = (service.server, service.port)
+        if service:
+            self.services[name] = (service.server, service.port)
 
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
