@@ -28,7 +28,10 @@ class CastListener(object):
             tries += 1
 
         if service:
-            self.services[name] = (service.server, service.port)
+            ips = zconf.cache.entries_with_name(service.server.lower())
+            host = repr(ips[0]) if ips else service.server
+
+            self.services[name] = (host, service.port)
 
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):

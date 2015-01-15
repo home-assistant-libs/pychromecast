@@ -3,7 +3,6 @@ PyChromecast: remote control your Chromecast
 """
 from __future__ import print_function
 
-import socket
 import logging
 
 # pylint: disable=wildcard-import
@@ -147,7 +146,7 @@ class Chromecast(object):
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
-        self.host = socket.gethostbyname(host)
+        self.host = host
 
         self.logger.info("Querying device status")
         self.device = get_device_status(self.host)
