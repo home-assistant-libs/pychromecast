@@ -117,8 +117,7 @@ def get_chromecast(strict=False, tries=None, **filters):
     if filters or strict:
         results = get_chromecasts(tries=tries, **filters)
     else:
-        results = [Chromecast(ip, tries=tries)
-                   for ip in discover_chromecasts(1)]
+        results = _get_all_chromecasts(tries)
 
     if len(results) > 1:
         if strict:
