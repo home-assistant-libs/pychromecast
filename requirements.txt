@@ -1,3 +1,5 @@
 requests>=2.0
 protobuf>=2.5.0
 zeroconf>=0.16.0
+netifaces>=0.10.4
+python-magic>=0.4.6
