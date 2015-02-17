@@ -5,7 +5,8 @@
 
 from __future__ import print_function
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-from SocketServer import ThreadingMixIn
+import collections
+import os
 
 
 def get_localhost():
@@ -13,7 +14,7 @@ def get_localhost():
 		import netifaces
 		dev = netifaces.gateways()["default"][netifaces.AF_INET][1]
 		return netifaces.ifaddresses(dev)[netifaces.AF_INET][0]["addr"]
-	except:
+	except ImportError:
 		import socket
 		return socket.getfqdn() + ".local"
 
@@ -22,19 +23,14 @@ def get_filetype(filepath):
 		import magic
 		return magic.from_file(filepath, mime=True)
 	except (ImportError, UnicodeDecodeError):
-		from os import path
-
 		ext_to_mime = { ".aac" : "audio/aac", ".mp3" : "audio/mpeg", ".ogg" : "audio/ogg", ".wav" : "audio/wav",
 		                ".bmp" : "image/bmp", ".gif" : "image/gif", ".jpg" : "image/jpeg", ".jpeg" : "image/jpeg", ".png" : "image/png", ".webp" : "image/webp",
 		                ".mp4" : "video/mp4", ".webm" : "video/webm",
 		              }
-
-		(root, ext) = path.splitext(filepath)
+		(root, ext) = os.path.splitext(filepath)
 		return ext_to_mime.get(ext.lower(), None)
 
-def walk_depth(dirpath, depth=1):
-	import os
-
+def walk_depth(dirpath, max_depth=1):
 	dirpath = dirpath.rstrip(os.path.sep)
 	assert os.path.isdir(dirpath)
 	num_sep = dirpath.count(os.path.sep)
@@ -42,39 +38,28 @@ def walk_depth(dirpath, depth=1):
 		dirs.sort()
 		yield root, dirs, files
 		num_sep_this = root.count(os.path.sep)
-		if num_sep + depth <= num_sep_this:
+		if num_sep + max_depth <= num_sep_this:
 			del dirs[:]
 
-def resolve_files(filenames, max_depth):
-	import os
+def resolve_path(name, max_depth):
 	import uuid
-	from collections import OrderedDict
 
-	# According to https://developers.google.com/cast/docs/media
-	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
-	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
-	                   "video/mp4", "video/webm"
-	                 ]
+	files = collections.OrderedDict()
 
-	files = OrderedDict()
+	def add_file(filepath):
+		filetype = get_filetype(os.path.realpath(filepath))
+		files[str(uuid.uuid4())] = (filepath, filetype)
 
-	for filename in filenames:
-		filepath = os.path.abspath(filename)
-
-		if os.path.isfile(filepath):
-			filetype = get_filetype(os.path.realpath(filepath))
-			if filetype in supportedtypes:
-				files[str(uuid.uuid4())] = (filepath, filetype)
-
-		elif os.path.isdir(filepath) and max_depth > 0:
-			for (root, subdirs, subfiles) in walk_depth(filepath, max_depth - 1):
-				files.update(resolve_files((os.path.join(root, name) for name in sorted(subfiles)), max_depth))
+	filepath = os.path.abspath(name)
+	if os.path.isfile(filepath):
+		add_file(filepath)
+	elif os.path.isdir(filepath) and max_depth > 0:
+		for (root, subdirs, subfiles) in walk_depth(filepath, max_depth - 1):
+			for subfile in sorted(subfiles):
+				add_file(os.path.join(root, subfile))
 
 	return files
 
-
-class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-	"""Handle requests in a separate thread."""
 
 class StreamHTTP(BaseHTTPRequestHandler):
 	def __init__(self, files, *args):
@@ -99,13 +84,83 @@ class StreamHTTP(BaseHTTPRequestHandler):
 				chunk = source.read(chunksize)
 
 
-def main():
-	import argparse
+def cast(args):
+	import contextlib
+	import pychromecast
 	import threading
 	import time
+	import urllib2
+	import urlparse
 
-	parser = argparse.ArgumentParser(version="0.2")
-	parser.add_argument("filenames",         type=str,                     nargs="+",                      help="files and/or directories to cast")
+	if args.device is not None:
+		cast = pychromecast.get_chromecast(strict=True, friendly_name=args.device)
+	else:
+		cast = pychromecast.get_chromecast(strict=True)
+
+	controller = cast.media_controller
+
+	if controller.is_active and not controller.is_idle:
+		print("{0} is busy".format(cast))
+		return
+
+
+	# According to https://developers.google.com/cast/docs/media
+	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
+	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
+	                   "video/mp4", "video/webm"
+	                 ]
+
+	media = [] # list of (url, filetype) tuples
+	files = collections.OrderedDict()
+	max_depth = args.recursive or 0
+
+	for name in args.names:
+		parsed = urlparse.urlparse(name)
+
+		if parsed.netloc != "":
+			# remote file
+			with contextlib.closing(urllib2.urlopen(parsed.geturl())) as source:
+				filetype = source.info()["Content-type"]
+				url = source.geturl()
+				if filetype in supportedtypes:
+					media += [(url, filetype)]
+		else:
+			# local file
+			files.update(resolve_path(name, max_depth))
+
+			for (handle, (filepath, filetype)) in files.items():
+				url = "http://{0}:{1}/{2}".format(args.host, args.port, handle)
+				if filetype in supportedtypes:
+					media += [(url, filetype)]
+
+	httpd = None
+	if len(files) > 0:
+		def build_stream(*h_args):
+			StreamHTTP(files, *h_args)
+		httpd = HTTPServer((args.host, args.port), build_stream)
+		threading.Thread(target=httpd.serve_forever).start()
+
+	try:
+		for (url, filetype) in media:
+			print("Casting {0} ({1}) to {2}".format(url, filetype, cast))
+			cast.play_media(url, filetype)
+
+			while not controller.is_idle:
+				pass
+
+			time.sleep(args.wait)
+
+	finally:
+		cast.quit_app()
+		if httpd is not None:
+			httpd.shutdown()
+
+
+if __name__ == "__main__":
+	import argparse
+
+	parser = argparse.ArgumentParser(version="0.3")
+	parser.add_argument("names",             type=str,                     nargs="+",                      help="files, directories, and/or URLs to cast")
 	parser.add_argument("-r", "--recursive", type=int, const=float("inf"), nargs="?", metavar="MAX_DEPTH", help="recurse directories to find files")
 	parser.add_argument("-w", "--wait",      type=int, default=1,                                          help="seconds to wait between each file")
 	parser.add_argument("-n", "--host",      type=str, default=get_localhost(),                            help="hostname or IP to serve content")
@@ -113,46 +168,4 @@ def main():
 	parser.add_argument("-d", "--device",    type=str, default=None,                                       help="name of cast target")
 	args = parser.parse_args()
 
-	max_depth = args.recursive or 0
-	files = resolve_files(args.filenames, max_depth)
-
-	def build_stream(*h_args): # lets us pass arguments the constructor
-		StreamHTTP(files, *h_args)
-	httpd = ThreadedHTTPServer((args.host, args.port), build_stream)
-	threading.Thread(target=httpd.serve_forever).start()
-
-	try:
-		import pychromecast
-
-		if args.device is not None:
-			cast = pychromecast.get_chromecast(strict=True, friendly_name=args.device)
-		else:
-			cast = pychromecast.get_chromecast(strict=True)
-
-		controller = cast.media_controller
-
-		if controller and controller.is_active and not controller.is_idle:
-			print("{0} is busy".format(cast))
-			return
-
-		try:
-			for (handle, (filepath, filetype)) in files.items():
-				url = "http://{0}:{1}/{2}".format(args.host, args.port, handle)
-				print("Casting {0} ({1}) to {2}".format(filepath, filetype, cast))
-				cast.play_media(url, filetype)
-
-				while not controller.is_idle:
-					pass
-
-				time.sleep(args.wait)
-
-		finally:
-			#controller.stop()
-			cast.quit_app()
-
-	finally:
-		httpd.shutdown()
-
-
-if __name__ == "__main__":
-	main()
+	cast(args)
