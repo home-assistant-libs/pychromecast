@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
+# Copyright 2015 Benn Snyder <benn.snyder@gmail.com>
+# Released under MIT license
+
 from __future__ import print_function
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
 
 
-def get_local_host():
+def get_localhost():
 	try:
 		import netifaces
 		dev = netifaces.gateways()["default"][netifaces.AF_INET][1]
@@ -14,8 +17,7 @@ def get_local_host():
 		import socket
 		return socket.getfqdn() + ".local"
 
-
-def get_mime_type(filepath):
+def get_filetype(filepath):
 	try:
 		import magic
 		return magic.from_file(filepath, mime=True)
@@ -30,61 +32,7 @@ def get_mime_type(filepath):
 		(root, ext) = path.splitext(filepath)
 		return ext_to_mime.get(ext.lower(), None)
 
-
-def convert_file(filename, tmpdir):
-	from os import path
-	import subprocess
-
-	# According to https://developers.google.com/cast/docs/media
-	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
-	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
-	                   "video/mp4", "video/webm"
-	                 ]
-
-	filepath = path.realpath(filename)
-	basename = path.basename(filepath)
-	filetype = get_mime_type(filepath)
-
-	if filetype in supportedtypes:
-		return (filepath, filetype, None) # no conversion necessary
-
-	if filetype.startswith("audio/"):
-		filepath_out = "{0}.ogg".format(path.join(tmpdir, basename))
-
-		command = [ "ffmpeg",
-	                "-i", filepath,
-	                #"-preset", "fast",
-	                #"-ac", "2",
-	                #"-c:v", "libvpx",
-	                "-c:a", "libvorbis",
-	                "-threads", "auto",
-	                #"-movflags", "faststart",
-	                filepath_out ]
-
-		ffmpeg = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		return (filepath_out, "audio/ogg", ffmpeg)
-
-	if filetype.startswith("video/"):
-		filepath_out = "{0}.webm".format(path.join(tmpdir, basename))
-
-		command = [ "ffmpeg",
-	                "-i", filepath,
-	                "-preset", "fast",
-	                "-ac", "2",
-	                "-c:v", "libvpx",
-	                "-c:a", "libvorbis",
-	                "-threads", "auto",
-	                "-movflags", "faststart",
-	                filepath_out ]
-
-		ffmpeg = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		return (filepath_out, "video/webm", ffmpeg)
-
-
-	raise RuntimeError("Unsupported file type: {0}".format(filetype))
-
-
-def walklevel(dirpath, level=1):
+def walk_depth(dirpath, depth=1):
 	import os
 
 	dirpath = dirpath.rstrip(os.path.sep)
@@ -94,9 +42,8 @@ def walklevel(dirpath, level=1):
 		dirs.sort()
 		yield root, dirs, files
 		num_sep_this = root.count(os.path.sep)
-		if num_sep + level <= num_sep_this:
+		if num_sep + depth <= num_sep_this:
 			del dirs[:]
-
 
 def resolve_files(filenames, max_depth):
 	import os
@@ -115,12 +62,12 @@ def resolve_files(filenames, max_depth):
 		filepath = os.path.abspath(filename)
 
 		if os.path.isfile(filepath):
-			filetype = get_mime_type(os.path.realpath(filepath))
+			filetype = get_filetype(os.path.realpath(filepath))
 			if filetype in supportedtypes:
 				files[str(uuid.uuid4())] = (filepath, filetype)
 
 		elif os.path.isdir(filepath) and max_depth > 0:
-			for (root, subdirs, subfiles) in walklevel(filepath, max_depth - 1):
+			for (root, subdirs, subfiles) in walk_depth(filepath, max_depth - 1):
 				files.update(resolve_files((os.path.join(root, name) for name in sorted(subfiles)), max_depth))
 
 	return files
@@ -142,29 +89,14 @@ class StreamHTTP(BaseHTTPRequestHandler):
 		return (filepath, filetype)
 
 	def do_GET(self):
-		# todo: convert files on the fly?
-		#tmpdir = tempfile.mkdtemp()
-		#finally:
-		#	if ffmpeg is not None:
-		#		ffmpeg.terminate()
-		#	shutil.rmtree(tmpdir)
-
-
 		(filepath, filetype) = self.do_HEAD()
 
 		chunksize = 8192
-
 		with open(filepath, 'rb') as source:
-			while True:
+			chunk = source.read(chunksize)
+			while chunk:
+				self.wfile.write(chunk)
 				chunk = source.read(chunksize)
-
-				if chunk:
-					self.wfile.write(chunk) # send some bytes
-				#elif self.ffmpeg and self.ffmpeg.poll() is not None:
-				#	import time
-				#	time.sleep(3)           # wait for more file data
-				else:
-					break                   # really EOF
 
 
 def main():
@@ -176,7 +108,7 @@ def main():
 	parser.add_argument("filenames",         type=str,                     nargs="+",                      help="files and/or directories to cast")
 	parser.add_argument("-r", "--recursive", type=int, const=float("inf"), nargs="?", metavar="MAX_DEPTH", help="recurse directories to find files")
 	parser.add_argument("-w", "--wait",      type=int, default=1,                                          help="seconds to wait between each file")
-	parser.add_argument("-n", "--host",      type=str, default=get_local_host(),                           help="hostname or IP to serve content")
+	parser.add_argument("-n", "--host",      type=str, default=get_localhost(),                            help="hostname or IP to serve content")
 	parser.add_argument("-p", "--port",      type=int, default=5403,                                       help="port on which to serve content")
 	parser.add_argument("-d", "--device",    type=str, default=None,                                       help="name of cast target")
 	args = parser.parse_args()
