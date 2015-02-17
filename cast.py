@@ -2,9 +2,10 @@
 
 from __future__ import print_function
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn
 
 
-def local_ip():
+def get_local_host():
 	try:
 		import netifaces
 		dev = netifaces.gateways()["default"][netifaces.AF_INET][1]
@@ -14,9 +15,24 @@ def local_ip():
 		return socket.getfqdn() + ".local"
 
 
-def resolve_file(filename, tmpdir):
+def get_mime_type(filepath):
+	try:
+		import magic
+		return magic.from_file(filepath, mime=True)
+	except (ImportError, UnicodeDecodeError):
+		from os import path
+
+		ext_to_mime = { ".aac" : "audio/aac", ".mp3" : "audio/mpeg", ".ogg" : "audio/ogg", ".wav" : "audio/wav",
+		                ".bmp" : "image/bmp", ".gif" : "image/gif", ".jpg" : "image/jpeg", ".jpeg" : "image/jpeg", ".png" : "image/png", ".webp" : "image/webp",
+		                ".mp4" : "video/mp4", ".webm" : "video/webm",
+		              }
+
+		(root, ext) = path.splitext(filepath)
+		return ext_to_mime.get(ext.lower(), None)
+
+
+def convert_file(filename, tmpdir):
 	from os import path
-	import magic
 	import subprocess
 
 	# According to https://developers.google.com/cast/docs/media
@@ -27,7 +43,7 @@ def resolve_file(filename, tmpdir):
 
 	filepath = path.realpath(filename)
 	basename = path.basename(filepath)
-	filetype = magic.from_file(filepath, mime=True)
+	filetype = get_mime_type(filepath)
 
 	if filetype in supportedtypes:
 		return (filepath, filetype, None) # no conversion necessary
@@ -68,63 +84,110 @@ def resolve_file(filename, tmpdir):
 	raise RuntimeError("Unsupported file type: {0}".format(filetype))
 
 
+def walklevel(dirpath, level=1):
+	import os
+
+	dirpath = dirpath.rstrip(os.path.sep)
+	assert os.path.isdir(dirpath)
+	num_sep = dirpath.count(os.path.sep)
+	for root, dirs, files in os.walk(dirpath, followlinks=True):
+		dirs.sort()
+		yield root, dirs, files
+		num_sep_this = root.count(os.path.sep)
+		if num_sep + level <= num_sep_this:
+			del dirs[:]
+
+
+def resolve_files(filenames, max_depth):
+	import os
+	import uuid
+	from collections import OrderedDict
+
+	# According to https://developers.google.com/cast/docs/media
+	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
+	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
+	                   "video/mp4", "video/webm"
+	                 ]
+
+	files = OrderedDict()
+
+	for filename in filenames:
+		filepath = os.path.abspath(filename)
+
+		if os.path.isfile(filepath):
+			filetype = get_mime_type(os.path.realpath(filepath))
+			if filetype in supportedtypes:
+				files[str(uuid.uuid4())] = (filepath, filetype)
+
+		elif os.path.isdir(filepath) and max_depth > 0:
+			for (root, subdirs, subfiles) in walklevel(filepath, max_depth - 1):
+				files.update(resolve_files((os.path.join(root, name) for name in sorted(subfiles)), max_depth))
+
+	return files
+
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+	"""Handle requests in a separate thread."""
+
 class StreamHTTP(BaseHTTPRequestHandler):
-	def __init__(self, filepath, filetype, ffmpeg, *args):
-		self.filepath = filepath
-		self.filetype = filetype
-		self.ffmpeg = ffmpeg
+	def __init__(self, files, *args):
+		self.files = files
 		BaseHTTPRequestHandler.__init__(self, *args)
 
 	def do_HEAD(self):
+		(filepath, filetype) = self.files[self.path[1:]]
 		self.send_response(200)
-		self.send_header("Content-type", self.filetype)
+		self.send_header("Content-type", filetype)
 		self.end_headers()
+		return (filepath, filetype)
 
 	def do_GET(self):
-		self.do_HEAD()
+		# todo: convert files on the fly?
+		#tmpdir = tempfile.mkdtemp()
+		#finally:
+		#	if ffmpeg is not None:
+		#		ffmpeg.terminate()
+		#	shutil.rmtree(tmpdir)
+
+
+		(filepath, filetype) = self.do_HEAD()
 
 		chunksize = 8192
 
-		with open(self.filepath, 'rb') as source:
+		with open(filepath, 'rb') as source:
 			while True:
 				chunk = source.read(chunksize)
 
 				if chunk:
 					self.wfile.write(chunk) # send some bytes
-				elif self.ffmpeg and self.ffmpeg.poll() is not None:
-					import time
-					time.sleep(3)           # wait for more file data
+				#elif self.ffmpeg and self.ffmpeg.poll() is not None:
+				#	import time
+				#	time.sleep(3)           # wait for more file data
 				else:
 					break                   # really EOF
 
 
 def main():
 	import argparse
-	import shutil
-	import tempfile
 	import threading
+	import time
 
-	parser = argparse.ArgumentParser()
-	parser.add_argument("filename",       type=str, help="file to cast")
-	parser.add_argument("-n", "--host",   type=str, default=local_ip(), help="hostname or IP to serve content")
-	parser.add_argument("-p", "--port",   type=int, default=5403, help="port on which to serve content")
-	parser.add_argument("-d", "--device", type=str, default=None, help="Name of cast target")
-
+	parser = argparse.ArgumentParser(version="0.2")
+	parser.add_argument("filenames",         type=str,                     nargs="+",                      help="files and/or directories to cast")
+	parser.add_argument("-r", "--recursive", type=int, const=float("inf"), nargs="?", metavar="MAX_DEPTH", help="recurse directories to find files")
+	parser.add_argument("-w", "--wait",      type=int, default=1,                                          help="seconds to wait between each file")
+	parser.add_argument("-n", "--host",      type=str, default=get_local_host(),                           help="hostname or IP to serve content")
+	parser.add_argument("-p", "--port",      type=int, default=5403,                                       help="port on which to serve content")
+	parser.add_argument("-d", "--device",    type=str, default=None,                                       help="name of cast target")
 	args = parser.parse_args()
 
-
-	tmpdir = tempfile.mkdtemp()
-
-	(filepath, filetype, ffmpeg) = resolve_file(args.filename, tmpdir)
+	max_depth = args.recursive or 0
+	files = resolve_files(args.filenames, max_depth)
 
 	def build_stream(*h_args): # lets us pass arguments the constructor
-		StreamHTTP(filepath, filetype, ffmpeg, *h_args)
-	httpd = HTTPServer((args.host, args.port), build_stream)
+		StreamHTTP(files, *h_args)
+	httpd = ThreadedHTTPServer((args.host, args.port), build_stream)
 	threading.Thread(target=httpd.serve_forever).start()
-
-	url = "http://{0}:{1}".format(args.host, args.port)
-	print("Serving {0} ({1}) at {2}".format(filepath, filetype, url))
-
 
 	try:
 		import pychromecast
@@ -140,22 +203,23 @@ def main():
 			print("{0} is busy".format(cast))
 			return
 
-		print("Casting to {0}".format(cast))
-		cast.play_media(url, filetype)
-
 		try:
-			while True:
-				pass
+			for (handle, (filepath, filetype)) in files.items():
+				url = "http://{0}:{1}/{2}".format(args.host, args.port, handle)
+				print("Casting {0} ({1}) to {2}".format(filepath, filetype, cast))
+				cast.play_media(url, filetype)
+
+				while not controller.is_idle:
+					pass
+
+				time.sleep(args.wait)
+
 		finally:
-			controller.stop()
+			#controller.stop()
 			cast.quit_app()
 
 	finally:
-		if ffmpeg is not None:
-			ffmpeg.terminate()
-
 		httpd.shutdown()
-		shutil.rmtree(tmpdir)
 
 
 if __name__ == "__main__":
