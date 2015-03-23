@@ -260,7 +260,7 @@ class SocketClient(threading.Thread):
     # pylint: disable=too-many-arguments
     def send_message(self, destination_id, namespace, data,
                      inc_session_id=False, wait_for_response=False,
-                     no_add_request_id=False):
+                     no_add_request_id=False, force=False):
         """ Send a message to the Chromecast. """
 
         # namespace is a string containing namespace
@@ -295,7 +295,7 @@ class SocketClient(threading.Thread):
             self.logger.debug(
                 "Sending: {}".format(_message_to_string(msg, data)))
 
-        if self.stop.is_set():
+        if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting:
             self.socket.sendall(be_size + msg.SerializeToString())
@@ -340,7 +340,7 @@ class SocketClient(threading.Thread):
         if destination_id in self._open_channels:
             self.send_message(destination_id, NS_CONNECTION,
                               {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
-                              no_add_request_id=True)
+                              no_add_request_id=True, force=True)
 
             self._open_channels.remove(destination_id)
 
