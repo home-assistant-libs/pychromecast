@@ -281,7 +281,7 @@ class SocketClient(threading.Thread):
         msg.destination_id = destination_id
         msg.payload_type = cast_channel_pb2.CastMessage.STRING
         msg.namespace = namespace
-        msg.payload_utf8 = json.dumps(data, ensure_ascii=False).encode("utf8")
+        msg.payload_utf8 = json.dumps(data)
 
         # prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
