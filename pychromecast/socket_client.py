@@ -237,10 +237,16 @@ class SocketClient(threading.Thread):
                     event.set()
 
         for handler in self._handlers.values():
-            handler.tear_down()
+            try:
+                handler.tear_down()
+            except Exception:  # pylint: disable=broad-except
+                pass
 
         for channel in self._open_channels:
-            self._disconnect_channel(channel)
+            try:
+                self._disconnect_channel(channel)
+            except Exception:  # pylint: disable=broad-except
+                pass
 
         self.socket.close()
 
