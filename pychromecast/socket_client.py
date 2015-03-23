@@ -183,6 +183,11 @@ class SocketClient(threading.Thread):
 
         return self._request_id
 
+    @property
+    def is_stopped(self):
+        """ Returns True if the connection has been stopped, False if it is running. """
+        return self.stop.is_set()
+
     def run(self):
         """ Start polling the socket. """
         self.receiver_controller.update_status()
