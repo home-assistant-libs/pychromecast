@@ -196,6 +196,10 @@ class SocketClient(threading.Thread):
                     self.initialize_connection()
                 continue
 
+            # If we are stopped after receiving a message we skip the message and tear down the connection
+            if self.stop.is_set():
+                break
+
             data = _json_from_message(message)
 
             if message.namespace in self._handlers:
