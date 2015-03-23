@@ -359,10 +359,17 @@ class HeartbeatController(BaseController):
 
     def receive_message(self, message, data):
         """ Called when a heartbeat message is received. """
+        if self._socket_client.is_stopped:
+            return True
+
         if data[MESSAGE_TYPE] == TYPE_PING:
-            self._socket_client.send_message(
-                PLATFORM_DESTINATION_ID, self.namespace,
-                {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
+            try:
+                self._socket_client.send_message(
+                    PLATFORM_DESTINATION_ID, self.namespace,
+                    {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
+            except PyChromecastStopped:
+                self._socket_client.logger.exception("Heartbeat error when sending response, Chromecast connection has "
+                                                     "stopped")
 
             return True
 
