@@ -213,11 +213,16 @@ class SocketClient(threading.Thread):
                     self.logger.debug("Received: {}".format(
                         _message_to_string(message, data)))
 
-                handled = self._handlers[message.namespace].receive_message(
-                    message, data)
+                try:
+                    handled = self._handlers[message.namespace].receive_message(
+                        message, data)
 
-                if not handled:
-                    self.logger.warning("Message unhandled: {}".format(
+                    if not handled:
+                        self.logger.warning("Message unhandled: {}".format(
+                            _message_to_string(message, data)))
+                except Exception, e:
+                    self.logger.exception(u"Exception {} caught while sending message to controller {}: {}".format(
+                        unicode(e), type(self._handlers[message.namespace]).__name__,
                         _message_to_string(message, data)))
 
             else:
