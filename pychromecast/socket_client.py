@@ -222,7 +222,7 @@ class SocketClient(threading.Thread):
                             _message_to_string(message, data)))
                 except Exception, e:
                     self.logger.exception(u"Exception {} caught while sending message to controller {}: {}".format(
-                        unicode(e), type(self._handlers[message.namespace]).__name__,
+                        e, type(self._handlers[message.namespace]).__name__,
                         _message_to_string(message, data)))
 
             else:
