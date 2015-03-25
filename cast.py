@@ -5,7 +5,6 @@
 
 from __future__ import print_function
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-import collections
 import os
 
 
@@ -16,7 +15,7 @@ def get_localhost():
 		return netifaces.ifaddresses(dev)[netifaces.AF_INET][0]["addr"]
 	except ImportError:
 		import socket
-		return socket.getfqdn() + ".local"
+		return "{0}.local".format(socket.getfqdn())
 
 def get_filetype(filepath):
 	try:
@@ -34,31 +33,74 @@ def walk_depth(dirpath, max_depth=1):
 	dirpath = dirpath.rstrip(os.path.sep)
 	assert os.path.isdir(dirpath)
 	num_sep = dirpath.count(os.path.sep)
-	for root, dirs, files in os.walk(dirpath, followlinks=True):
+	for (root, dirs, files) in os.walk(dirpath, followlinks=True):
 		dirs.sort()
-		yield root, dirs, files
+		yield (root, dirs, files)
 		num_sep_this = root.count(os.path.sep)
 		if num_sep + max_depth <= num_sep_this:
 			del dirs[:]
 
 def resolve_path(name, max_depth):
-	import uuid
-
-	files = collections.OrderedDict()
-
-	def add_file(filepath):
-		filetype = get_filetype(os.path.realpath(filepath))
-		files[str(uuid.uuid4())] = (filepath, filetype)
-
 	filepath = os.path.abspath(name)
 	if os.path.isfile(filepath):
-		add_file(filepath)
+		filetype = get_filetype(os.path.realpath(filepath))
+		yield (filepath, filetype)
 	elif os.path.isdir(filepath) and max_depth > 0:
 		for (root, subdirs, subfiles) in walk_depth(filepath, max_depth - 1):
 			for subfile in sorted(subfiles):
-				add_file(os.path.join(root, subfile))
+				subfilepath = os.path.join(root, subfile)
+				subfiletype = get_filetype(os.path.realpath(subfilepath))
+				yield (subfilepath, subfiletype)
 
-	return files
+def resolve_name(name, max_depth, args):
+	import contextlib
+	import re
+	import urllib2
+	import urlparse
+	import uuid
+
+	# According to https://developers.google.com/cast/docs/media
+	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
+	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
+	                   "video/mp4", "video/webm"
+	                 ]
+
+	parsed = urlparse.urlparse(name)
+	if parsed.netloc == "":
+		# local file(s)
+		found_any = False
+		for (filepath, filetype) in resolve_path(name, max_depth):
+			found_any = True
+			if filetype in supportedtypes:
+				handle = str(uuid.uuid4())
+				url = "http://{0}:{1}/{2}".format(args.host, args.port, handle)
+				yield (url, filetype, handle, filepath)
+		if found_any:
+			return
+	else:
+		# remote file
+		with contextlib.closing(urllib2.urlopen(parsed.geturl())) as source:
+			filetype = source.info()["content-type"]
+			url = source.geturl()
+			if filetype in supportedtypes:
+				yield (url, filetype, None, None)
+			return
+
+	# youtube link or ID
+	youtube_re = re.compile(r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})")
+	youtube_match = youtube_re.match(name)
+	youtube_id = name if len(name) == 11 else (youtube_match.group(6) if youtube_match else None)
+	if youtube_id is not None:
+		try:
+			# make sure video with youtube_id exists
+			with contextlib.closing(urllib2.urlopen("http://gdata.youtube.com/feeds/api/videos/{0}".format(youtube_id))) as exists:
+				if exists.getcode() == 200:
+					yield (youtube_id, "youtube", None, None)
+					return
+		except urllib2.HTTPError:
+			pass
+
+	print("Unable to resolve {0}".format(name))
 
 
 class StreamHTTP(BaseHTTPRequestHandler):
@@ -87,10 +129,9 @@ class StreamHTTP(BaseHTTPRequestHandler):
 def cast(args):
 	import contextlib
 	import pychromecast
+	#import pychromecast.controllers.youtube
 	import threading
 	import time
-	import urllib2
-	import urlparse
 
 	if args.device is not None:
 		cast = pychromecast.get_chromecast(strict=True, friendly_name=args.device)
@@ -98,40 +139,23 @@ def cast(args):
 		cast = pychromecast.get_chromecast(strict=True)
 
 	controller = cast.media_controller
+	#yt_controller = pychromecast.controllers.youtube.YouTubeController()
+	#cast.register_handler(yt_controller)
 
 	if controller.is_active and not controller.is_idle:
 		print("{0} is busy".format(cast))
 		return
 
 
-	# According to https://developers.google.com/cast/docs/media
-	supportedtypes = [ "audio/aac", "audio/mpeg", "audio/ogg", "audio/wav",
-	                   "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp",
-	                   "video/mp4", "video/webm"
-	                 ]
-
-	media = [] # list of (url, filetype) tuples
-	files = collections.OrderedDict()
+	media = [] # list of (url, filetype)
+	files = {} # dict of handle : (filepath, filetype)
 	max_depth = args.recursive or 0
 
 	for name in args.names:
-		parsed = urlparse.urlparse(name)
-
-		if parsed.netloc != "":
-			# remote file
-			with contextlib.closing(urllib2.urlopen(parsed.geturl())) as source:
-				filetype = source.info()["Content-type"]
-				url = source.geturl()
-				if filetype in supportedtypes:
-					media += [(url, filetype)]
-		else:
-			# local file
-			files.update(resolve_path(name, max_depth))
-
-			for (handle, (filepath, filetype)) in files.items():
-				url = "http://{0}:{1}/{2}".format(args.host, args.port, handle)
-				if filetype in supportedtypes:
-					media += [(url, filetype)]
+		for (url, filetype, handle, filepath) in resolve_name(name, max_depth, args):
+			media += [(url, filetype)]
+			if filepath is not None and handle is not None:
+				files[handle] = (filepath, filetype)
 
 	httpd = None
 	if len(files) > 0:
@@ -143,9 +167,16 @@ def cast(args):
 	try:
 		for (url, filetype) in media:
 			print("Casting {0} ({1}) to {2}".format(url, filetype, cast))
-			cast.play_media(url, filetype)
 
-			while not controller.is_idle:
+			if filetype == "youtube":
+				#yt_controller.play_video(url)
+				# There's no way to tell when youtube is done playing.
+				# So don't even bother yet.
+				print("Ignoring youtube link")
+			else:
+				cast.play_media(url, filetype)
+
+			while not controller.is_idle: #or not yt_controller.is_idle:
 				pass
 
 			time.sleep(args.wait)
@@ -159,7 +190,7 @@ def cast(args):
 if __name__ == "__main__":
 	import argparse
 
-	parser = argparse.ArgumentParser(version="0.3")
+	parser = argparse.ArgumentParser(version="0.4")
 	parser.add_argument("names",             type=str,                     nargs="+",                      help="files, directories, and/or URLs to cast")
 	parser.add_argument("-r", "--recursive", type=int, const=float("inf"), nargs="?", metavar="MAX_DEPTH", help="recurse directories to find files")
 	parser.add_argument("-w", "--wait",      type=int, default=1,                                          help="seconds to wait between each file")
