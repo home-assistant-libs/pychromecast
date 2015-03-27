@@ -15,6 +15,7 @@ from collections import namedtuple
 from struct import pack, unpack
 
 from . import cast_channel_pb2
+import sys
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .error import (
@@ -57,6 +58,17 @@ def _message_to_string(message, data=None):
 
     return "Message {} from {} to {}: {}".format(
         message.namespace, message.source_id, message.destination_id, data)
+
+
+if sys.version_info >= (3, 0):
+    def _json_to_payload(data):
+        """ Encodes a python value into JSON format. """
+        return json.dumps(data, ensure_ascii=False).encode("utf8")
+else:
+    def _json_to_payload(data):
+        """ Encodes a python value into JSON format. """
+        return json.dumps(data, ensure_ascii=False)
+
 
 CastStatus = namedtuple('CastStatus',
                         ['is_active_input', 'is_stand_by', 'volume_level',
@@ -301,7 +313,7 @@ class SocketClient(threading.Thread):
         msg.destination_id = destination_id
         msg.payload_type = cast_channel_pb2.CastMessage.STRING
         msg.namespace = namespace
-        msg.payload_utf8 = json.dumps(data)
+        msg.payload_utf8 = _json_to_payload(data)
 
         # prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
