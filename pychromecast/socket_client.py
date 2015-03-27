@@ -15,6 +15,7 @@ from collections import namedtuple
 from struct import pack, unpack
 
 from . import cast_channel_pb2
+import sys
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .error import (
@@ -57,6 +58,17 @@ def _message_to_string(message, data=None):
 
     return "Message {} from {} to {}: {}".format(
         message.namespace, message.source_id, message.destination_id, data)
+
+
+if sys.version_info >= (3, 0):
+    def _json_to_payload(data):
+        """ Encodes a python value into JSON format. """
+        return json.dumps(data, ensure_ascii=False).encode("utf8")
+else:
+    def _json_to_payload(data):
+        """ Encodes a python value into JSON format. """
+        return json.dumps(data, ensure_ascii=False)
+
 
 CastStatus = namedtuple('CastStatus',
                         ['is_active_input', 'is_stand_by', 'volume_level',
@@ -183,6 +195,11 @@ class SocketClient(threading.Thread):
 
         return self._request_id
 
+    @property
+    def is_stopped(self):
+        """ Returns True if the connection has been stopped, False if it is running. """
+        return self.stop.is_set()
+
     def run(self):
         """ Start polling the socket. """
         self.receiver_controller.update_status()
@@ -196,6 +213,10 @@ class SocketClient(threading.Thread):
                     self.initialize_connection()
                 continue
 
+            # If we are stopped after receiving a message we skip the message and tear down the connection
+            if self.stop.is_set():
+                break
+
             data = _json_from_message(message)
 
             if message.namespace in self._handlers:
@@ -204,11 +225,16 @@ class SocketClient(threading.Thread):
                     self.logger.debug("Received: {}".format(
                         _message_to_string(message, data)))
 
-                handled = self._handlers[message.namespace].receive_message(
-                    message, data)
+                try:
+                    handled = self._handlers[message.namespace].receive_message(
+                        message, data)
 
-                if not handled:
-                    self.logger.warning("Message unhandled: {}".format(
+                    if not handled:
+                        self.logger.warning("Message unhandled: {}".format(
+                            _message_to_string(message, data)))
+                except Exception, e:
+                    self.logger.exception(u"Exception {} caught while sending message to controller {}: {}".format(
+                        e, type(self._handlers[message.namespace]).__name__,
                         _message_to_string(message, data)))
 
             else:
@@ -223,10 +249,16 @@ class SocketClient(threading.Thread):
                     event.set()
 
         for handler in self._handlers.values():
-            handler.tear_down()
+            try:
+                handler.tear_down()
+            except Exception:  # pylint: disable=broad-except
+                pass
 
         for channel in self._open_channels:
-            self._disconnect_channel(channel)
+            try:
+                self._disconnect_channel(channel)
+            except Exception:  # pylint: disable=broad-except
+                pass
 
         self.socket.close()
 
@@ -256,7 +288,7 @@ class SocketClient(threading.Thread):
     # pylint: disable=too-many-arguments
     def send_message(self, destination_id, namespace, data,
                      inc_session_id=False, wait_for_response=False,
-                     no_add_request_id=False):
+                     no_add_request_id=False, force=False):
         """ Send a message to the Chromecast. """
 
         # namespace is a string containing namespace
@@ -281,7 +313,7 @@ class SocketClient(threading.Thread):
         msg.destination_id = destination_id
         msg.payload_type = cast_channel_pb2.CastMessage.STRING
         msg.namespace = namespace
-        msg.payload_utf8 = json.dumps(data, ensure_ascii=False).encode("utf8")
+        msg.payload_utf8 = _json_to_payload(data)
 
         # prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
@@ -291,7 +323,7 @@ class SocketClient(threading.Thread):
             self.logger.debug(
                 "Sending: {}".format(_message_to_string(msg, data)))
 
-        if self.stop.is_set():
+        if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting:
             self.socket.sendall(be_size + msg.SerializeToString())
@@ -336,7 +368,7 @@ class SocketClient(threading.Thread):
         if destination_id in self._open_channels:
             self.send_message(destination_id, NS_CONNECTION,
                               {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
-                              no_add_request_id=True)
+                              no_add_request_id=True, force=True)
 
             self._open_channels.remove(destination_id)
 
@@ -350,10 +382,17 @@ class HeartbeatController(BaseController):
 
     def receive_message(self, message, data):
         """ Called when a heartbeat message is received. """
+        if self._socket_client.is_stopped:
+            return True
+
         if data[MESSAGE_TYPE] == TYPE_PING:
-            self._socket_client.send_message(
-                PLATFORM_DESTINATION_ID, self.namespace,
-                {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
+            try:
+                self._socket_client.send_message(
+                    PLATFORM_DESTINATION_ID, self.namespace,
+                    {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
+            except PyChromecastStopped:
+                self._socket_client.logger.exception("Heartbeat error when sending response, Chromecast connection has "
+                                                     "stopped")
 
             return True
 
