@@ -232,7 +232,7 @@ class SocketClient(threading.Thread):
                     if not handled:
                         self.logger.warning("Message unhandled: {}".format(
                             _message_to_string(message, data)))
-                except Exception, e:
+                except Exception as e:
                     self.logger.exception(u"Exception {} caught while sending message to controller {}: {}".format(
                         e, type(self._handlers[message.namespace]).__name__,
                         _message_to_string(message, data)))
@@ -262,22 +262,25 @@ class SocketClient(threading.Thread):
 
         self.socket.close()
 
+    def _read_bytes_from_socket(self, msglen):
+        chunks = []
+        bytes_recd = 0
+        while bytes_recd < msglen:
+            chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
+            if chunk == b'':
+                raise RuntimeError("socket connection broken")
+            chunks.append(chunk)
+            bytes_recd += len(chunk)
+        return b''.join(chunks)
+
     def _read_message(self):
         """ Reads a message from the socket and converts it to a message. """
         # first 4 bytes is Big-Endian payload length
-        payload_info = ""
-
-        while len(payload_info) < 4:
-            frag = self.socket.recv(1)
-            payload_info += frag
-
+        payload_info = self._read_bytes_from_socket(4);
         read_len = unpack(">I", payload_info)[0]
 
         # now read the payload
-        payload = ""
-        while len(payload) < read_len:
-            frag = self.socket.recv(2048)
-            payload += frag
+        payload = self._read_bytes_from_socket(read_len);
 
         # pylint: disable=no-member
         message = cast_channel_pb2.CastMessage()
