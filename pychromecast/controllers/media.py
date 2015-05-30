@@ -3,23 +3,16 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 
-from collections import namedtuple
-
 from ..config import APP_MEDIA_RECEIVER
 from . import BaseController
 
+STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
 
 MEDIA_PLAYER_STATE_PLAYING = "PLAYING"
 MEDIA_PLAYER_STATE_PAUSED = "PAUSED"
 MEDIA_PLAYER_STATE_IDLE = "IDLE"
-
-MediaStatus = namedtuple('MediaStatus',
-                         ['current_time', 'content_id', 'content_type',
-                          'duration', 'stream_type', 'idle_reason',
-                          'media_session_id', 'playback_rate', 'player_state',
-                          'supported_media_commands', 'volume_level',
-                          'volume_muted', "media_customData"])
+MEDIA_PLAYER_STATE_UNKNOWN = "UNKNOWN"
 
 MESSAGE_TYPE = 'type'
 
@@ -32,6 +25,53 @@ TYPE_LOAD = "LOAD"
 TYPE_SEEK = "SEEK"
 
 
+class MediaStatus(object):
+    """ Class to hold the media status. """
+    def __init__(self):
+        self.current_time = 0
+        self.content_id = None
+        self.content_type = None
+        self.duration = None
+        self.stream_type = STREAM_TYPE_UNKNOWN
+        self.idle_reason = None
+        self.media_session_id = None
+        self.playback_rate = 1
+        self.player_state = MEDIA_PLAYER_STATE_UNKNOWN
+        self.supported_media_commands = 0
+        self.volume_level = 1
+        self.volume_muted = False
+        self.media_custom_data = {}
+        self.media_metadata = {}
+
+    def update(self, data):
+        """ New data will only contain the changed attributes. """
+        if len(data.get('status', [])) == 0:
+            return
+
+        status_data = data['status'][0]
+        media_data = status_data.get('media') or {}
+        volume_data = status_data.get('volume', {})
+
+        self.current_time = status_data.get('currentTime', self.current_time),
+        self.content_id = media_data.get('contentId', self.content_id)
+        self.content_type = media_data.get('contentType', self.content_type)
+        self.duration = media_data.get('duration', self.duration)
+        self.stream_type = media_data.get('streamType', self.stream_type)
+        self.idle_reason = status_data.get('idleReason', self.idle_reason)
+        self.media_session_id = status_data.get(
+            'mediaSessionId', self.media_session_id)
+        self.playback_rate = status_data.get(
+            'playbackRate', self.playback_rate)
+        self.player_state = status_data.get('playerState', self.player_state)
+        self.supported_media_commands = status_data.get(
+            'supportedMediaCommands', self.supported_media_commands)
+        self.volume_level = volume_data.get('level', self.volume_level)
+        self.volume_muted = volume_data.get('muted', self.volume_muted)
+        self.media_custom_data = media_data.get(
+            'customData', self.media_custom_data)
+        self.media_metadata = media_data.get('metadata', self.media_metadata)
+
+
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
@@ -40,7 +80,7 @@ class MediaController(BaseController):
             "urn:x-cast:com.google.cast.media")
 
         self.media_session_id = 0
-        self.status = None
+        self.status = MediaStatus()
 
         self._status_listeners = []
 
@@ -95,6 +135,24 @@ class MediaController(BaseController):
         return (self.status is not None and
                 self.status.player_state == MEDIA_PLAYER_STATE_IDLE)
 
+    @property
+    def title(self):
+        """ Return title of the current playing item. """
+        if not self.status:
+            return None
+
+        return self.status.media_metadata.get('title')
+
+    @property
+    def thumbnail(self):
+        """ Return thumbnail url of current playing item. """
+        if not self.status:
+            return None
+
+        images = self.status.media_metadata.get('images')
+
+        return images[0]['url'] if images and len(images) > 0 else None
+
     def play(self):
         """ Send the PLAY command. """
         self._send_command({MESSAGE_TYPE: TYPE_PLAY})
@@ -119,31 +177,9 @@ class MediaController(BaseController):
 
     def _process_media_status(self, data):
         """ Processes a STATUS message. """
-        if 'status' in data and len(data['status']) > 0:
-            status_data = data['status'][0]
-            media_data = status_data.get('media') or {}
-            volume_data = status_data.get('volume', {})
+        self.status.update(data)
 
-            self.status = MediaStatus(
-                status_data.get('currentTime', 0),
-                media_data.get('contentId'),
-                media_data.get('contentType'),
-                media_data.get('duration', 0),
-                media_data.get('streamType'),
-                status_data.get('idleReason'),
-                status_data.get('mediaSessionId'),
-                status_data.get('playbackRate', 1),
-                status_data.get('playerState'),
-                status_data.get('supportedMediaCommands'),
-                volume_data.get('level', 1.0),
-                volume_data.get('muted', False),
-                media_data.get('customData')
-                )
-
-        else:
-            self.status = None
-
-        self.logger.debug("Media:Received status {}".format(self.status))
+        self.logger.debug("Media:Received status {}".format(data))
 
         for listener in self._status_listeners:
             try:

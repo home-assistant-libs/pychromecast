@@ -156,7 +156,6 @@ class Chromecast(object):
                 "Could not connect to {}".format(self.host))
 
         self.status = None
-        self.media_status = None
 
         self.socket_client = socket_client.SocketClient(host, tries)
 

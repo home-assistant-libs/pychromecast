@@ -1,8 +1,6 @@
 pychromecast [![Build Status](https://travis-ci.org/balloob/pychromecast.svg?branch=master)](https://travis-ci.org/balloob/pychromecast)
 ============
 
-**Python 3 support is currently broken. Use version 0.5.1.1 on PyPI for Python 3 support.**
-
 Library for Python 2 and 3 to communicate with the Google Chromecast. It currently supports:
  - Auto discovering connected Chromecasts on the network
  - Start the default media receiver and play any online media
