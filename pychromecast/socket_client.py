@@ -176,6 +176,10 @@ class SocketClient(threading.Thread):
             # Disconnect old channel
             self._disconnect_channel(self.destination_id)
 
+            for namespace in self.app_namespaces:
+                if namespace in self._handlers:
+                    self._handlers[namespace].channel_disconnected()
+
         self.app_namespaces = cast_status.namespaces
         self.destination_id = cast_status.transport_id
         self.session_id = cast_status.session_id
@@ -183,14 +187,10 @@ class SocketClient(threading.Thread):
         if new_channel:
             # If any of the namespaces of the new app are supported
             # we will automatically connect to it to receive updates
-            match_ns = [value for key, value in self._handlers.items()
-                        if key in cast_status.namespaces]
-
-            if match_ns:
-                self._ensure_channel_connected(self.destination_id)
-
-                for handler in match_ns:
-                    handler.channel_connected()
+            for namespace in self.app_namespaces:
+                if namespace in self._handlers:
+                    self._ensure_channel_connected(self.destination_id)
+                    self._handlers[namespace].channel_connected()
 
     def _gen_request_id(self):
         """ Generates a unique request id. """
@@ -369,18 +369,19 @@ class SocketClient(threading.Thread):
         if destination_id not in self._open_channels:
             self._open_channels.append(destination_id)
 
-            self.send_message(destination_id, NS_CONNECTION,
-                              {MESSAGE_TYPE: TYPE_CONNECT,
-                               'origin': {},
-                               'userAgent': 'PyChromecast'},
-                              no_add_request_id=True)
+            self.send_message(
+                destination_id, NS_CONNECTION,
+                {MESSAGE_TYPE: TYPE_CONNECT,
+                 'origin': {}, 'userAgent': 'PyChromecast'},
+                no_add_request_id=True)
 
     def _disconnect_channel(self, destination_id):
         """ Disconnect a channel with destination_id. """
         if destination_id in self._open_channels:
-            self.send_message(destination_id, NS_CONNECTION,
-                              {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
-                              no_add_request_id=True, force=True)
+            self.send_message(
+                destination_id, NS_CONNECTION,
+                {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
+                no_add_request_id=True, force=True)
 
             self._open_channels.remove(destination_id)
 

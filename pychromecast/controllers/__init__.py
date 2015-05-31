@@ -57,6 +57,10 @@ class BaseController(object):
             namespace of this controller. """
         pass
 
+    def channel_disconnected(self):
+        """ Called when a channel is disconnected. """
+        pass
+
     def send_message(self, data, inc_session_id=False,
                      wait_for_response=False):
         """

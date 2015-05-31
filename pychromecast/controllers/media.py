@@ -73,6 +73,9 @@ class MediaStatus(object):
             'customData', self.media_custom_data)
         self.media_metadata = media_data.get('metadata', self.media_metadata)
 
+    def __repr__(self):
+        return '<MediaStatus {}>'.format(self.__dict__)
+
 
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
@@ -89,6 +92,11 @@ class MediaController(BaseController):
     def channel_connected(self):
         """ Called when media channel is connected. Will update status. """
         self.update_status()
+
+    def channel_disconnected(self):
+        """ Called when a media channel is disconnected. Will erase status. """
+        self.status = MediaStatus()
+        self._fire_status_changed()
 
     def receive_message(self, message, data):
         """ Called when a media message is received. """
@@ -182,7 +190,10 @@ class MediaController(BaseController):
         self.status.update(data)
 
         self.logger.debug("Media:Received status %s", data)
+        self._fire_status_changed()
 
+    def _fire_status_changed(self):
+        """ Tells listeners of a changed status. """
         for listener in self._status_listeners:
             try:
                 listener.new_media_status(self.status)
