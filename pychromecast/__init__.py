@@ -13,6 +13,8 @@ from .discovery import discover_chromecasts
 from .dial import get_device_status, reboot
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
+IDLE_APP_ID = 'E8C28D3C'
+
 
 def _get_all_chromecasts(tries=None):
     """
@@ -170,7 +172,8 @@ class Chromecast(object):
     @property
     def is_idle(self):
         """ Returns if there is currently an app running. """
-        return self.status is None or self.status.is_stand_by
+        return (self.status is None or self.status.is_stand_by
+                or self.app_id in (None, IDLE_APP_ID))
 
     @property
     def app_id(self):

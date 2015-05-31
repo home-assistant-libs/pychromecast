@@ -518,10 +518,7 @@ class ReceiverController(BaseController):
 
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """
-        data = data.get('status')
-
-        if data is None:
-            return
+        data = data.get('status', {})
 
         volume_data = data.get('volume', {})
 
