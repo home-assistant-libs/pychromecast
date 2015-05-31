@@ -518,6 +518,12 @@ class ReceiverController(BaseController):
                            'volume': {'level': volume}})
         return volume
 
+    def set_volume_muted(self, muted):
+        """ Allows to mute volume. """
+        self.send_message(
+            {MESSAGE_TYPE: 'SET_VOLUME',
+             'volume': {'muted': muted}})
+
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """
         data = data.get('status', {})
