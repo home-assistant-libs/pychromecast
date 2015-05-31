@@ -102,6 +102,7 @@ class SocketClient(threading.Thread):
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
+
         self.connecting = True
         self.socket = None
         self._open_channels = []
@@ -157,6 +158,7 @@ class SocketClient(threading.Thread):
             raise ChromecastConnectionError("Failed to connect")
 
         self.register_handler(HeartbeatController())
+        self.register_handler(ConnectionController())
         self.register_handler(self.receiver_controller)
         self.register_handler(self.media_controller)
 
@@ -173,12 +175,7 @@ class SocketClient(threading.Thread):
         new_channel = self.destination_id != cast_status.transport_id
 
         if new_channel:
-            # Disconnect old channel
             self._disconnect_channel(self.destination_id)
-
-            for namespace in self.app_namespaces:
-                if namespace in self._handlers:
-                    self._handlers[namespace].channel_disconnected()
 
         self.app_namespaces = cast_status.namespaces
         self.destination_id = cast_status.transport_id
@@ -257,15 +254,16 @@ class SocketClient(threading.Thread):
                 if event is not None:
                     event.set()
 
-        for handler in self._handlers.values():
-            try:
-                handler.tear_down()
-            except Exception:  # pylint: disable=broad-except
-                pass
-
+        # Clean up
         for channel in self._open_channels:
             try:
                 self._disconnect_channel(channel)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        for handler in self._handlers.values():
+            try:
+                handler.tear_down()
             except Exception:  # pylint: disable=broad-except
                 pass
 
@@ -384,6 +382,38 @@ class SocketClient(threading.Thread):
                 no_add_request_id=True, force=True)
 
             self._open_channels.remove(destination_id)
+
+            self.handle_channel_disconnected()
+
+    def handle_channel_disconnected(self):
+        """ Handles a channel being disconnected. """
+        for namespace in self.app_namespaces:
+            if namespace in self._handlers:
+                self._handlers[namespace].channel_disconnected()
+
+        self.app_namespaces = []
+        self.destination_id = None
+        self.session_id = None
+
+
+class ConnectionController(BaseController):
+    """ Controller to respond to connection messages. """
+
+    def __init__(self):
+        super(ConnectionController, self).__init__(NS_CONNECTION)
+
+    def receive_message(self, message, data):
+        """ Called when a connection message is received. """
+        if self._socket_client.is_stopped:
+            return True
+
+        if data[MESSAGE_TYPE] == TYPE_CLOSE:
+            self._socket_client.handle_channel_disconnected()
+
+            return True
+
+        else:
+            return False
 
 
 class HeartbeatController(BaseController):
