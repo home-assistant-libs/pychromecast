@@ -503,7 +503,9 @@ class ReceiverController(BaseController):
     def stop_app(self):
         """ Stops the current running app on the Chromecast. """
         self.logger.info("Receiver:Stopping current app")
-        self.send_message({MESSAGE_TYPE: 'STOP'}, inc_session_id=True)
+        self.send_message(
+            {MESSAGE_TYPE: 'STOP'},
+            inc_session_id=True, wait_for_response=True)
 
     def set_volume(self, volume):
         """ Allows to set volume. Should be value between 0..1.
