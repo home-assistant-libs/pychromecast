@@ -3,7 +3,7 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 import logging
 
-from ..error import NotConnected, UnsupportedNamespace, ControllerNotRegistered
+from ..error import UnsupportedNamespace, ControllerNotRegistered
 
 
 class BaseController(object):
