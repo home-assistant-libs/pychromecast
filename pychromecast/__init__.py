@@ -226,11 +226,6 @@ class Chromecast(object):
         volume = round(self.status.volume_level, 1)
         return self.set_volume(volume - 0.1)
 
-    def volume_mute(self, mute):
-        """ Mute the volume if mute is true
-        or unmute if the mute parameter is false. """
-        self.set_volume_muted(mute)
-
     def __del__(self):
         self.socket_client.stop.set()
 
