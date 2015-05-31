@@ -11,11 +11,11 @@ TYPE_STOP = "STOP"
 
 
 class PlexController(BaseController):
-    """ Controller to interact with Google media namespace. """
+    """ Controller to interact with Plex namespace. """
 
     def __init__(self):
         super(PlexController, self).__init__(
-            "urn:x-cast:plex")
+            "urn:x-cast:plex", "9AC194DC")
 
     def stop(self):
         """ Send stop command. """

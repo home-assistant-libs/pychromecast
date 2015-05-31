@@ -5,6 +5,9 @@ Big thanks goes out to Fred Clift <fred@clift.org> who build the first
 version of this code: https://github.com/minektur/chromecast-python-poc.
 Without him this would not have been possible.
 """
+# Pylint does not understand the protobuf objects correctly
+# pylint: disable=no-member
+
 import logging
 import socket
 import ssl
@@ -197,11 +200,12 @@ class SocketClient(threading.Thread):
 
     @property
     def is_stopped(self):
-        """ Returns True if the connection has been stopped, False if it is running. """
+        """ Returns boolean if the connection has been stopped. """
         return self.stop.is_set()
 
     def run(self):
         """ Start polling the socket. """
+        # pylint: disable=too-many-branches
         self.receiver_controller.update_status()
 
         while not self.stop.is_set():
@@ -213,7 +217,8 @@ class SocketClient(threading.Thread):
                     self.initialize_connection()
                 continue
 
-            # If we are stopped after receiving a message we skip the message and tear down the connection
+            # If we are stopped after receiving a message we skip the message
+            # and tear down the connection
             if self.stop.is_set():
                 break
 
@@ -222,25 +227,29 @@ class SocketClient(threading.Thread):
             if message.namespace in self._handlers:
 
                 if message.namespace != NS_HEARTBEAT:
-                    self.logger.debug("Received: {}".format(
-                        _message_to_string(message, data)))
+                    self.logger.debug(
+                        "Received: %s", _message_to_string(message, data))
 
                 try:
-                    handled = self._handlers[message.namespace].receive_message(
-                        message, data)
+                    handled = \
+                        self._handlers[message.namespace].receive_message(
+                            message, data)
 
                     if not handled:
-                        self.logger.warning("Message unhandled: {}".format(
-                            _message_to_string(message, data)))
-                except Exception as e:
-                    self.logger.exception(u"Exception {} caught while sending message to controller {}: {}".format(
-                        e, type(self._handlers[message.namespace]).__name__,
-                        _message_to_string(message, data)))
+                        self.logger.warning(
+                            "Message unhandled: %s",
+                            _message_to_string(message, data))
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception(
+                        (u"Exception caught while sending message to "
+                         u"controller %s: %s"),
+                        type(self._handlers[message.namespace]).__name__,
+                        _message_to_string(message, data))
 
             else:
                 self.logger.warning(
-                    "Received unknown namespace: {}".format(
-                        _message_to_string(message, data)))
+                    "Received unknown namespace: %s",
+                    _message_to_string(message, data))
 
             if REQUEST_ID in data:
                 event = self._request_callbacks.pop(data[REQUEST_ID], None)
@@ -263,6 +272,7 @@ class SocketClient(threading.Thread):
         self.socket.close()
 
     def _read_bytes_from_socket(self, msglen):
+        """ Read bytes from the socket. """
         chunks = []
         bytes_recd = 0
         while bytes_recd < msglen:
@@ -276,11 +286,11 @@ class SocketClient(threading.Thread):
     def _read_message(self):
         """ Reads a message from the socket and converts it to a message. """
         # first 4 bytes is Big-Endian payload length
-        payload_info = self._read_bytes_from_socket(4);
+        payload_info = self._read_bytes_from_socket(4)
         read_len = unpack(">I", payload_info)[0]
 
         # now read the payload
-        payload = self._read_bytes_from_socket(read_len);
+        payload = self._read_bytes_from_socket(read_len)
 
         # pylint: disable=no-member
         message = cast_channel_pb2.CastMessage()
@@ -323,8 +333,7 @@ class SocketClient(threading.Thread):
 
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
-            self.logger.debug(
-                "Sending: {}".format(_message_to_string(msg, data)))
+            self.logger.debug("Sending: %s", _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
@@ -394,8 +403,9 @@ class HeartbeatController(BaseController):
                     PLATFORM_DESTINATION_ID, self.namespace,
                     {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
             except PyChromecastStopped:
-                self._socket_client.logger.exception("Heartbeat error when sending response, Chromecast connection has "
-                                                     "stopped")
+                self._socket_client.logger.exception(
+                    "Heartbeat error when sending response, "
+                    "Chromecast connection has stopped")
 
             return True
 
@@ -432,7 +442,7 @@ class ReceiverController(BaseController):
     def register_status_listener(self, listener):
         """ Register a status listener for when a new Chromecast status
             has been received. Listeners will be called with
-            listener.new_channel(status) """
+            listener.new_cast_status(status) """
         self._status_listeners.append(listener)
 
     def update_status(self, blocking=False):
@@ -502,7 +512,7 @@ class ReceiverController(BaseController):
             app_data.get('status_text', '')
             )
 
-        self.logger.debug("Received: {}".format(self.status))
+        self.logger.debug("Received: %s", self.status)
 
         for listener in self._status_listeners:
             try:

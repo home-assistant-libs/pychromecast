@@ -21,7 +21,7 @@ def _get_all_chromecasts(tries=None):
     """
     hosts = discover_chromecasts()
     cc_list = []
-    for ip_address, port in hosts:
+    for ip_address, _ in hosts:
         try:
             cc_list.append(Chromecast(host=ip_address, tries=tries))
         except ChromecastConnectionError:
@@ -74,7 +74,7 @@ def get_chromecasts(tries=None, **filters):
     filtered_cc = cc_list - excluded_cc
 
     for cast in excluded_cc:
-        logger.debug("Stopping excluded chromecast {}".format(cast))
+        logger.debug("Stopping excluded chromecast %s", cast)
         cast.socket_client.stop.set()
 
     return list(filtered_cc)
@@ -90,7 +90,6 @@ def get_chromecasts_as_dict(tries=None, **filters):
     retry connecting if connection is lost or it fails to connect
     in the first place.
     """
-    # pylint: disable=star-args
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, **filters)}
 
@@ -194,7 +193,7 @@ class Chromecast(object):
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
-        self.logger.info("Starting app {}".format(app_id))
+        self.logger.info("Starting app %s", app_id)
 
         self.socket_client.receiver_controller.launch_app(app_id)
 

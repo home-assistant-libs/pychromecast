@@ -27,6 +27,8 @@ TYPE_SEEK = "SEEK"
 
 class MediaStatus(object):
     """ Class to hold the media status. """
+
+    # pylint: disable=too-many-instance-attributes,too-few-public-methods
     def __init__(self):
         self.current_time = 0
         self.content_id = None
@@ -179,7 +181,7 @@ class MediaController(BaseController):
         """ Processes a STATUS message. """
         self.status.update(data)
 
-        self.logger.debug("Media:Received status {}".format(data))
+        self.logger.debug("Media:Received status %s", data)
 
         for listener in self._status_listeners:
             try:
