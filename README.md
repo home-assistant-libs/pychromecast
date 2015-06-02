@@ -13,7 +13,9 @@ Library for Python 2 and 3 to communicate with the Google Chromecast. It current
 
 Dependencies
 ------------
-PyChromecast depends on the Python packages requests and protobuf. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+PyChromecast depends on the Python packages requests, protobuf and zeroconf. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+
+_Some users running Python 2.7 have [reported](https://github.com/balloob/pychromecast/issues/47#issuecomment-107822162) that they had to upgrade their version of pip using `pip install --upgrade pip` before they were able to install the latest version of the dependencies._
 
 How to use
 ----------
