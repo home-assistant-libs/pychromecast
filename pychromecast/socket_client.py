@@ -209,7 +209,7 @@ class SocketClient(threading.Thread):
                 message = self._read_message()
             except socket.error:
                 self.logger.exception(
-                    "Error communicating with socket, resetting connection…")
+                    "Error communicating with socket, resetting connection")
                 self.initialize_connection()
                 continue
 
