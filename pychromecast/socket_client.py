@@ -94,27 +94,32 @@ class SocketClient(threading.Thread):
         self.tries = tries
         self.host = host
 
+        self.source_id = "sender-0"
         self.stop = threading.Event()
-
-        self.receiver_controller = ReceiverController()
-        self.media_controller = MediaController()
 
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
+        self._request_id = 0
+        # dict mapping requestId on threading.Event objects
+        self._request_callbacks = {}
+        self._open_channels = []
 
         self.connecting = True
         self.socket = None
-        self._open_channels = []
-        self._request_id = 0
 
         # dict mapping namespace on Controller objects
         self._handlers = {}
 
-        # dict mapping requestId on threading.Event objects
-        self._request_callbacks = {}
+        self.receiver_controller = ReceiverController()
+        self.media_controller = MediaController()
 
-        self.source_id = "sender-0"
+        self.register_handler(HeartbeatController())
+        self.register_handler(ConnectionController())
+        self.register_handler(self.receiver_controller)
+        self.register_handler(self.media_controller)
+
+        self.receiver_controller.register_status_listener(self)
 
         self.initialize_connection()
 
@@ -122,28 +127,31 @@ class SocketClient(threading.Thread):
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
+        if self.socket is not None:
+            self.socket.close()
+            self.socket = None
+
+        # Make sure nobody is blocking.
+        for event in self._request_callbacks.values():
+            event.set()
+
+        self.app_namespaces = []
+        self.destination_id = None
+        self.session_id = None
+        self._request_id = 0
+        self._request_callbacks = {}
+        self._open_channels = []
+
+        self.connecting = True
+
         while tries is None or tries > 0:
-            self.connecting = True
-
-            self.app_namespaces = []
-            self.destination_id = None
-            self.session_id = None
-
-            self._request_id = 0
-
-            # Make sure nobody is blocking.
-            for event in self._request_callbacks.values():
-                event.set()
-
-            self._request_callbacks = {}
-
-            self._open_channels = []
-
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
-                self.socket.settimeout(10)
+                self.socket.settimeout(60)
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
+                self.receiver_controller.update_status()
+
                 self.logger.debug("Connected!")
                 break
             except socket.error:
@@ -156,13 +164,6 @@ class SocketClient(threading.Thread):
             self.stop.set()
             self.logger.error("Failed to connect. No retries.")
             raise ChromecastConnectionError("Failed to connect")
-
-        self.register_handler(HeartbeatController())
-        self.register_handler(ConnectionController())
-        self.register_handler(self.receiver_controller)
-        self.register_handler(self.media_controller)
-
-        self.receiver_controller.register_status_listener(self)
 
     def register_handler(self, handler):
         """ Register a new namespace handler. """
@@ -203,21 +204,14 @@ class SocketClient(threading.Thread):
     def run(self):
         """ Start polling the socket. """
         # pylint: disable=too-many-branches
-        self.receiver_controller.update_status()
-
         while not self.stop.is_set():
             try:
                 message = self._read_message()
             except socket.error:
-                if not self.connecting:
-                    self.logger.exception("Connecting to chromecast...")
-                    self.initialize_connection()
+                self.logger.exception(
+                    "Error communicating with socket, resetting connection…")
+                self.initialize_connection()
                 continue
-
-            # If we are stopped after receiving a message we skip the message
-            # and tear down the connection
-            if self.stop.is_set():
-                break
 
             data = _json_from_message(message)
 
@@ -370,7 +364,15 @@ class SocketClient(threading.Thread):
             self.send_message(
                 destination_id, NS_CONNECTION,
                 {MESSAGE_TYPE: TYPE_CONNECT,
-                 'origin': {}, 'userAgent': 'PyChromecast'},
+                 'origin': {},
+                 'userAgent': 'PyChromecast',
+                 'senderInfo': {
+                     'sdkType': 2,
+                     'version': '15.605.1.3',
+                     'browserVersion': "44.0.2403.30",
+                     'platform': 4,
+                     'systemVersion': 'Macintosh; Intel Mac OS X10_10_3',
+                     'connectionType': 1}},
                 no_add_request_id=True)
 
     def _disconnect_channel(self, destination_id):
@@ -442,6 +444,10 @@ class HeartbeatController(BaseController):
 
         else:
             return False
+
+    def ping(self):
+        """ Send a ping message. """
+        self.send_message({MESSAGE_TYPE: TYPE_PING})
 
 
 class ReceiverController(BaseController):
