@@ -25,6 +25,7 @@ TYPE_PAUSE = "PAUSE"
 TYPE_STOP = "STOP"
 TYPE_LOAD = "LOAD"
 TYPE_SEEK = "SEEK"
+TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
 
 METADATA_TYPE_GENERIC = 0
 METADATA_TYPE_TVSHOW = 1
@@ -62,6 +63,7 @@ class MediaStatus(object):
         self.volume_muted = False
         self.media_custom_data = {}
         self.media_metadata = {}
+        self.tracks = {}
 
     @property
     def metadata_type(self):
@@ -154,11 +156,6 @@ class MediaStatus(object):
         return self.media_metadata.get('albumArtist')
 
     @property
-    def track(self):
-        """ Return track if available. """
-        return self.media_metadata.get('track')
-
-    @property
     def images(self):
         """ Return a list of MediaImage objects for this media. """
         return [
@@ -223,6 +220,7 @@ class MediaStatus(object):
         self.media_custom_data = media_data.get(
             'customData', self.media_custom_data)
         self.media_metadata = media_data.get('metadata', self.media_metadata)
+        self.tracks = media_data.get('tracks', self.tracks)
 
     def __repr__(self):
         info = {
@@ -234,7 +232,7 @@ class MediaStatus(object):
             'artist': self.artist,
             'album_name': self.album_name,
             'album_artist': self.album_artist,
-            'track': self.track,
+            'tracks': self.tracks,
             'images': self.images,
             'supports_pause': self.supports_pause,
             'supports_seek': self.supports_seek,
@@ -357,6 +355,20 @@ class MediaController(BaseController):
         self._send_command({MESSAGE_TYPE: TYPE_SEEK,
                             "currentTime": position,
                             "resumeState": "PLAYBACK_START"})
+
+    def enable_subtitle(self, track_id):
+        """ Enable specific text track. """
+        self._send_command({
+            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
+            "activeTrackIds": [track_id]
+        })
+
+    def disable_subtitle(self):
+        """ Disable subtitle. """
+        self._send_command({
+            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
+            "activeTrackIds": []
+        })
 
     def _process_media_status(self, data):
         """ Processes a STATUS message. """
