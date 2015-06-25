@@ -63,7 +63,7 @@ class MediaStatus(object):
         self.volume_muted = False
         self.media_custom_data = {}
         self.media_metadata = {}
-        self.tracks = {}
+        self.subtitle_tracks = {}
 
     @property
     def metadata_type(self):
@@ -156,6 +156,11 @@ class MediaStatus(object):
         return self.media_metadata.get('albumArtist')
 
     @property
+    def track(self):
+        """ Return track number if available. """
+        return self.media_metadata.get('track')
+
+    @property
     def images(self):
         """ Return a list of MediaImage objects for this media. """
         return [
@@ -220,7 +225,7 @@ class MediaStatus(object):
         self.media_custom_data = media_data.get(
             'customData', self.media_custom_data)
         self.media_metadata = media_data.get('metadata', self.media_metadata)
-        self.tracks = media_data.get('tracks', self.tracks)
+        self.subtitle_tracks = media_data.get('tracks', self.subtitle_tracks)
 
     def __repr__(self):
         info = {
@@ -232,7 +237,8 @@ class MediaStatus(object):
             'artist': self.artist,
             'album_name': self.album_name,
             'album_artist': self.album_artist,
-            'tracks': self.tracks,
+            'track': self.track,
+            'subtitle_tracks': self.subtitle_tracks,
             'images': self.images,
             'supports_pause': self.supports_pause,
             'supports_seek': self.supports_seek,
