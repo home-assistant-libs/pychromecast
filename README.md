@@ -100,7 +100,7 @@ value to be reported improperly.
 
 This active input value is typically used to determine if the Chromecast is
 idle. PyChromecast is capable of ignoring the active input value when
-determining in the Chromecast is idle in the instance that the Chromecast is
+determining if the Chromecast is idle in the instance that the Chromecast is
 returning erroneous values. To ignore this CEC detection data in PyChromecast,
 append a [Linux style wildcard](http://tldp.org/LDP/GNU-Linux-Tools-Summary/html/x11655.htm)
 formatted string to the IGNORE_CEC list in PyChromecast like in the example
