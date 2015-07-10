@@ -86,6 +86,29 @@ The following instructions require the use of the [Google Chrome browser](https:
  * Go through the results and collect the JSON that is exchanged.
  * Now write a controller that is able to mimic this behavior :-)
 
+Ignoring CEC Data
+-----------------
+The Chromecast typically reports whether it is the active input on the device
+to which it is connected. This value is stored inside a cast object in the
+following property.
+
+    cast.status.is_active_input
+
+Some Chromecast users have reported CEC incompatibilities with their media
+center devices. These incompatibilities may sometimes cause this active input
+value to be reported improperly.
+
+This active input value is typically used to determine if the Chromecast is
+idle. PyChromecast is capable of ignoring the active input value when
+determining in the Chromecast is idle in the instance that the Chromecast is
+returning erroneous values. To ignore this CEC detection data in PyChromecast,
+append a [Linux style wildcard](http://tldp.org/LDP/GNU-Linux-Tools-Summary/html/x11655.htm)
+formatted string to the IGNORE_CEC list in PyChromecast like in the example
+below.
+
+    pychromecast.IGNORE_CEC.append('*')  # Ignore CEC on all devices
+    pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
+
 Thanks
 ------
 I would like to thank [Fred Clift](https://github.com/minektur) for laying the socket client ground work. Without him it would not have been possible!
