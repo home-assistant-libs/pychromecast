@@ -1,5 +1,5 @@
 [MASTER]
-ignore=cast_channel_pb2.py
+ignore=cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py
 reports=no
 
 disable=locally-disabled

@@ -1,0 +1,134 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+syntax = "proto2";
+option optimize_for = LITE_RUNTIME;
+package extensions.core_api.cast_channel.proto;
+enum EventType {
+  EVENT_TYPE_UNKNOWN = 0;
+  CAST_SOCKET_CREATED = 1;
+  READY_STATE_CHANGED = 2;
+  CONNECTION_STATE_CHANGED = 3;
+  READ_STATE_CHANGED = 4;
+  WRITE_STATE_CHANGED = 5;
+  ERROR_STATE_CHANGED = 6;
+  CONNECT_FAILED = 7;
+  TCP_SOCKET_CONNECT = 8;  // Logged with RV.
+  TCP_SOCKET_SET_KEEP_ALIVE = 9;
+  SSL_CERT_WHITELISTED = 10;
+  SSL_SOCKET_CONNECT = 11;  // Logged with RV.
+  SSL_INFO_OBTAINED = 12;
+  DER_ENCODED_CERT_OBTAIN = 13;  // Logged with RV.
+  RECEIVED_CHALLENGE_REPLY = 14;
+  AUTH_CHALLENGE_REPLY = 15;
+  CONNECT_TIMED_OUT = 16;
+  SEND_MESSAGE_FAILED = 17;
+  MESSAGE_ENQUEUED = 18;   // Message
+  SOCKET_WRITE = 19;       // Logged with RV.
+  MESSAGE_WRITTEN = 20;    // Message
+  SOCKET_READ = 21;        // Logged with RV.
+  MESSAGE_READ = 22;       // Message
+  SOCKET_CLOSED = 25;
+  SSL_CERT_EXCESSIVE_LIFETIME = 26;
+  CHANNEL_POLICY_ENFORCED = 27;
+  TCP_SOCKET_CONNECT_COMPLETE = 28;   // Logged with RV.
+  SSL_SOCKET_CONNECT_COMPLETE = 29;   // Logged with RV.
+  SSL_SOCKET_CONNECT_FAILED = 30;     // Logged with RV.
+  SEND_AUTH_CHALLENGE_FAILED = 31;    // Logged with RV.
+  AUTH_CHALLENGE_REPLY_INVALID = 32;
+  PING_WRITE_ERROR = 33;              // Logged with RV.
+}
+enum ChannelAuth {
+  // SSL over TCP.
+  SSL = 1;
+  // SSL over TCP with challenge and receiver signature verification.
+  SSL_VERIFIED = 2;
+}
+enum ReadyState {
+  READY_STATE_NONE = 1;
+  READY_STATE_CONNECTING = 2;
+  READY_STATE_OPEN = 3;
+  READY_STATE_CLOSING = 4;
+  READY_STATE_CLOSED = 5;
+}
+enum ConnectionState {
+  CONN_STATE_NONE = 1;
+  CONN_STATE_TCP_CONNECT = 2;
+  CONN_STATE_TCP_CONNECT_COMPLETE = 3;
+  CONN_STATE_SSL_CONNECT = 4;
+  CONN_STATE_SSL_CONNECT_COMPLETE = 5;
+  CONN_STATE_AUTH_CHALLENGE_SEND = 6;
+  CONN_STATE_AUTH_CHALLENGE_SEND_COMPLETE = 7;
+  CONN_STATE_AUTH_CHALLENGE_REPLY_COMPLETE = 8;
+}
+enum ReadState {
+  READ_STATE_NONE = 1;
+  READ_STATE_READ = 2;
+  READ_STATE_READ_COMPLETE = 3;
+  READ_STATE_DO_CALLBACK = 4;
+  READ_STATE_ERROR = 5;
+}
+enum WriteState {
+  WRITE_STATE_NONE = 1;
+  WRITE_STATE_WRITE = 2;
+  WRITE_STATE_WRITE_COMPLETE = 3;
+  WRITE_STATE_DO_CALLBACK = 4;
+  WRITE_STATE_ERROR = 5;
+}
+enum ErrorState {
+  CHANNEL_ERROR_NONE = 1;
+  CHANNEL_ERROR_CHANNEL_NOT_OPEN = 2;
+  CHANNEL_ERROR_AUTHENTICATION_ERROR = 3;
+  CHANNEL_ERROR_CONNECT_ERROR = 4;
+  CHANNEL_ERROR_SOCKET_ERROR = 5;
+  CHANNEL_ERROR_TRANSPORT_ERROR = 6;
+  CHANNEL_ERROR_INVALID_MESSAGE = 7;
+  CHANNEL_ERROR_INVALID_CHANNEL_ID = 8;
+  CHANNEL_ERROR_CONNECT_TIMEOUT = 9;
+  CHANNEL_ERROR_UNKNOWN = 10;
+}
+enum ChallengeReplyErrorType {
+  CHALLENGE_REPLY_ERROR_NONE = 1;
+  CHALLENGE_REPLY_ERROR_PEER_CERT_EMPTY = 2;
+  CHALLENGE_REPLY_ERROR_WRONG_PAYLOAD_TYPE = 3;
+  CHALLENGE_REPLY_ERROR_NO_PAYLOAD = 4;
+  CHALLENGE_REPLY_ERROR_PAYLOAD_PARSING_FAILED = 5;
+  CHALLENGE_REPLY_ERROR_MESSAGE_ERROR = 6;
+  CHALLENGE_REPLY_ERROR_NO_RESPONSE = 7;
+  CHALLENGE_REPLY_ERROR_FINGERPRINT_NOT_FOUND = 8;
+  CHALLENGE_REPLY_ERROR_CERT_PARSING_FAILED = 9;
+  CHALLENGE_REPLY_ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA = 10;
+  CHALLENGE_REPLY_ERROR_CANNOT_EXTRACT_PUBLIC_KEY = 11;
+  CHALLENGE_REPLY_ERROR_SIGNED_BLOBS_MISMATCH = 12;
+}
+message SocketEvent {
+  // Required
+  optional EventType type = 1;
+  optional int64 timestamp_micros = 2;
+  optional string details = 3;
+  optional int32 net_return_value = 4;
+  optional string message_namespace = 5;
+  optional ReadyState ready_state = 6;
+  optional ConnectionState connection_state = 7;
+  optional ReadState read_state = 8;
+  optional WriteState write_state = 9;
+  optional ErrorState error_state = 10;
+  optional ChallengeReplyErrorType challenge_reply_error_type = 11;
+  optional int32 nss_error_code = 12;
+}
+message AggregatedSocketEvent {
+  optional int32 id = 1;
+  optional int32 endpoint_id = 2;
+  optional ChannelAuth channel_auth_type = 3;
+  repeated SocketEvent socket_event = 4;
+  optional int64 bytes_read = 5;
+  optional int64 bytes_written = 6;
+}
+message Log {
+  // Each AggregatedSocketEvent represents events recorded for a socket.
+  repeated AggregatedSocketEvent aggregated_socket_event = 1;
+  // Number of socket log entries evicted by the logger due to size constraints.
+  optional int32 num_evicted_aggregated_socket_events = 2;
+  // Number of event log entries evicted by the logger due to size constraints.
+  optional int32 num_evicted_socket_events = 3;
+}

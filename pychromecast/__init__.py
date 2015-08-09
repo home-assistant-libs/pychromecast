@@ -4,6 +4,7 @@ PyChromecast: remote control your Chromecast
 from __future__ import print_function
 
 import logging
+import fnmatch
 
 # pylint: disable=wildcard-import
 from .config import *  # noqa
@@ -13,6 +14,9 @@ from .discovery import discover_chromecasts
 from .dial import get_device_status, reboot
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
+IDLE_APP_ID = 'E8C28D3C'
+IGNORE_CEC = []
+
 
 def _get_all_chromecasts(tries=None):
     """
@@ -21,7 +25,7 @@ def _get_all_chromecasts(tries=None):
     """
     hosts = discover_chromecasts()
     cc_list = []
-    for ip_address, port in hosts:
+    for ip_address, _ in hosts:
         try:
             cc_list.append(Chromecast(host=ip_address, tries=tries))
         except ChromecastConnectionError:
@@ -74,7 +78,7 @@ def get_chromecasts(tries=None, **filters):
     filtered_cc = cc_list - excluded_cc
 
     for cast in excluded_cc:
-        logger.debug("Stopping excluded chromecast {}".format(cast))
+        logger.debug("Stopping excluded chromecast %s", cast)
         cast.socket_client.stop.set()
 
     return list(filtered_cc)
@@ -90,7 +94,6 @@ def get_chromecasts_as_dict(tries=None, **filters):
     retry connecting if connection is lost or it fails to connect
     in the first place.
     """
-    # pylint: disable=star-args
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, **filters)}
 
@@ -156,23 +159,33 @@ class Chromecast(object):
                 "Could not connect to {}".format(self.host))
 
         self.status = None
-        self.media_status = None
 
         self.socket_client = socket_client.SocketClient(host, tries)
 
-        self.socket_client.receiver_controller.register_status_listener(self)
+        receiver_controller = self.socket_client.receiver_controller
+        receiver_controller.register_status_listener(self)
 
         # Forward these methods
-        self.set_volume = self.socket_client.receiver_controller.set_volume
+        self.set_volume = receiver_controller.set_volume
+        self.set_volume_muted = receiver_controller.set_volume_muted
         self.play_media = self.socket_client.media_controller.play_media
         self.register_handler = self.socket_client.register_handler
 
         self.socket_client.start()
 
     @property
+    def ignore_cec(self):
+        """ Returns whether the CEC data should be ignored. """
+        return self.device is not None and \
+            any([fnmatch.fnmatchcase(self.device.friendly_name, pattern)
+                 for pattern in IGNORE_CEC])
+
+    @property
     def is_idle(self):
         """ Returns if there is currently an app running. """
-        return self.status is None or self.status.is_stand_by
+        return (self.status is None or
+                self.app_id in (None, IDLE_APP_ID) or
+                (not self.status.is_active_input and not self.ignore_cec))
 
     @property
     def app_id(self):
@@ -195,7 +208,7 @@ class Chromecast(object):
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
-        self.logger.info("Starting app {}".format(app_id))
+        self.logger.info("Starting app %s", app_id)
 
         self.socket_client.receiver_controller.launch_app(app_id)
 

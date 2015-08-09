@@ -1,8 +1,6 @@
 pychromecast [![Build Status](https://travis-ci.org/balloob/pychromecast.svg?branch=master)](https://travis-ci.org/balloob/pychromecast)
 ============
 
-**Python 3 support is currently broken. Use version 0.5.1.1 on PyPy for Python 3 support.**
-
 Library for Python 2 and 3 to communicate with the Google Chromecast. It currently supports:
  - Auto discovering connected Chromecasts on the network
  - Start the default media receiver and play any online media
@@ -15,7 +13,9 @@ Library for Python 2 and 3 to communicate with the Google Chromecast. It current
 
 Dependencies
 ------------
-PyChromecast depends on the Python packages requests and protobuf. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+PyChromecast depends on the Python packages requests, protobuf and zeroconf. Make sure you have these dependencies installed using `pip install -r requirements.txt`
+
+_Some users running Python 2.7 have [reported](https://github.com/balloob/pychromecast/issues/47#issuecomment-107822162) that they had to upgrade their version of pip using `pip install --upgrade pip` before they were able to install the latest version of the dependencies._
 
 How to use
 ----------
@@ -85,6 +85,29 @@ The following instructions require the use of the [Google Chrome browser](https:
  * In the filter box enter the text `Tr@n$p0rt`. This should give one SOCKET connection as result: the connection with your Chromecast.
  * Go through the results and collect the JSON that is exchanged.
  * Now write a controller that is able to mimic this behavior :-)
+
+Ignoring CEC Data
+-----------------
+The Chromecast typically reports whether it is the active input on the device
+to which it is connected. This value is stored inside a cast object in the
+following property.
+
+    cast.status.is_active_input
+
+Some Chromecast users have reported CEC incompatibilities with their media
+center devices. These incompatibilities may sometimes cause this active input
+value to be reported improperly.
+
+This active input value is typically used to determine if the Chromecast is
+idle. PyChromecast is capable of ignoring the active input value when
+determining if the Chromecast is idle in the instance that the Chromecast is
+returning erroneous values. To ignore this CEC detection data in PyChromecast,
+append a [Linux style wildcard](http://tldp.org/LDP/GNU-Linux-Tools-Summary/html/x11655.htm)
+formatted string to the IGNORE_CEC list in PyChromecast like in the example
+below.
+
+    pychromecast.IGNORE_CEC.append('*')  # Ignore CEC on all devices
+    pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
 
 Thanks
 ------

@@ -3,7 +3,7 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 import logging
 
-from ..error import NotConnected, UnsupportedNamespace, ControllerNotRegistered
+from ..error import UnsupportedNamespace, ControllerNotRegistered
 
 
 class BaseController(object):
@@ -55,6 +55,10 @@ class BaseController(object):
     def channel_connected(self):
         """ Called when a channel has been openend that supports the
             namespace of this controller. """
+        pass
+
+    def channel_disconnected(self):
+        """ Called when a channel is disconnected. """
         pass
 
     def send_message(self, data, inc_session_id=False,
