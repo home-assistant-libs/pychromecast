@@ -126,9 +126,9 @@ class StreamHTTP(BaseHTTPRequestHandler):
 				chunk = source.read(chunksize)
 
 def cast(args):
-	import contextlib
 	import pychromecast
 	#import pychromecast.controllers.youtube
+	import signal
 	import threading
 	import time
 
@@ -157,6 +157,12 @@ def cast(args):
 			StreamHTTP(files, *h_args)
 		httpd = HTTPServer((args.host, args.port), build_stream)
 		threading.Thread(target=httpd.serve_forever).start()
+
+	# Treat SIGTERM like Ctrl-C
+	def handle_signal(signum, frame):
+		if (signum == signal.SIGTERM):
+			raise KeyboardInterrupt("Caught SIGTERM; shutting down")
+	signal.signal(signal.SIGTERM, handle_signal)
 
 	try:
 		for (url, filetype) in media:
