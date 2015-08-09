@@ -125,7 +125,6 @@ class StreamHTTP(BaseHTTPRequestHandler):
 				self.wfile.write(chunk)
 				chunk = source.read(chunksize)
 
-
 def cast(args):
 	import contextlib
 	import pychromecast
@@ -141,11 +140,6 @@ def cast(args):
 	controller = cast.media_controller
 	#yt_controller = pychromecast.controllers.youtube.YouTubeController()
 	#cast.register_handler(yt_controller)
-
-	if controller.is_active and not controller.is_idle:
-		print("{0} is busy".format(cast))
-		return
-
 
 	media = [] # list of (url, filetype)
 	files = {} # dict of handle : (filepath, filetype)
@@ -176,8 +170,8 @@ def cast(args):
 			else:
 				cast.play_media(url, filetype)
 
-			while not controller.is_idle: #or not yt_controller.is_idle:
-				pass
+			while not controller.status.player_is_idle: #or not yt_controller.is_idle:
+				time.sleep(1)
 
 			time.sleep(args.wait)
 
