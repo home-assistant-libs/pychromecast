@@ -84,7 +84,7 @@ def resolve_name(name, max_depth, args):
 			url = source.geturl()
 			if filetype in supportedtypes:
 				yield (url, filetype, None, None)
-			return
+				return
 
 	# youtube link or ID
 	youtube_re = re.compile(r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})")
@@ -93,12 +93,12 @@ def resolve_name(name, max_depth, args):
 	if youtube_id is not None:
 		try:
 			# make sure video with youtube_id exists
-			with contextlib.closing(urllib2.urlopen("http://gdata.youtube.com/feeds/api/videos/{0}".format(youtube_id))) as exists:
+			with contextlib.closing(urllib2.urlopen("https://youtube.com/oembed?url=https://youtube.com/watch?v={0}".format(youtube_id))) as exists:
 				if exists.getcode() == 200:
 					yield (youtube_id, "youtube", None, None)
 					return
-		except urllib2.HTTPError:
-			pass
+		except urllib2.HTTPError as error:
+			print("Failed to verify YouTube video exists: {0}".format(error))
 
 	print("Unable to resolve {0}".format(name))
 
@@ -163,15 +163,17 @@ def cast(args):
 			print("Casting {0} ({1}) to {2}".format(url, filetype, cast))
 
 			if filetype == "youtube":
+				print("Skipping YouTube video")
+				# YouTube decides to auto-play extra videos after the first one.
+				# Disabled until we find a workaround for this dumbass behavior.
 				#yt_controller.play_video(url)
-				# There's no way to tell when youtube is done playing.
-				# So don't even bother yet.
-				print("Ignoring youtube link")
+				#time.sleep(8) # wait for youtube to start playing
+				#while yt_controller.screen_id is not None:
+				#	time.sleep(1)
 			else:
-				cast.play_media(url, filetype)
-
-			while not controller.status.player_is_idle: #or not yt_controller.is_idle:
-				time.sleep(1)
+				controller.play_media(url, filetype)
+				while not controller.status.player_is_idle:
+					time.sleep(1)
 
 			time.sleep(args.wait)
 
