@@ -9,6 +9,7 @@ Without him this would not have been possible.
 # pylint: disable=no-member
 
 import logging
+import select
 import socket
 import ssl
 import json
@@ -47,6 +48,11 @@ TYPE_LOAD = "LOAD"
 APP_ID = 'appId'
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
+
+HB_PING_TIME = 10
+HB_PONG_TIME = 10
+POLL_TIME = 5
+TIMEOUT_TIME = 30
 
 
 def _json_from_message(message):
@@ -113,8 +119,9 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
+        self.heartbeat_controller = HeartbeatController()
 
-        self.register_handler(HeartbeatController())
+        self.register_handler(self.heartbeat_controller)
         self.register_handler(ConnectionController())
         self.register_handler(self.receiver_controller)
         self.register_handler(self.media_controller)
@@ -147,10 +154,12 @@ class SocketClient(threading.Thread):
         while tries is None or tries > 0:
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
-                self.socket.settimeout(60)
+                self.socket.settimeout(TIMEOUT_TIME)
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
                 self.receiver_controller.update_status()
+                self.heartbeat_controller.ping()
+                self.heartbeat_controller.reset()
 
                 self.logger.debug("Connected!")
                 break
@@ -204,23 +213,36 @@ class SocketClient(threading.Thread):
     def run(self):
         """ Start polling the socket. """
         # pylint: disable=too-many-branches
+        self.heartbeat_controller.reset()
         while not self.stop.is_set():
-            try:
-                message = self._read_message()
-            except socket.error:
-                self.logger.exception(
+
+            # check if connection is expired
+            if self.heartbeat_controller.is_expired():
+                self.logger.error(
                     "Error communicating with socket, resetting connection")
-                self.initialize_connection()
+                try:
+                    self.initialize_connection()
+                except ChromecastConnectionError:
+                    self.stop.set()
                 continue
 
-            data = _json_from_message(message)
+            # read messages from chromecast
+            can_read, _, _ = select.select([self.socket], [], [], POLL_TIME)
+            if self.socket in can_read:
+                message = self._read_message()
+                data = _json_from_message(message)
+            else:
+                continue
 
+            # route message to handlers
             if message.namespace in self._handlers:
 
+                # debug messages
                 if message.namespace != NS_HEARTBEAT:
                     self.logger.debug(
                         "Received: %s", _message_to_string(message, data))
 
+                # message handlers
                 try:
                     handled = \
                         self._handlers[message.namespace].receive_message(
@@ -424,6 +446,8 @@ class HeartbeatController(BaseController):
     def __init__(self):
         super(HeartbeatController, self).__init__(
             NS_HEARTBEAT, target_platform=True)
+        self.last_ping = 0
+        self.last_pong = time.time()
 
     def receive_message(self, message, data):
         """ Called when a heartbeat message is received. """
@@ -442,12 +466,28 @@ class HeartbeatController(BaseController):
 
             return True
 
+        elif data[MESSAGE_TYPE] == TYPE_PONG:
+            self.reset()
+            return True
+
         else:
             return False
 
     def ping(self):
         """ Send a ping message. """
+        self.last_ping = time.time()
         self.send_message({MESSAGE_TYPE: TYPE_PING})
+
+    def reset(self):
+        """ Reset expired counter. """
+        self.last_pong = time.time()
+
+    def is_expired(self):
+        """ Indicates if connection has expired. """
+        if time.time() - self.last_ping > HB_PING_TIME:
+            self.ping()
+
+        return (time.time() - self.last_pong) > HB_PING_TIME + HB_PONG_TIME
 
 
 class ReceiverController(BaseController):
