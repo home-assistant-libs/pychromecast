@@ -217,7 +217,7 @@ class SocketClient(threading.Thread):
         while not self.stop.is_set():
 
             # check if connection is expired
-            if self.heartbeat_controller.expired:
+            if self.heartbeat_controller.is_expired():
                 self.logger.error(
                     "Error communicating with socket, resetting connection")
                 try:
@@ -482,8 +482,7 @@ class HeartbeatController(BaseController):
         """ Reset expired counter. """
         self.last_pong = time.time()
 
-    @property
-    def expired(self):
+    def is_expired(self):
         """ Indicates if connection has expired. """
         if time.time() - self.last_ping > HB_PING_TIME:
             self.ping()
