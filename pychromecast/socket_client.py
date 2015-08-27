@@ -97,6 +97,8 @@ class SocketClient(threading.Thread):
 
         self.logger = logging.getLogger(__name__)
 
+        self._force_recon = False
+
         self.tries = tries
         self.host = host
 
@@ -160,6 +162,7 @@ class SocketClient(threading.Thread):
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
+                self._force_recon = False
 
                 self.logger.debug("Connected!")
                 break
@@ -214,10 +217,11 @@ class SocketClient(threading.Thread):
         """ Start polling the socket. """
         # pylint: disable=too-many-branches
         self.heartbeat_controller.reset()
+        self._force_recon = False
         while not self.stop.is_set():
 
             # check if connection is expired
-            if self.heartbeat_controller.is_expired():
+            if self.heartbeat_controller.is_expired() or self._force_recon:
                 self.logger.error(
                     "Error communicating with socket, resetting connection")
                 try:
@@ -226,12 +230,20 @@ class SocketClient(threading.Thread):
                     self.stop.set()
                 continue
 
-            # read messages from chromecast
+            # poll the socket
             can_read, _, _ = select.select([self.socket], [], [], POLL_TIME)
-            if self.socket in can_read:
-                message = self._read_message()
-                data = _json_from_message(message)
-            else:
+
+            # read messages from chromecast
+            message = data = None
+            if self.socket in can_read and not self._force_recon:
+                try:
+                    message = self._read_message()
+                except socket.error:
+                    self._force_recon = True
+                    self.logging.error('Error reading from socket.')
+                else:
+                    data = _json_from_message(message)
+            if not message:
                 continue
 
             # route message to handlers
@@ -260,7 +272,7 @@ class SocketClient(threading.Thread):
                         _message_to_string(message, data))
 
             else:
-                self.logger.warning(
+                self.logger.debug(
                     "Received unknown namespace: %s",
                     _message_to_string(message, data))
 
@@ -352,7 +364,12 @@ class SocketClient(threading.Thread):
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting:
-            self.socket.sendall(be_size + msg.SerializeToString())
+            try:
+                self.socket.sendall(be_size + msg.SerializeToString())
+            except socket.error as err:
+                self._force_recon = True
+                self.logger.error('Error writing to socket.')
+                raise err
         else:
             raise NotConnected("Chromecast is connecting...")
 
