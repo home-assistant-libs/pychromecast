@@ -363,7 +363,7 @@ class SocketClient(threading.Thread):
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
-        if not self.connecting:
+        if not self.connecting and not self._force_recon:
             try:
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error as err:
