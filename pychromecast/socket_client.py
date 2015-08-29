@@ -240,7 +240,7 @@ class SocketClient(threading.Thread):
                     message = self._read_message()
                 except socket.error:
                     self._force_recon = True
-                    self.logging.error('Error reading from socket.')
+                    self.logger.error('Error reading from socket.')
                 else:
                     data = _json_from_message(message)
             if not message:
