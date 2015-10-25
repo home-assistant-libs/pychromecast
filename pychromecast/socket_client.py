@@ -26,7 +26,8 @@ from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
     NotConnected,
-    PyChromecastStopped
+    PyChromecastStopped,
+    StopError,
 )
 
 NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
@@ -183,6 +184,9 @@ class SocketClient(threading.Thread):
             self.logger.error("Failed to connect. No retries.")
             raise ChromecastConnectionError("Failed to connect")
 
+    def disconnect(self):
+        self.stop.set()
+
     def register_handler(self, handler):
         """ Register a new namespace handler. """
         self._handlers[handler.namespace] = handler
@@ -244,6 +248,14 @@ class SocketClient(threading.Thread):
             if self.socket in can_read and not self._force_recon:
                 try:
                     message = self._read_message()
+                except StopError as exc:
+                    if self.stop.is_set():
+                        self.logger.info(
+                            "Stopped while reading message, disconnecting.")
+                        break
+                    else:
+                        self.logger.exception(
+                            "Stop exception caught without being stopped %s", exc)
                 except ssl.SSLError as exc:
                     if exc.errno == ssl.SSL_ERROR_EOF:
                         if self.stop.is_set():
@@ -256,6 +268,11 @@ class SocketClient(threading.Thread):
                     data = _json_from_message(message)
             if not message:
                 continue
+
+            # If we are stopped after receiving a message we skip the message
+            # and tear down the connection
+            if self.stop.is_set():
+                break
 
             # route message to handlers
             if message.namespace in self._handlers:
@@ -313,6 +330,8 @@ class SocketClient(threading.Thread):
         chunks = []
         bytes_recd = 0
         while bytes_recd < msglen:
+            if self.stop.is_set():
+                raise StopError("Stopped while reading from socket")
             try:
                 chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
                 if chunk == b'':
@@ -587,8 +606,9 @@ class ReceiverController(BaseController):
         """ Stops the current running app on the Chromecast. """
         self.logger.info("Receiver:Stopping current app")
         self.send_message(
+        return self.send_message(
             {MESSAGE_TYPE: 'STOP'},
-            inc_session_id=True, wait_for_response=True)
+            inc_session_id=True, wait_for_response=block_till_stopped)
 
     def set_volume(self, volume):
         """ Allows to set volume. Should be value between 0..1.

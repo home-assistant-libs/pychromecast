@@ -237,6 +237,31 @@ class Chromecast(object):
         volume = round(self.status.volume_level, 1)
         return self.set_volume(volume - 0.1)
 
+    def disconnect(self, timeout=None, blocking=True):
+        """
+        Disconnects the chromecast and waits for it to terminate.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        :param blocking: If True it will block until the disconnection is
+                         complete, otherwise it will return immediately.
+        """
+        self.socket_client.disconnect()
+        if blocking:
+            self.join(timeout=timeout)
+
+    def join(self, timeout=None):
+        """
+        Blocks the thread of the caller until the chromecast connection is
+        stopped.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        """
+        self.socket_client.join(timeout=timeout)
+
     def __del__(self):
         self.socket_client.stop.set()
 
