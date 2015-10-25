@@ -155,8 +155,8 @@ class SocketClient(threading.Thread):
             self.socket = None
 
         # Make sure nobody is blocking.
-        for event in self._request_callbacks.values():
-            event.set()
+        for callback in self._request_callbacks.values():
+            callback['event'].set()
 
         self.app_namespaces = []
         self.destination_id = None
@@ -296,9 +296,10 @@ class SocketClient(threading.Thread):
                             message, data)
 
                     if not handled:
-                        self.logger.warning(
-                            "Message unhandled: %s",
-                            _message_to_string(message, data))
+                        if data.get(REQUEST_ID) not in self._request_callbacks:
+                            self.logger.warning(
+                                "Message unhandled: %s",
+                                _message_to_string(message, data))
                 except Exception:  # pylint: disable=broad-except
                     self.logger.exception(
                         (u"Exception caught while sending message to "
@@ -312,9 +313,11 @@ class SocketClient(threading.Thread):
                     _message_to_string(message, data))
 
             if REQUEST_ID in data:
-                event = self._request_callbacks.pop(data[REQUEST_ID], None)
+                callback = self._request_callbacks.pop(data[REQUEST_ID], None)
+                if callback is not None:
+                    event = callback['event']
+                    callback['response'] = data
 
-                if event is not None:
                     event.set()
 
         # Clean up
@@ -383,6 +386,7 @@ class SocketClient(threading.Thread):
         # If channel is not open yet, connect to it.
         self._ensure_channel_connected(destination_id)
 
+        request_id = None
         if not no_add_request_id:
             request_id = self._gen_request_id()
             data[REQUEST_ID] = request_id
@@ -419,15 +423,21 @@ class SocketClient(threading.Thread):
         else:
             raise NotConnected("Chromecast is connecting...")
 
+        response = None
         if not no_add_request_id and wait_for_response:
-            self._request_callbacks[request_id] = threading.Event()
-            self._request_callbacks[request_id].wait()
+            callback = self._request_callbacks[request_id] = {
+                'event': threading.Event(),
+                'response': None,
+            }
+            callback['event'].wait()
+            response = callback.get('response')
+        return response
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               wait_for_response=False):
         """ Helper method to send a message to the platform. """
-        self.send_message(PLATFORM_DESTINATION_ID, namespace, message,
-                          inc_session_id, wait_for_response)
+        return self.send_message(PLATFORM_DESTINATION_ID, namespace, message,
+                                 inc_session_id, wait_for_response)
 
     def send_app_message(self, namespace, message, inc_session_id=False,
                          wait_for_response=False):
@@ -438,8 +448,8 @@ class SocketClient(threading.Thread):
                  "Supported are {}").format(namespace,
                                             ", ".join(self.app_namespaces)))
 
-        self.send_message(self.destination_id, namespace, message,
-                          inc_session_id, wait_for_response)
+        return self.send_message(self.destination_id, namespace, message,
+                                 inc_session_id, wait_for_response)
 
     def _ensure_channel_connected(self, destination_id):
         """ Ensure we opened a channel to destination_id. """
@@ -562,6 +572,8 @@ class ReceiverController(BaseController):
 
         self.status = None
         self.launch_failure = None
+        self.app_to_launch = None
+        self.app_launch_event = threading.Event()
 
         self._status_listeners = []
         self._launch_error_listeners = []
@@ -608,7 +620,7 @@ class ReceiverController(BaseController):
         """ Launches an app on the Chromecast.
 
             Will only launch if it is not currently running unless
-            force_launc=True. """
+            force_launch=True. """
         # If this is called too quickly after launch, we don't have the info.
         # We need the info if we are not force launching to check running app.
         if not force_launch and self.app_id is None:
@@ -616,21 +628,52 @@ class ReceiverController(BaseController):
 
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
-            self.launch_failure = None
 
-            self.send_message({
+            # If we are blocking we need to wait for the status update or
+            # launch failure before returning
+            self.launch_failure = None
+            if block_till_launched:
+                self.app_to_launch = app_id
+                self.app_launch_event.clear()
+
+            response = self.send_message({
                     MESSAGE_TYPE: TYPE_LAUNCH,
                     APP_ID: app_id
                 },
                 wait_for_response=block_till_launched)
+
+            if block_till_launched:
+                is_app_started = False
+                if response:
+                    response_type = response[MESSAGE_TYPE]
+                    if response_type == TYPE_RECEIVER_STATUS:
+                        new_status = self._parse_status(response)
+                        new_app_id = new_status.app_id
+                        if new_app_id == app_id:
+                            is_app_started = True
+                            self.app_to_launch = None
+                            self.app_launch_event.clear()
+                    elif response_type == TYPE_LAUNCH_ERROR:
+                        self.app_to_launch = None
+                        self.app_launch_event.clear()
+                        launch_error = self._parse_launch_error(response)
+                        raise LaunchError(
+                            "Failed to launch app: {}, Reason: {}".format(
+                                app_id, launch_error.reason))
+
+                if not is_app_started:
+                    self.app_launch_event.wait()
+                    if self.launch_failure:
+                        raise LaunchError(
+                            "Failed to launch app: {}, Reason: {}".format(
+                                app_id, self.launch_failure.reason))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
 
-    def stop_app(self):
+    def stop_app(self, block_till_stopped=True):
         """ Stops the current running app on the Chromecast. """
-        self.logger.info("Receiver:Stopping current app")
-        self.send_message(
+        self.logger.info("Receiver:Stopping current app '%s'", self.app_id)
         return self.send_message(
             {MESSAGE_TYPE: 'STOP'},
             inc_session_id=True, wait_for_response=block_till_stopped)
@@ -652,8 +695,14 @@ class ReceiverController(BaseController):
             {MESSAGE_TYPE: 'SET_VOLUME',
              'volume': {'muted': muted}})
 
-    def _process_get_status(self, data):
-        """ Processes a received STATUS message and notifies listeners. """
+    @staticmethod
+    def _parse_status(data):
+        """
+        Parses a STATUS message and returns a CastStatus object.
+
+        :type data: dict
+        :rtype: CastStatus
+        """
         data = data.get('status', {})
 
         volume_data = data.get('volume', {})
@@ -663,7 +712,7 @@ class ReceiverController(BaseController):
         except KeyError:
             app_data = {}
 
-        self.status = CastStatus(
+        status = CastStatus(
             data.get('isActiveInput', False),
             data.get('isStandBy', True),
             volume_data.get('level', 1.0),
@@ -675,8 +724,19 @@ class ReceiverController(BaseController):
             app_data.get('transportId'),
             app_data.get('status_text', '')
             )
+        return status
 
-        self.logger.debug("Received: %s", self.status)
+    def _process_get_status(self, data):
+        """ Processes a received STATUS message and notifies listeners. """
+        status = self._parse_status(data)
+        is_new_app = self.app_id != status.app_id and self.app_to_launch
+        self.status = status
+
+        if is_new_app and self.app_to_launch == self.app_id:
+            self.app_to_launch = None
+            self.app_launch_event.set()
+
+        self.logger.debug("Received status: %s", self.status)
 
         for listener in self._status_listeners:
             try:
@@ -704,6 +764,10 @@ class ReceiverController(BaseController):
         """
         launch_failure = self._parse_launch_error(data)
         self.launch_failure = launch_failure
+
+        if self.app_to_launch:
+            self.app_to_launch = None
+            self.app_launch_event.set()
 
         self.logger.debug("Launch status: %s", launch_failure)
 
