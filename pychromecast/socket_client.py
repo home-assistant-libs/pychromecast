@@ -227,7 +227,9 @@ class SocketClient(threading.Thread):
 
     @property
     def is_stopped(self):
-        """ Returns boolean if the connection has been stopped. """
+        """
+        Returns True if the connection has been stopped, False if it is running.
+        """
         return self.stop.is_set()
 
     def run(self):
