@@ -27,7 +27,6 @@ from .error import (
     UnsupportedNamespace,
     NotConnected,
     PyChromecastStopped,
-    StopError,
     LaunchError,
 )
 
@@ -57,6 +56,11 @@ HB_PING_TIME = 10
 HB_PONG_TIME = 10
 POLL_TIME = 5
 TIMEOUT_TIME = 30
+
+
+class InterruptLoop(Exception):
+    """ The chromecast has been manually stopped. """
+    pass
 
 
 def _json_from_message(message):
@@ -257,14 +261,15 @@ class SocketClient(threading.Thread):
             if self.socket in can_read and not self._force_recon:
                 try:
                     message = self._read_message()
-                except StopError as exc:
+                except InterruptLoop as exc:
                     if self.stop.is_set():
                         self.logger.info(
                             "Stopped while reading message, disconnecting.")
                         break
                     else:
                         self.logger.exception(
-                            "Stop exception caught without being stopped %s", exc)
+                            "Interruption caught without being stopped %s", exc)
+                        break
                 except ssl.SSLError as exc:
                     if exc.errno == ssl.SSL_ERROR_EOF:
                         if self.stop.is_set():
@@ -343,7 +348,7 @@ class SocketClient(threading.Thread):
         bytes_recd = 0
         while bytes_recd < msglen:
             if self.stop.is_set():
-                raise StopError("Stopped while reading from socket")
+                raise InterruptLoop("Stopped while reading from socket")
             try:
                 chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
                 if chunk == b'':

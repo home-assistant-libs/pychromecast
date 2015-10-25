@@ -32,11 +32,6 @@ class LaunchError(PyChromecastError):
     pass
 
 
-class StopError(PyChromecastError):
-    """ The chromecast has been manually stopped. """
-    pass
-
-
 class PyChromecastStopped(PyChromecastError):
     """ Raised when a command is invoked while the Chromecast's socket_client
     is stopped.
