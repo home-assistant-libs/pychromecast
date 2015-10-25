@@ -27,6 +27,11 @@ class ChromecastConnectionError(PyChromecastError):
     pass
 
 
+class LaunchError(PyChromecastError):
+    """ When an app fails to launch. """
+    pass
+
+
 class StopError(PyChromecastError):
     """ The chromecast has been manually stopped. """
     pass

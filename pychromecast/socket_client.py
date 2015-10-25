@@ -28,6 +28,7 @@ from .error import (
     NotConnected,
     PyChromecastStopped,
     StopError,
+    LaunchError,
 )
 
 NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
@@ -44,11 +45,13 @@ TYPE_CONNECT = "CONNECT"
 TYPE_CLOSE = "CLOSE"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_LAUNCH = "LAUNCH"
+TYPE_LAUNCH_ERROR = "LAUNCH_ERROR"
 TYPE_LOAD = "LOAD"
 
 APP_ID = 'appId'
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
+ERROR_REASON = 'reason'
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
@@ -91,6 +94,10 @@ CastStatus = namedtuple('CastStatus',
                          'volume_muted', 'app_id', 'display_name',
                          'namespaces', 'session_id', 'transport_id',
                          'status_text'])
+
+
+LaunchFailure = namedtuple('LaunchStatus',
+                           ['reason', 'app_id', 'request_id'])
 
 
 # pylint: disable=too-many-instance-attributes
@@ -554,8 +561,10 @@ class ReceiverController(BaseController):
             NS_RECEIVER, target_platform=True)
 
         self.status = None
+        self.launch_failure = None
 
         self._status_listeners = []
+        self._launch_error_listeners = []
 
     @property
     def app_id(self):
@@ -569,6 +578,11 @@ class ReceiverController(BaseController):
 
             return True
 
+        elif data[MESSAGE_TYPE] == TYPE_LAUNCH_ERROR:
+            self._process_launch_error(data)
+
+            return True
+
         else:
             return False
 
@@ -577,6 +591,12 @@ class ReceiverController(BaseController):
             has been received. Listeners will be called with
             listener.new_cast_status(status) """
         self._status_listeners.append(listener)
+
+    def register_launch_error_listener(self, listener):
+        """ Register a listener for when a new launch error message
+            has been received. Listeners will be called with
+            listener.new_launch_error(launch_failure) """
+        self._launch_error_listeners.append(listener)
 
     def update_status(self, blocking=False):
         """ Sends a message to the Chromecast to update the status. """
@@ -596,8 +616,13 @@ class ReceiverController(BaseController):
 
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
-            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
-                              wait_for_response=block_till_launched)
+            self.launch_failure = None
+
+            self.send_message({
+                    MESSAGE_TYPE: TYPE_LAUNCH,
+                    APP_ID: app_id
+                },
+                wait_for_response=block_till_launched)
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
@@ -656,6 +681,37 @@ class ReceiverController(BaseController):
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    @staticmethod
+    def _parse_launch_error(data):
+        """
+        Parses a LAUNCH_ERROR message and returns a LaunchFailure object.
+
+        :type data: dict
+        :rtype: LaunchFailure
+        """
+        return LaunchFailure(
+            data.get(ERROR_REASON, None),
+            data.get(APP_ID),
+            data.get(REQUEST_ID),
+        )
+
+    def _process_launch_error(self, data):
+        """
+        Processes a received LAUNCH_ERROR message and notifies listeners.
+        """
+        launch_failure = self._parse_launch_error(data)
+        self.launch_failure = launch_failure
+
+        self.logger.debug("Launch status: %s", launch_failure)
+
+        for listener in self._launch_error_listeners:
+            try:
+                self.logger.debug("launch listener: %x (%s)" %
+                                  (id(listener), type(listener).__name__))
+                listener.new_launch_error(launch_failure)
             except Exception:  # pylint: disable=broad-except
                 pass
 
