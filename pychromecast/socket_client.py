@@ -79,6 +79,12 @@ else:
         return json.dumps(data, ensure_ascii=False)
 
 
+def _is_ssl_timeout(exc):
+    return exc.message in ("The handshake operation timed out",
+                           "The write operation timed out",
+                           "The read operation timed out")
+
+
 CastStatus = namedtuple('CastStatus',
                         ['is_active_input', 'is_stand_by', 'volume_level',
                          'volume_muted', 'app_id', 'display_name',
@@ -302,11 +308,20 @@ class SocketClient(threading.Thread):
         chunks = []
         bytes_recd = 0
         while bytes_recd < msglen:
-            chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
-            if chunk == b'':
-                raise RuntimeError("socket connection broken")
-            chunks.append(chunk)
-            bytes_recd += len(chunk)
+            try:
+                chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
+                if chunk == b'':
+                    raise RuntimeError("socket connection broken")
+                chunks.append(chunk)
+                bytes_recd += len(chunk)
+            except socket.timeout:
+                continue
+            except ssl.SSLError as exc:
+                # Support older ssl implementations which does not raise
+                # socket.timeout on timeouts
+                if _is_ssl_timeout(exc):
+                    continue
+                raise
         return b''.join(chunks)
 
     def _read_message(self):
