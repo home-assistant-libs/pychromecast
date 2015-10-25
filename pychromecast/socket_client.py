@@ -244,6 +244,11 @@ class SocketClient(threading.Thread):
             if self.socket in can_read and not self._force_recon:
                 try:
                     message = self._read_message()
+                except ssl.SSLError as exc:
+                    if exc.errno == ssl.SSL_ERROR_EOF:
+                        if self.stop.is_set():
+                            break
+                    raise
                 except socket.error:
                     self._force_recon = True
                     self.logger.error('Error reading from socket.')
