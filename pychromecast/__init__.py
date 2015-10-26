@@ -159,6 +159,7 @@ class Chromecast(object):
                 "Could not connect to {}".format(self.host))
 
         self.status = None
+        self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(host, tries)
 
@@ -205,6 +206,7 @@ class Chromecast(object):
     def new_cast_status(self, status):
         """ Called when a new status received from the Chromecast. """
         self.status = status
+        self.status_event.set()
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
@@ -249,7 +251,7 @@ class Chromecast(object):
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        self.socket_client.receiver_controller.wait_for_status(timeout=timeout)
+        self.status_event.wait(timeout=timeout)
 
     def disconnect(self, timeout=None, blocking=True):
         """

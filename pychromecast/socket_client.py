@@ -601,7 +601,6 @@ class ReceiverController(BaseController):
             NS_RECEIVER, target_platform=True)
 
         self.status = None
-        self.status_event = threading.Event()
         self.launch_failure = None
         self.app_to_launch = None
         self.app_launch_event = threading.Event()
@@ -613,21 +612,6 @@ class ReceiverController(BaseController):
     def app_id(self):
         """ Convenience method to retrieve current app id. """
         return self.status.app_id if self.status else None
-
-    def wait_for_status(self, timeout=None):
-        """
-        Waits until a status value is available from the cast device.
-        This can be used directly after receiving a cast object to halt
-        execution until the status message has been received.
-
-        If the status has already been received then the method returns
-        immediately.
-
-        :param timeout: a floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        """
-        self.status_event.wait(timeout=timeout)
 
     def receive_message(self, message, data):
         """ Called when a receiver-message has been received. """
@@ -787,8 +771,6 @@ class ReceiverController(BaseController):
                 listener.new_cast_status(self.status)
             except Exception:  # pylint: disable=broad-except
                 pass
-
-        self.status_event.set()
 
     @staticmethod
     def _parse_launch_error(data):
