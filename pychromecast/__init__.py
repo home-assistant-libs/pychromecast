@@ -7,6 +7,7 @@ import logging
 import fnmatch
 
 # pylint: disable=wildcard-import
+import threading
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
