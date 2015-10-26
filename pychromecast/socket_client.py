@@ -246,14 +246,7 @@ class SocketClient(threading.Thread):
         self._force_recon = False
         while not self.stop.is_set():
 
-            # check if connection is expired
-            if self.heartbeat_controller.is_expired() or self._force_recon:
-                self.logger.error(
-                    "Error communicating with socket, resetting connection")
-                try:
-                    self.initialize_connection()
-                except ChromecastConnectionError:
-                    self.stop.set()
+            if self._check_connection():
                 continue
 
             # poll the socket
@@ -292,36 +285,8 @@ class SocketClient(threading.Thread):
             if self.stop.is_set():
                 break
 
-            # route message to handlers
-            if message.namespace in self._handlers:
-
-                # debug messages
-                if message.namespace != NS_HEARTBEAT:
-                    self.logger.debug(
-                        "Received: %s", _message_to_string(message, data))
-
-                # message handlers
-                try:
-                    handled = \
-                        self._handlers[message.namespace].receive_message(
-                            message, data)
-
-                    if not handled:
-                        if data.get(REQUEST_ID) not in self._request_callbacks:
-                            self.logger.warning(
-                                "Message unhandled: %s",
-                                _message_to_string(message, data))
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.exception(
-                        (u"Exception caught while sending message to "
-                         u"controller %s: %s"),
-                        type(self._handlers[message.namespace]).__name__,
-                        _message_to_string(message, data))
-
-            else:
-                self.logger.debug(
-                    "Received unknown namespace: %s",
-                    _message_to_string(message, data))
+            # See if any handlers will accept this message
+            self._route_message(message, data)
 
             if REQUEST_ID in data:
                 callback = self._request_callbacks.pop(data[REQUEST_ID], None)
@@ -332,6 +297,60 @@ class SocketClient(threading.Thread):
                     event.set()
 
         # Clean up
+        self._cleanup()
+
+    def _check_connection(self):
+        """
+        Checks if the connection is active, and if not reconnect
+
+        :return: True if the connection was reset, False otherwise
+        """
+        # check if connection is expired
+        if self.heartbeat_controller.is_expired() or self._force_recon:
+            self.logger.error(
+                "Error communicating with socket, resetting connection")
+            try:
+                self.initialize_connection()
+            except ChromecastConnectionError:
+                self.stop.set()
+            return True
+        return False
+
+    def _route_message(self, message, data):
+        """ Route message to any handlers on the message namespace """
+        # route message to handlers
+        if message.namespace in self._handlers:
+
+            # debug messages
+            if message.namespace != NS_HEARTBEAT:
+                self.logger.debug(
+                    "Received: %s", _message_to_string(message, data))
+
+            # message handlers
+            try:
+                handled = \
+                    self._handlers[message.namespace].receive_message(
+                        message, data)
+
+                if not handled:
+                    if data.get(REQUEST_ID) not in self._request_callbacks:
+                        self.logger.warning(
+                            "Message unhandled: %s",
+                            _message_to_string(message, data))
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    (u"Exception caught while sending message to "
+                     u"controller %s: %s"),
+                    type(self._handlers[message.namespace]).__name__,
+                    _message_to_string(message, data))
+
+        else:
+            self.logger.debug(
+                "Received unknown namespace: %s",
+                _message_to_string(message, data))
+
+    def _cleanup(self):
+        """ Cleanup open channels and handlers """
         for channel in self._open_channels:
             try:
                 self._disconnect_channel(channel)
