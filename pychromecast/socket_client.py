@@ -88,6 +88,7 @@ else:
 
 
 def _is_ssl_timeout(exc):
+    """ Returns True if the exception is for an SSL timeout """
     return exc.message in ("The handshake operation timed out",
                            "The write operation timed out",
                            "The read operation timed out")
@@ -196,6 +197,7 @@ class SocketClient(threading.Thread):
             raise ChromecastConnectionError("Failed to connect")
 
     def disconnect(self):
+        """ Disconnect socket connection to Chromecast device """
         self.stop.set()
 
     def register_handler(self, handler):
@@ -232,7 +234,8 @@ class SocketClient(threading.Thread):
     @property
     def is_stopped(self):
         """
-        Returns True if the connection has been stopped, False if it is running.
+        Returns True if the connection has been stopped, False if it is
+        running.
         """
         return self.stop.is_set()
 
@@ -268,7 +271,8 @@ class SocketClient(threading.Thread):
                         break
                     else:
                         self.logger.exception(
-                            "Interruption caught without being stopped %s", exc)
+                            "Interruption caught without being stopped %s",
+                            exc)
                         break
                 except ssl.SSLError as exc:
                     if exc.errno == ssl.SSL_ERROR_EOF:
@@ -643,11 +647,9 @@ class ReceiverController(BaseController):
                 self.app_to_launch = app_id
                 self.app_launch_event.clear()
 
-            response = self.send_message({
-                    MESSAGE_TYPE: TYPE_LAUNCH,
-                    APP_ID: app_id
-                },
-                wait_for_response=block_till_launched)
+            response = self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
+                                          APP_ID: app_id},
+                                         wait_for_response=block_till_launched)
 
             if block_till_launched:
                 is_app_started = False
@@ -780,8 +782,6 @@ class ReceiverController(BaseController):
 
         for listener in self._launch_error_listeners:
             try:
-                self.logger.debug("launch listener: %x (%s)" %
-                                  (id(listener), type(listener).__name__))
                 listener.new_launch_error(launch_failure)
             except Exception:  # pylint: disable=broad-except
                 pass
