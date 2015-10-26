@@ -237,6 +237,20 @@ class Chromecast(object):
         volume = round(self.status.volume_level, 1)
         return self.set_volume(volume - 0.1)
 
+    def wait(self, timeout=None):
+        """
+        Waits until the cast device is ready for communication. The device
+        is ready as soon a status message has been received.
+
+        If the status has already been received then the method returns
+        immediately.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        """
+        self.socket_client.receiver_controller.wait_for_status(timeout=timeout)
+
     def disconnect(self, timeout=None, blocking=True):
         """
         Disconnects the chromecast and waits for it to terminate.
