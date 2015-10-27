@@ -19,7 +19,7 @@ IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
 
 
-def _get_all_chromecasts(tries=None):
+def _get_all_chromecasts(tries=None, retry_wait=None):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
@@ -28,13 +28,14 @@ def _get_all_chromecasts(tries=None):
     cc_list = []
     for ip_address, _ in hosts:
         try:
-            cc_list.append(Chromecast(host=ip_address, tries=tries))
+            cc_list.append(Chromecast(host=ip_address, tries=tries,
+                                      retry_wait=retry_wait))
         except ChromecastConnectionError:
             pass
     return cc_list
 
 
-def get_chromecasts(tries=None, **filters):
+def get_chromecasts(tries=None, retry_wait=None, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -54,11 +55,13 @@ def get_chromecasts(tries=None, **filters):
     Tries is specified if you want to limit the number of times the
     underlying socket associated with your Chromecast objects will
     retry connecting if connection is lost or it fails to connect
-    in the first place.
+    in the first place. The number of seconds spent between each retry
+    can be defined by passing the retry_wait parameter, the default is
+    to wait 5 seconds.
     """
     logger = logging.getLogger(__name__)
 
-    cc_list = set(_get_all_chromecasts(tries=tries))
+    cc_list = set(_get_all_chromecasts(tries, retry_wait))
     excluded_cc = set()
 
     if not filters:
@@ -85,7 +88,7 @@ def get_chromecasts(tries=None, **filters):
     return list(filtered_cc)
 
 
-def get_chromecasts_as_dict(tries=None, **filters):
+def get_chromecasts_as_dict(tries=None, retry_wait=None, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -93,13 +96,16 @@ def get_chromecasts_as_dict(tries=None, **filters):
     Tries is specified if you want to limit the number of times the
     underlying socket associated with your Chromecast objects will
     retry connecting if connection is lost or it fails to connect
-    in the first place.
+    in the first place. The number of seconds spent between each retry
+    can be defined by passing the retry_wait parameter, the default is
+    to wait 5 seconds.
     """
     return {cc.device.friendly_name: cc
-            for cc in get_chromecasts(tries=tries, **filters)}
+            for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                      **filters)}
 
 
-def get_chromecast(strict=False, tries=None, **filters):
+def get_chromecast(strict=False, tries=None, retry_wait=None, **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
@@ -111,16 +117,21 @@ def get_chromecast(strict=False, tries=None, **filters):
     Tries is specified if you want to limit the number of times the
     underlying socket associated with your Chromecast objects will
     retry connecting if connection is lost or it fails to connect
-    in the first place.
+    in the first place. The number of seconds spent between each retry
+    can be defined by passing the retry_wait parameter, the default is
+    to wait 5 seconds.
+
+    :type retry_wait: float or None
     """
 
     # If we have filters or are operating in strict mode we have to scan
     # for all Chromecasts to ensure there is only 1 matching chromecast.
     # If no filters given and not strict just use the first dicsovered one.
     if filters or strict:
-        results = get_chromecasts(tries=tries, **filters)
+        results = get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                  **filters)
     else:
-        results = _get_all_chromecasts(tries)
+        results = _get_all_chromecasts(tries, retry_wait)
 
     if len(results) > 1:
         if strict:
@@ -144,9 +155,17 @@ def get_chromecast(strict=False, tries=None, **filters):
 
 # pylint: disable=too-many-instance-attributes
 class Chromecast(object):
-    """ Class to interface with a ChromeCast. """
+    """
+    Class to interface with a ChromeCast.
 
-    def __init__(self, host, tries=None):
+    :param tries: Number of retries to perform if the connection fails.
+                  None for inifinite retries.
+    :param retry_wait: A floating point number specifying how many seconds to
+                       wait between each retry. None means to use the default
+                       which is 5 seconds.
+    """
+
+    def __init__(self, host, tries=None, retry_wait=None):
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
@@ -162,7 +181,8 @@ class Chromecast(object):
         self.status = None
         self.status_event = threading.Event()
 
-        self.socket_client = socket_client.SocketClient(host, tries)
+        self.socket_client = socket_client.SocketClient(
+            host, tries, retry_wait=retry_wait)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)

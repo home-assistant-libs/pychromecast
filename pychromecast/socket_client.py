@@ -56,6 +56,7 @@ HB_PING_TIME = 10
 HB_PONG_TIME = 10
 POLL_TIME = 5
 TIMEOUT_TIME = 30
+RETRY_TIME = 5
 
 
 class InterruptLoop(Exception):
@@ -107,9 +108,17 @@ LaunchFailure = namedtuple('LaunchStatus',
 
 # pylint: disable=too-many-instance-attributes
 class SocketClient(threading.Thread):
-    """ Class to interact with a Chromecast through a socket. """
+    """
+    Class to interact with a Chromecast through a socket.
 
-    def __init__(self, host, tries=None):
+    :param tries: Number of retries to perform if the connection fails.
+                  None for inifinite retries.
+    :param retry_wait: A floating point number specifying how many seconds to
+                       wait between each retry. None means to use the default
+                       which is 5 seconds.
+    """
+
+    def __init__(self, host, tries=None, retry_wait=None):
         super(SocketClient, self).__init__()
 
         self.daemon = True
@@ -119,6 +128,7 @@ class SocketClient(threading.Thread):
         self._force_recon = False
 
         self.tries = tries
+        self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
 
         self.source_id = "sender-0"
@@ -187,8 +197,9 @@ class SocketClient(threading.Thread):
                 break
             except socket.error:
                 self.connecting = True
-                self.logger.exception("Failed to connect, retrying in 5s")
-                time.sleep(5)
+                self.logger.exception("Failed to connect, retrying in %fs",
+                                      self.retry_wait)
+                time.sleep(self.retry_wait)
                 if tries:
                     tries -= 1
         else:
