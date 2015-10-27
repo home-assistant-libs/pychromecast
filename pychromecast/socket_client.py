@@ -182,7 +182,7 @@ class SocketClient(threading.Thread):
 
         self.connecting = True
 
-        while tries is None or tries > 0:
+        while not self.stop.is_set() and (tries is None or tries > 0):
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
                 self.socket.settimeout(TIMEOUT_TIME)
@@ -197,6 +197,11 @@ class SocketClient(threading.Thread):
                 break
             except socket.error:
                 self.connecting = True
+                if self.stop.is_set():
+                    self.logger.exception(
+                        "Failed to connect, aborting due to stop signal.")
+                    raise ChromecastConnectionError("Failed to connect")
+
                 self.logger.exception("Failed to connect, retrying in %fs",
                                       self.retry_wait)
                 time.sleep(self.retry_wait)
@@ -257,8 +262,11 @@ class SocketClient(threading.Thread):
         self._force_recon = False
         while not self.stop.is_set():
 
-            if self._check_connection():
-                continue
+            try:
+                if self._check_connection():
+                    continue
+            except ChromecastConnectionError:
+                break
 
             # poll the socket
             can_read, _, _ = select.select([self.socket], [], [], POLL_TIME)
