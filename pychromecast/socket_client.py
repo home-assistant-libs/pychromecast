@@ -271,7 +271,7 @@ class SocketClient(threading.Thread):
         while not self.stop.is_set():
 
             try:
-                if self._check_connection():
+                if not self._check_connection():
                     continue
             except ChromecastConnectionError:
                 break
@@ -330,7 +330,8 @@ class SocketClient(threading.Thread):
         """
         Checks if the connection is active, and if not reconnect
 
-        :return: True if the connection was reset, False otherwise
+        :return: True if the connection is active, False if the connection was
+                 reset.
         """
         # check if connection is expired
         if self.heartbeat_controller.is_expired() or self._force_recon:
@@ -340,8 +341,8 @@ class SocketClient(threading.Thread):
                 self.initialize_connection()
             except ChromecastConnectionError:
                 self.stop.set()
-            return True
-        return False
+            return False
+        return True
 
     def _route_message(self, message, data):
         """ Route message to any handlers on the message namespace """
