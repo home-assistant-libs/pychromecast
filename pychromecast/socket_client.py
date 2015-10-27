@@ -47,6 +47,17 @@ TYPE_LAUNCH = "LAUNCH"
 TYPE_LAUNCH_ERROR = "LAUNCH_ERROR"
 TYPE_LOAD = "LOAD"
 
+# The socket connection is being setup
+CONNECTION_STATUS_CONNECTING = "CONNECTING"
+# The socket connection was complete
+CONNECTION_STATUS_CONNECTED = "CONNECTED"
+# The socket connection has been disconnected
+CONNECTION_STATUS_DISCONNECTED = "DISCONNECTED"
+# Connecting to socket failed (after a CONNECTION_STATUS_CONNECTING)
+CONNECTION_STATUS_FAILED = "FAILED"
+# The socket connection was lost and needs to be retried
+CONNECTION_STATUS_LOST = "LOST"
+
 APP_ID = 'appId'
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
@@ -93,6 +104,10 @@ def _is_ssl_timeout(exc):
     return exc.message in ("The handshake operation timed out",
                            "The write operation timed out",
                            "The read operation timed out")
+
+
+ConnectionStatus = namedtuple('ConnectionStatus',
+                              ['status', 'address'])
 
 
 CastStatus = namedtuple('CastStatus',
@@ -147,6 +162,7 @@ class SocketClient(threading.Thread):
 
         # dict mapping namespace on Controller objects
         self._handlers = {}
+        self._connection_listeners = []
 
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
@@ -159,7 +175,12 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller.register_status_listener(self)
 
-        self.initialize_connection()
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+            raise
 
     def initialize_connection(self):
         """Initialize a socket to a Chromecast, retrying as necessary."""
@@ -186,8 +207,14 @@ class SocketClient(threading.Thread):
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
                 self.socket.settimeout(TIMEOUT_TIME)
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_CONNECTING,
+                                     (self.host, 8009)))
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_CONNECTED,
+                                     (self.host, 8009)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
@@ -202,6 +229,8 @@ class SocketClient(threading.Thread):
                         "Failed to connect, aborting due to stop signal.")
                     raise ChromecastConnectionError("Failed to connect")
 
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_FAILED, None))
                 self.logger.exception("Failed to connect, retrying in %fs",
                                       self.retry_wait)
                 time.sleep(self.retry_wait)
@@ -337,6 +366,8 @@ class SocketClient(threading.Thread):
         if self.heartbeat_controller.is_expired() or self._force_recon:
             self.logger.error(
                 "Error communicating with socket, resetting connection")
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_LOST, None))
             try:
                 self.initialize_connection()
             except ChromecastConnectionError:
@@ -392,7 +423,19 @@ class SocketClient(threading.Thread):
                 pass
 
         self.socket.close()
+        self._report_connection_status(
+            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
         self.connecting = True
+
+    def _report_connection_status(self, status):
+        """ Report a change in the connection status to any listeners """
+        for listener in self._connection_listeners:
+            try:
+                self.logger.debug("connection listener: %x (%s)",
+                                  id(listener), type(listener).__name__)
+                listener.new_connection_status(status)
+            except Exception:  # pylint: disable=broad-except
+                pass
 
     def _read_bytes_from_socket(self, msglen):
         """ Read bytes from the socket. """
@@ -509,6 +552,12 @@ class SocketClient(threading.Thread):
 
         return self.send_message(self.destination_id, namespace, message,
                                  inc_session_id, wait_for_response)
+
+    def register_connection_listener(self, listener):
+        """ Register a connection listener for when the socket connection
+            changes. Listeners will be called with
+            listener.new_connection_status(status) """
+        self._connection_listeners.append(listener)
 
     def _ensure_channel_connected(self, destination_id):
         """ Ensure we opened a channel to destination_id. """

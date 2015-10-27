@@ -196,6 +196,8 @@ class Chromecast(object):
             receiver_controller.register_status_listener
         self.register_launch_error_listener = \
             receiver_controller.register_launch_error_listener
+        self.register_connection_listener = \
+            self.socket_client.register_connection_listener
 
         self.socket_client.start()
 
