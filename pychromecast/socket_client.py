@@ -248,6 +248,14 @@ class SocketClient(threading.Thread):
         return self._request_id
 
     @property
+    def is_connected(self):
+        """
+        Returns True if the client is connected, False if it is stopped
+        (or trying to connect).
+        """
+        return not self.connecting
+
+    @property
     def is_stopped(self):
         """
         Returns True if the connection has been stopped, False if it is
@@ -383,6 +391,7 @@ class SocketClient(threading.Thread):
                 pass
 
         self.socket.close()
+        self.connecting = True
 
     def _read_bytes_from_socket(self, msglen):
         """ Read bytes from the socket. """
