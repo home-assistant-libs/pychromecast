@@ -7,6 +7,7 @@ import logging
 import fnmatch
 
 # pylint: disable=wildcard-import
+import threading
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
@@ -159,6 +160,7 @@ class Chromecast(object):
                 "Could not connect to {}".format(self.host))
 
         self.status = None
+        self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(host, tries)
 
@@ -205,6 +207,7 @@ class Chromecast(object):
     def new_cast_status(self, status):
         """ Called when a new status received from the Chromecast. """
         self.status = status
+        self.status_event.set()
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
@@ -236,6 +239,20 @@ class Chromecast(object):
         """
         volume = round(self.status.volume_level, 1)
         return self.set_volume(volume - 0.1)
+
+    def wait(self, timeout=None):
+        """
+        Waits until the cast device is ready for communication. The device
+        is ready as soon a status message has been received.
+
+        If the status has already been received then the method returns
+        immediately.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        """
+        self.status_event.wait(timeout=timeout)
 
     def disconnect(self, timeout=None, blocking=True):
         """
