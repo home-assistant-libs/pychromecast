@@ -847,6 +847,7 @@ class ReceiverController(BaseController):
         self._report_status()
 
     def _report_status(self):
+        """ Reports the current status to all listeners. """
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
