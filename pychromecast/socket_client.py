@@ -844,6 +844,9 @@ class ReceiverController(BaseController):
 
         self.logger.debug("Received status: %s", self.status)
 
+        self._report_status()
+
+    def _report_status(self):
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
@@ -886,5 +889,11 @@ class ReceiverController(BaseController):
     def tear_down(self):
         """ Called when controller is destroyed. """
         super(ReceiverController, self).tear_down()
+
+        self.status = None
+        self.launch_failure = None
+        self.app_to_launch = None
+        self.app_launch_event.clear()
+        self._report_status()
 
         self._status_listeners[:] = []

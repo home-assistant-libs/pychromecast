@@ -233,7 +233,10 @@ class Chromecast(object):
     def new_cast_status(self, status):
         """ Called when a new status received from the Chromecast. """
         self.status = status
-        self.status_event.set()
+        if status:
+            self.status_event.set()
+        else:
+            self.status_event.clear()
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
