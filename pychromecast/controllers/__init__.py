@@ -94,6 +94,7 @@ class BaseController(object):
     def tear_down(self):
         """ Called when we are shutting down. """
         self._socket_client = None
+        self._message_func = None
 
     def _check_registered(self):
         """ Helper method to see if we are registered with a Cast object. """
