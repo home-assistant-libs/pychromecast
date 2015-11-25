@@ -235,8 +235,6 @@ class Chromecast(object):
         self.status = status
         if status:
             self.status_event.set()
-        else:
-            self.status_event.clear()
 
     def start_app(self, app_id):
         """ Start an app on the Chromecast. """
