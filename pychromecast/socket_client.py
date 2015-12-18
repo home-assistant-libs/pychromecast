@@ -17,9 +17,9 @@ import threading
 import time
 from collections import namedtuple
 from struct import pack, unpack
+import sys
 
 from . import cast_channel_pb2
-import sys
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .error import (
