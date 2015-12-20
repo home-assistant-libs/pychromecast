@@ -126,6 +126,9 @@ class SocketClient(threading.Thread):
     """
     Class to interact with a Chromecast through a socket.
 
+    :param port: The port to use when connecting to the device, set to None to
+                 use the default of 8009. Special devices such as Cast Groups
+                 may return a different port number so we need to use that.
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -133,7 +136,7 @@ class SocketClient(threading.Thread):
                        which is 5 seconds.
     """
 
-    def __init__(self, host, tries=None, retry_wait=None):
+    def __init__(self, host, port=None, tries=None, retry_wait=None):
         super(SocketClient, self).__init__()
 
         self.daemon = True
@@ -145,6 +148,7 @@ class SocketClient(threading.Thread):
         self.tries = tries
         self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
+        self.port = port or 8009
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
@@ -210,13 +214,13 @@ class SocketClient(threading.Thread):
                 self.socket.settimeout(TIMEOUT_TIME)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
-                                     (self.host, 8009)))
-                self.socket.connect((self.host, 8009))
+                                     (self.host, self.port)))
+                self.socket.connect((self.host, self.port))
                 self.connecting = False
                 self._force_recon = False
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTED,
-                                     (self.host, 8009)))
+                                     (self.host, self.port)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()

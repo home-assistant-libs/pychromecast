@@ -13,7 +13,7 @@ from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts
-from .dial import get_device_status, reboot
+from .dial import get_device_status, reboot, DeviceStatus
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 IDLE_APP_ID = 'E8C28D3C'
@@ -29,10 +29,19 @@ def _get_all_chromecasts(tries=None, retry_wait=None):
     """
     hosts = discover_chromecasts()
     cc_list = []
-    for ip_address, _ in hosts:
+    for ip_address, port, uuid, model_name, friendly_name in hosts:
         try:
-            cc_list.append(Chromecast(host=ip_address, tries=tries,
-                                      retry_wait=retry_wait))
+            # Build device status from the mDNS info, this information is
+            # the primary source and the remaining will be fetched
+            # later on.
+            device = DeviceStatus(
+                friendly_name=friendly_name, model_name=model_name,
+                manufacturer=None, api_version=None,
+                uuid=uuid,
+            )
+            cc_list.append(Chromecast(host=ip_address, port=port,
+                                      device=device,
+                                      tries=tries, retry_wait=retry_wait))
         except ChromecastConnectionError:
             pass
     return cc_list
@@ -161,6 +170,11 @@ class Chromecast(object):
     """
     Class to interface with a ChromeCast.
 
+    :param port: The port to use when connecting to the device, set to None to
+                 use the default of 8009. Special devices such as Cast Groups
+                 may return a different port number so we need to use that.
+    :param device: DeviceStatus with initial information for the device.
+    :type device: pychromecast.dial.DeviceStatus
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -168,24 +182,37 @@ class Chromecast(object):
                        which is 5 seconds.
     """
 
-    def __init__(self, host, device=None, tries=None, retry_wait=None):
+    def __init__(self, host, port=None, device=None,
+                 tries=None, retry_wait=None):
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
         self.host = host
+        self.port = port or 8009
 
         self.logger.info("Querying device status")
-        self.device = device or get_device_status(self.host)
+        self.device = device
+        if device:
+            dev_status = get_device_status(self.host)
+            self.device = DeviceStatus(
+                friendly_name=device.friendly_name or dev_status.friendly_name,
+                model_name=device.model_name or dev_status.model_name,
+                manufacturer=device.manufacturer or dev_status.manufacturer,
+                api_version=device.api_version or dev_status.api_version,
+                uuid=device.uuid or dev_status.uuid
+            )
+        else:
+            self.device = get_device_status(self.host)
 
         if not self.device:
             raise ChromecastConnectionError(
-                "Could not connect to {}".format(self.host))
+                "Could not connect to {}:{}".format(self.host, self.port))
 
         self.status = None
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host, tries, retry_wait=retry_wait)
+            host, port=port, tries=tries, retry_wait=retry_wait)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
@@ -313,15 +340,15 @@ class Chromecast(object):
         self.socket_client.stop.set()
 
     def __repr__(self):
-        txt = u"Chromecast({!r}, device={!r})".format(
-            self.host, self.device)
+        txt = u"Chromecast({!r}, port={!r}, device={!r})".format(
+            self.host, self.port, self.device)
         # Python 2.x does not work well with unicode returned from repr
         if NON_UNICODE_REPR:
             return txt.encode('utf-8')
         return txt
 
     def __unicode__(self):
-        return u"Chromecast({}, {}, {}, {}, api={}.{})".format(
-            self.host, self.device.friendly_name,
+        return u"Chromecast({}, {}, {}, {}, {}, api={}.{})".format(
+            self.host, self.port, self.device.friendly_name,
             self.device.model_name, self.device.manufacturer,
             self.device.api_version[0], self.device.api_version[1])

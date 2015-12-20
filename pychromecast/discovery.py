@@ -37,8 +37,12 @@ class CastListener(object):
         if service:
             ips = zconf.cache.entries_with_name(service.server.lower())
             host = repr(ips[0]) if ips else service.server
+            model_name = service.properties.get('md')
+            uuid = service.properties.get('id')
+            friendly_name = service.properties.get('fn')
 
-            self.services[name] = (host, service.port)
+            self.services[name] = (host, service.port, uuid, model_name,
+                                   friendly_name)
 
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):

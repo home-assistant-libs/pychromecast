@@ -56,8 +56,11 @@ def get_device_status(host):
                        int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "minor", -1)))
 
+        # TODO: Read the UDN UUID value
+        uuid = None
+
         return DeviceStatus(friendly_name, model_name, manufacturer,
-                            api_version)
+                            api_version, uuid)
 
     except (requests.exceptions.RequestException, ET.ParseError):
         return None
@@ -78,4 +81,5 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
 
 DeviceStatus = namedtuple("DeviceStatus",
                           ["friendly_name", "model_name",
-                           "manufacturer", "api_version"])
+                           "manufacturer", "api_version",
+                           "uuid"])
