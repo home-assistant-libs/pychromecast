@@ -13,7 +13,8 @@ from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts
-from .dial import get_device_status, reboot, DeviceStatus
+from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
+    CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 IDLE_APP_ID = 'E8C28D3C'
@@ -34,10 +35,12 @@ def _get_all_chromecasts(tries=None, retry_wait=None):
             # Build device status from the mDNS info, this information is
             # the primary source and the remaining will be fetched
             # later on.
+            cast_type = CAST_TYPES.get(unicode(model_name).lower(),
+                                       CAST_TYPE_CHROMECAST)
             device = DeviceStatus(
                 friendly_name=friendly_name, model_name=model_name,
                 manufacturer=None, api_version=None,
-                uuid=uuid,
+                uuid=uuid, cast_type=cast_type,
             )
             cc_list.append(Chromecast(host=ip_address, port=port,
                                       device=device,
@@ -199,7 +202,8 @@ class Chromecast(object):
                 model_name=device.model_name or dev_status.model_name,
                 manufacturer=device.manufacturer or dev_status.manufacturer,
                 api_version=device.api_version or dev_status.api_version,
-                uuid=device.uuid or dev_status.uuid
+                uuid=device.uuid or dev_status.uuid,
+                cast_type=device.cast_type or dev_status.cast_type,
             )
         else:
             self.device = get_device_status(self.host)
@@ -212,7 +216,8 @@ class Chromecast(object):
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host, port=port, tries=tries, retry_wait=retry_wait)
+            host, port=port, cast_type=self.device.cast_type,
+            tries=tries, retry_wait=retry_wait)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)

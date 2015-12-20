@@ -14,6 +14,19 @@ FORMAT_BASE_URL = "http://{}:8008"
 CC_SESSION = requests.Session()
 CC_SESSION.headers['content-type'] = 'application/json'
 
+# Regular chromecast, supports video/audio
+CAST_TYPE_CHROMECAST = 'cast'
+# Cast Audio device, supports only audio
+CAST_TYPE_AUDIO = 'audio'
+# Cast Audio group device, supports only audio
+CAST_TYPE_GROUP = 'group'
+
+CAST_TYPES = {
+    u'chromecast': CAST_TYPE_CHROMECAST,
+    u'chromecast audio': CAST_TYPE_AUDIO,
+    u'google cast group': CAST_TYPE_GROUP,
+}
+
 
 def reboot(host):
     """ Reboots the chromecast. """
@@ -56,11 +69,13 @@ def get_device_status(host):
                        int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "minor", -1)))
 
+        cast_type = CAST_TYPES.get(unicode(model_name).lower(),
+                                   CAST_TYPE_CHROMECAST)
         # TODO: Read the UDN UUID value
         uuid = None
 
         return DeviceStatus(friendly_name, model_name, manufacturer,
-                            api_version, uuid)
+                            api_version, uuid, cast_type)
 
     except (requests.exceptions.RequestException, ET.ParseError):
         return None
@@ -82,4 +97,4 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
 DeviceStatus = namedtuple("DeviceStatus",
                           ["friendly_name", "model_name",
                            "manufacturer", "api_version",
-                           "uuid"])
+                           "uuid", "cast_type"])
