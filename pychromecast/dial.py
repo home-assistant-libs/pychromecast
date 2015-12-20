@@ -29,7 +29,9 @@ def get_device_status(host):
             FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml",
             timeout=10)
 
-        req.encoding = "utf-8"
+        if req.encoding is None:
+            req.encoding = "utf-8" # don't attempt to guess
+            
         status_el = ET.fromstring(req.text.encode("UTF-8"))
 
         device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
