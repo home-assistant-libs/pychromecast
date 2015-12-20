@@ -168,14 +168,14 @@ class Chromecast(object):
                        which is 5 seconds.
     """
 
-    def __init__(self, host, tries=None, retry_wait=None):
+    def __init__(self, host, device=None, tries=None, retry_wait=None):
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
         self.host = host
 
         self.logger.info("Querying device status")
-        self.device = get_device_status(self.host)
+        self.device = device or get_device_status(self.host)
 
         if not self.device:
             raise ChromecastConnectionError(
@@ -313,11 +313,15 @@ class Chromecast(object):
         self.socket_client.stop.set()
 
     def __repr__(self):
-        txt = u"Chromecast({}, {}, {}, {}, api={}.{})".format(
-            self.host, self.device.friendly_name,
-            self.device.model_name, self.device.manufacturer,
-            self.device.api_version[0], self.device.api_version[1])
+        txt = u"Chromecast({!r}, device={!r})".format(
+            self.host, self.device)
         # Python 2.x does not work well with unicode returned from repr
         if NON_UNICODE_REPR:
             return txt.encode('utf-8')
         return txt
+
+    def __unicode__(self):
+        return u"Chromecast({}, {}, {}, {}, api={}.{})".format(
+            self.host, self.device.friendly_name,
+            self.device.model_name, self.device.manufacturer,
+            self.device.api_version[0], self.device.api_version[1])
