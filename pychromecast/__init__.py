@@ -3,6 +3,7 @@ PyChromecast: remote control your Chromecast
 """
 from __future__ import print_function
 
+import sys
 import logging
 import fnmatch
 
@@ -17,6 +18,8 @@ from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
+# For Python 2.x we need to decode __repr__ Unicode return values to str
+NON_UNICODE_REPR = sys.version_info < (3, )
 
 
 def _get_all_chromecasts(tries=None, retry_wait=None):
@@ -310,7 +313,11 @@ class Chromecast(object):
         self.socket_client.stop.set()
 
     def __repr__(self):
-        return "Chromecast({}, {}, {}, {}, api={}.{})".format(
-            self.host, self.device.friendly_name, self.device.model_name,
-            self.device.manufacturer, self.device.api_version[0],
-            self.device.api_version[1])
+        txt = u"Chromecast({}, {}, {}, {}, api={}.{})".format(
+            self.host, self.device.friendly_name,
+            self.device.model_name, self.device.manufacturer,
+            self.device.api_version[0], self.device.api_version[1])
+        # Python 2.x does not work well with unicode returned from repr
+        if NON_UNICODE_REPR:
+            return txt.encode('utf-8')
+        return txt
