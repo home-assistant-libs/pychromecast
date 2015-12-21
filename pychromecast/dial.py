@@ -29,9 +29,15 @@ def get_device_status(host):
             FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml",
             timeout=10)
 
+        # The Requests library will fall back to guessing the encoding in case
+        # no encoding is specified in the response headers - which is the case
+        # for the Chromecast.
+        # The standard mandates utf-8 encoding, let's fall back to that instead
+        # if no encoding is provided, since the autodetection does not always
+        # provide correct results.
         if req.encoding is None:
-            req.encoding = "utf-8" # don't attempt to guess
-            
+            req.encoding = 'utf-8'
+
         status_el = ET.fromstring(req.text.encode("UTF-8"))
 
         device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
