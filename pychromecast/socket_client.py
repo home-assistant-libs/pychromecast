@@ -828,7 +828,7 @@ class ReceiverController(BaseController):
             [item['name'] for item in app_data.get('namespaces', [])],
             app_data.get(SESSION_ID),
             app_data.get('transportId'),
-            app_data.get('status_text', '')
+            app_data.get('statusText', '')
             )
         return status
 
