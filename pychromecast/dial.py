@@ -69,7 +69,7 @@ def get_device_status(host):
                        int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "minor", -1)))
 
-        cast_type = CAST_TYPES.get(unicode(model_name).lower(),
+        cast_type = CAST_TYPES.get(model_name.lower(),
                                    CAST_TYPE_CHROMECAST)
         # TODO: Read the UDN UUID value
         uuid = None

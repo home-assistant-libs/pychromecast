@@ -35,7 +35,7 @@ def _get_all_chromecasts(tries=None, retry_wait=None):
             # Build device status from the mDNS info, this information is
             # the primary source and the remaining will be fetched
             # later on.
-            cast_type = CAST_TYPES.get(unicode(model_name).lower(),
+            cast_type = CAST_TYPES.get(model_name.lower(),
                                        CAST_TYPE_CHROMECAST)
             device = DeviceStatus(
                 friendly_name=friendly_name, model_name=model_name,
