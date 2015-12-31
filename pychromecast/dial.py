@@ -63,6 +63,9 @@ def get_device_status(host):
         manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
                                          "manufacturer",
                                          "Unknown manufacturer")
+        udn = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
+                                "UDN",
+                                None)
 
         api_version = (int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "major", -1)),
@@ -71,8 +74,10 @@ def get_device_status(host):
 
         cast_type = CAST_TYPES.get(model_name.lower(),
                                    CAST_TYPE_CHROMECAST)
-        # TODO: Read the UDN UUID value
+
         uuid = None
+        if udn and udn.startswith('uuid:'):
+            uuid = udn[len('uuid:'):].replace("-", "")
 
         return DeviceStatus(friendly_name, model_name, manufacturer,
                             api_version, uuid, cast_type)
