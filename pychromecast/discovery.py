@@ -1,6 +1,7 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import time
 
+import six
 from zeroconf import ServiceBrowser, Zeroconf
 
 DISCOVER_TIMEOUT = 5
@@ -38,8 +39,12 @@ class CastListener(object):
             ips = zconf.cache.entries_with_name(service.server.lower())
             host = repr(ips[0]) if ips else service.server
             model_name = service.properties.get('md')
+            if not isinstance(model_name, six.text_type):
+                model_name = model_name.decode('utf-8')
             uuid = service.properties.get('id')
             friendly_name = service.properties.get('fn')
+            if not isinstance(friendly_name, six.text_type):
+                friendly_name = friendly_name.decode('utf-8')
 
             self.services[name] = (host, service.port, uuid, model_name,
                                    friendly_name)
