@@ -28,6 +28,8 @@ How to use
     ['Dev', 'Living Room', 'Den', 'Bedroom']
 
     >> cast = pychromecast.get_chromecast(friendly_name="Living Room")
+    >> # Wait for cast device to be ready
+    >> cast.wait()
     >> print(cast.device)
     DeviceStatus(friendly_name='Living Room', model_name='Eureka Dongle', manufacturer='Google Inc.', api_version=(1, 0))
 
