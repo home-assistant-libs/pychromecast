@@ -140,7 +140,10 @@ class SocketClient(threading.Thread):
     """
 
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST,
-                 tries=None, retry_wait=None):
+                 **kwargs):
+        tries = kwargs.pop('tries', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+
         super(SocketClient, self).__init__()
 
         self.daemon = True

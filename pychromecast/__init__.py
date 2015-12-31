@@ -185,8 +185,10 @@ class Chromecast(object):
                        which is 5 seconds.
     """
 
-    def __init__(self, host, port=None, device=None,
-                 tries=None, retry_wait=None):
+    def __init__(self, host, port=None, device=None, **kwargs):
+        tries = kwargs.pop('tries', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
