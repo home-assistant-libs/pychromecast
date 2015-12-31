@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import namedtuple
 
 import requests
-
+import six
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -66,7 +66,7 @@ def get_device_status(host):
 def _read_xml_element(element, xml_ns, tag_name, default=""):
     """ Helper method to read text from an element. """
     try:
-        return unicode(element.find(xml_ns + tag_name).text)
+        return six.u(element.find(xml_ns + tag_name).text)
 
     except AttributeError:
         return default
