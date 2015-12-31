@@ -66,7 +66,11 @@ def get_device_status(host):
 def _read_xml_element(element, xml_ns, tag_name, default=""):
     """ Helper method to read text from an element. """
     try:
-        return six.u(element.find(xml_ns + tag_name).text)
+        text = element.find(xml_ns + tag_name).text
+        if isinstance(text, six.text_type):
+            return text
+        else:
+            return six.u(text)
 
     except AttributeError:
         return default
