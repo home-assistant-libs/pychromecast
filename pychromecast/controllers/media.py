@@ -413,9 +413,15 @@ class MediaController(BaseController):
         }
 
         if title:
+            if 'payload' not in msg['customData']:
+                msg['customData']['payload'] = {}
+
             msg['customData']['payload']['title'] = title
 
         if thumb:
+            if 'payload' not in msg['customData']:
+                msg['customData']['payload'] = {}
+
             msg['customData']['payload']['thumb'] = thumb
 
         self.send_message(msg, inc_session_id=True)
