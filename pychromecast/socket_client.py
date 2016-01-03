@@ -212,13 +212,13 @@ class SocketClient(threading.Thread):
                                      (self.host, 8009)))
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
+                self._force_recon = False
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTED,
                                      (self.host, 8009)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
-                self._force_recon = False
 
                 self.logger.debug("Connected!")
                 break
