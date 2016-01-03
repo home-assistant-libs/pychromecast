@@ -363,9 +363,17 @@ class SocketClient(threading.Thread):
                  reset.
         """
         # check if connection is expired
-        if self.heartbeat_controller.is_expired() or self._force_recon:
+        reset = False
+        if self.heartbeat_controller.is_expired():
+            self.logger.error(
+                "Heartbeat timeout, resetting connection")
+            reset = True
+        if self._force_recon:
             self.logger.error(
                 "Error communicating with socket, resetting connection")
+            reset = True
+
+        if reset:
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_LOST, None))
             try:
@@ -447,7 +455,7 @@ class SocketClient(threading.Thread):
             try:
                 chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
                 if chunk == b'':
-                    raise RuntimeError("socket connection broken")
+                    raise socket.error("socket connection broken")
                 chunks.append(chunk)
                 bytes_recd += len(chunk)
             except socket.timeout:
