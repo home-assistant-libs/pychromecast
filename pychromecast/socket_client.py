@@ -665,7 +665,11 @@ class HeartbeatController(BaseController):
     def ping(self):
         """ Send a ping message. """
         self.last_ping = time.time()
-        self.send_message({MESSAGE_TYPE: TYPE_PING})
+        try:
+            self.send_message({MESSAGE_TYPE: TYPE_PING})
+        except NotConnected:
+            self._socket_client.logger.error("Chromecast is disconnected. " +
+                                             "Cannot ping until reconnected.")
 
     def reset(self):
         """ Reset expired counter. """
