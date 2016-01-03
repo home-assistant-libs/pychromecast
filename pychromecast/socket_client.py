@@ -364,13 +364,14 @@ class SocketClient(threading.Thread):
         """
         # check if connection is expired
         reset = False
-        if self.heartbeat_controller.is_expired():
-            self.logger.error(
-                "Heartbeat timeout, resetting connection")
-            reset = True
         if self._force_recon:
             self.logger.error(
                 "Error communicating with socket, resetting connection")
+            reset = True
+
+        elif self.heartbeat_controller.is_expired():
+            self.logger.error(
+                "Heartbeat timeout, resetting connection")
             reset = True
 
         if reset:
