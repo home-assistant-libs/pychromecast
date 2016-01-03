@@ -9,6 +9,7 @@ Without him this would not have been possible.
 # pylint: disable=no-member
 
 import logging
+import select
 import socket
 import ssl
 import json
@@ -16,16 +17,17 @@ import threading
 import time
 from collections import namedtuple
 from struct import pack, unpack
+import sys
 
 from . import cast_channel_pb2
-import sys
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
     NotConnected,
-    PyChromecastStopped
+    PyChromecastStopped,
+    LaunchError,
 )
 
 NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection'
@@ -42,11 +44,35 @@ TYPE_CONNECT = "CONNECT"
 TYPE_CLOSE = "CLOSE"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_LAUNCH = "LAUNCH"
+TYPE_LAUNCH_ERROR = "LAUNCH_ERROR"
 TYPE_LOAD = "LOAD"
+
+# The socket connection is being setup
+CONNECTION_STATUS_CONNECTING = "CONNECTING"
+# The socket connection was complete
+CONNECTION_STATUS_CONNECTED = "CONNECTED"
+# The socket connection has been disconnected
+CONNECTION_STATUS_DISCONNECTED = "DISCONNECTED"
+# Connecting to socket failed (after a CONNECTION_STATUS_CONNECTING)
+CONNECTION_STATUS_FAILED = "FAILED"
+# The socket connection was lost and needs to be retried
+CONNECTION_STATUS_LOST = "LOST"
 
 APP_ID = 'appId'
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
+ERROR_REASON = 'reason'
+
+HB_PING_TIME = 10
+HB_PONG_TIME = 10
+POLL_TIME = 5
+TIMEOUT_TIME = 30
+RETRY_TIME = 5
+
+
+class InterruptLoop(Exception):
+    """ The chromecast has been manually stopped. """
+    pass
 
 
 def _json_from_message(message):
@@ -73,6 +99,17 @@ else:
         return json.dumps(data, ensure_ascii=False)
 
 
+def _is_ssl_timeout(exc):
+    """ Returns True if the exception is for an SSL timeout """
+    return exc.message in ("The handshake operation timed out",
+                           "The write operation timed out",
+                           "The read operation timed out")
+
+
+ConnectionStatus = namedtuple('ConnectionStatus',
+                              ['status', 'address'])
+
+
 CastStatus = namedtuple('CastStatus',
                         ['is_active_input', 'is_stand_by', 'volume_level',
                          'volume_muted', 'app_id', 'display_name',
@@ -80,18 +117,33 @@ CastStatus = namedtuple('CastStatus',
                          'status_text'])
 
 
+LaunchFailure = namedtuple('LaunchStatus',
+                           ['reason', 'app_id', 'request_id'])
+
+
 # pylint: disable=too-many-instance-attributes
 class SocketClient(threading.Thread):
-    """ Class to interact with a Chromecast through a socket. """
+    """
+    Class to interact with a Chromecast through a socket.
 
-    def __init__(self, host, tries=None):
+    :param tries: Number of retries to perform if the connection fails.
+                  None for inifinite retries.
+    :param retry_wait: A floating point number specifying how many seconds to
+                       wait between each retry. None means to use the default
+                       which is 5 seconds.
+    """
+
+    def __init__(self, host, tries=None, retry_wait=None):
         super(SocketClient, self).__init__()
 
         self.daemon = True
 
         self.logger = logging.getLogger(__name__)
 
+        self._force_recon = False
+
         self.tries = tries
+        self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
 
         self.source_id = "sender-0"
@@ -110,18 +162,25 @@ class SocketClient(threading.Thread):
 
         # dict mapping namespace on Controller objects
         self._handlers = {}
+        self._connection_listeners = []
 
         self.receiver_controller = ReceiverController()
         self.media_controller = MediaController()
+        self.heartbeat_controller = HeartbeatController()
 
-        self.register_handler(HeartbeatController())
+        self.register_handler(self.heartbeat_controller)
         self.register_handler(ConnectionController())
         self.register_handler(self.receiver_controller)
         self.register_handler(self.media_controller)
 
         self.receiver_controller.register_status_listener(self)
 
-        self.initialize_connection()
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+            raise
 
     def initialize_connection(self):
         """Initialize a socket to a Chromecast, retrying as necessary."""
@@ -132,8 +191,8 @@ class SocketClient(threading.Thread):
             self.socket = None
 
         # Make sure nobody is blocking.
-        for event in self._request_callbacks.values():
-            event.set()
+        for callback in self._request_callbacks.values():
+            callback['event'].set()
 
         self.app_namespaces = []
         self.destination_id = None
@@ -144,26 +203,47 @@ class SocketClient(threading.Thread):
 
         self.connecting = True
 
-        while tries is None or tries > 0:
+        while not self.stop.is_set() and (tries is None or tries > 0):
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
-                self.socket.settimeout(60)
+                self.socket.settimeout(TIMEOUT_TIME)
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_CONNECTING,
+                                     (self.host, 8009)))
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_CONNECTED,
+                                     (self.host, 8009)))
                 self.receiver_controller.update_status()
+                self.heartbeat_controller.ping()
+                self.heartbeat_controller.reset()
+                self._force_recon = False
 
                 self.logger.debug("Connected!")
                 break
             except socket.error:
                 self.connecting = True
-                self.logger.exception("Failed to connect, retrying in 5s")
-                time.sleep(5)
+                if self.stop.is_set():
+                    self.logger.exception(
+                        "Failed to connect, aborting due to stop signal.")
+                    raise ChromecastConnectionError("Failed to connect")
+
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_FAILED, None))
+                self.logger.exception("Failed to connect, retrying in %fs",
+                                      self.retry_wait)
+                time.sleep(self.retry_wait)
                 if tries:
                     tries -= 1
         else:
             self.stop.set()
             self.logger.error("Failed to connect. No retries.")
             raise ChromecastConnectionError("Failed to connect")
+
+    def disconnect(self):
+        """ Disconnect socket connection to Chromecast device """
+        self.stop.set()
 
     def register_handler(self, handler):
         """ Register a new namespace handler. """
@@ -197,58 +277,139 @@ class SocketClient(threading.Thread):
         return self._request_id
 
     @property
+    def is_connected(self):
+        """
+        Returns True if the client is connected, False if it is stopped
+        (or trying to connect).
+        """
+        return not self.connecting
+
+    @property
     def is_stopped(self):
-        """ Returns boolean if the connection has been stopped. """
+        """
+        Returns True if the connection has been stopped, False if it is
+        running.
+        """
         return self.stop.is_set()
 
     def run(self):
         """ Start polling the socket. """
         # pylint: disable=too-many-branches
+        self.heartbeat_controller.reset()
+        self._force_recon = False
         while not self.stop.is_set():
+
             try:
-                message = self._read_message()
-            except socket.error:
-                self.logger.exception(
-                    "Error communicating with socket, resetting connection")
-                self.initialize_connection()
+                if not self._check_connection():
+                    continue
+            except ChromecastConnectionError:
+                break
+
+            # poll the socket
+            can_read, _, _ = select.select([self.socket], [], [], POLL_TIME)
+
+            # read messages from chromecast
+            message = data = None
+            if self.socket in can_read and not self._force_recon:
+                try:
+                    message = self._read_message()
+                except InterruptLoop as exc:
+                    if self.stop.is_set():
+                        self.logger.info(
+                            "Stopped while reading message, disconnecting.")
+                        break
+                    else:
+                        self.logger.exception(
+                            "Interruption caught without being stopped %s",
+                            exc)
+                        break
+                except ssl.SSLError as exc:
+                    if exc.errno == ssl.SSL_ERROR_EOF:
+                        if self.stop.is_set():
+                            break
+                    raise
+                except socket.error:
+                    self._force_recon = True
+                    self.logger.error('Error reading from socket.')
+                else:
+                    data = _json_from_message(message)
+            if not message:
                 continue
 
-            data = _json_from_message(message)
+            # If we are stopped after receiving a message we skip the message
+            # and tear down the connection
+            if self.stop.is_set():
+                break
 
-            if message.namespace in self._handlers:
-
-                if message.namespace != NS_HEARTBEAT:
-                    self.logger.debug(
-                        "Received: %s", _message_to_string(message, data))
-
-                try:
-                    handled = \
-                        self._handlers[message.namespace].receive_message(
-                            message, data)
-
-                    if not handled:
-                        self.logger.warning(
-                            "Message unhandled: %s",
-                            _message_to_string(message, data))
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.exception(
-                        (u"Exception caught while sending message to "
-                         u"controller %s: %s"),
-                        type(self._handlers[message.namespace]).__name__,
-                        _message_to_string(message, data))
-
-            else:
-                self.logger.warning(
-                    "Received unknown namespace: %s",
-                    _message_to_string(message, data))
+            # See if any handlers will accept this message
+            self._route_message(message, data)
 
             if REQUEST_ID in data:
-                event = self._request_callbacks.pop(data[REQUEST_ID], None)
+                callback = self._request_callbacks.pop(data[REQUEST_ID], None)
+                if callback is not None:
+                    event = callback['event']
+                    callback['response'] = data
 
-                if event is not None:
                     event.set()
 
         # Clean up
+        self._cleanup()
+
+    def _check_connection(self):
+        """
+        Checks if the connection is active, and if not reconnect
+
+        :return: True if the connection is active, False if the connection was
+                 reset.
+        """
+        # check if connection is expired
+        if self.heartbeat_controller.is_expired() or self._force_recon:
+            self.logger.error(
+                "Error communicating with socket, resetting connection")
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_LOST, None))
+            try:
+                self.initialize_connection()
+            except ChromecastConnectionError:
+                self.stop.set()
+            return False
+        return True
+
+    def _route_message(self, message, data):
+        """ Route message to any handlers on the message namespace """
+        # route message to handlers
+        if message.namespace in self._handlers:
+
+            # debug messages
+            if message.namespace != NS_HEARTBEAT:
+                self.logger.debug(
+                    "Received: %s", _message_to_string(message, data))
+
+            # message handlers
+            try:
+                handled = \
+                    self._handlers[message.namespace].receive_message(
+                        message, data)
+
+                if not handled:
+                    if data.get(REQUEST_ID) not in self._request_callbacks:
+                        self.logger.warning(
+                            "Message unhandled: %s",
+                            _message_to_string(message, data))
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    (u"Exception caught while sending message to "
+                     u"controller %s: %s"),
+                    type(self._handlers[message.namespace]).__name__,
+                    _message_to_string(message, data))
+
+        else:
+            self.logger.debug(
+                "Received unknown namespace: %s",
+                _message_to_string(message, data))
+
+    def _cleanup(self):
+        """ Cleanup open channels and handlers """
         for channel in self._open_channels:
             try:
                 self._disconnect_channel(channel)
@@ -262,17 +423,41 @@ class SocketClient(threading.Thread):
                 pass
 
         self.socket.close()
+        self._report_connection_status(
+            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+        self.connecting = True
+
+    def _report_connection_status(self, status):
+        """ Report a change in the connection status to any listeners """
+        for listener in self._connection_listeners:
+            try:
+                self.logger.debug("connection listener: %x (%s)",
+                                  id(listener), type(listener).__name__)
+                listener.new_connection_status(status)
+            except Exception:  # pylint: disable=broad-except
+                pass
 
     def _read_bytes_from_socket(self, msglen):
         """ Read bytes from the socket. """
         chunks = []
         bytes_recd = 0
         while bytes_recd < msglen:
-            chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
-            if chunk == b'':
-                raise RuntimeError("socket connection broken")
-            chunks.append(chunk)
-            bytes_recd += len(chunk)
+            if self.stop.is_set():
+                raise InterruptLoop("Stopped while reading from socket")
+            try:
+                chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
+                if chunk == b'':
+                    raise RuntimeError("socket connection broken")
+                chunks.append(chunk)
+                bytes_recd += len(chunk)
+            except socket.timeout:
+                continue
+            except ssl.SSLError as exc:
+                # Support older ssl implementations which does not raise
+                # socket.timeout on timeouts
+                if _is_ssl_timeout(exc):
+                    continue
+                raise
         return b''.join(chunks)
 
     def _read_message(self):
@@ -303,6 +488,7 @@ class SocketClient(threading.Thread):
         # If channel is not open yet, connect to it.
         self._ensure_channel_connected(destination_id)
 
+        request_id = None
         if not no_add_request_id:
             request_id = self._gen_request_id()
             data[REQUEST_ID] = request_id
@@ -329,20 +515,31 @@ class SocketClient(threading.Thread):
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
-        if not self.connecting:
-            self.socket.sendall(be_size + msg.SerializeToString())
+        if not self.connecting and not self._force_recon:
+            try:
+                self.socket.sendall(be_size + msg.SerializeToString())
+            except socket.error as err:
+                self._force_recon = True
+                self.logger.error('Error writing to socket.')
+                raise err
         else:
             raise NotConnected("Chromecast is connecting...")
 
+        response = None
         if not no_add_request_id and wait_for_response:
-            self._request_callbacks[request_id] = threading.Event()
-            self._request_callbacks[request_id].wait()
+            callback = self._request_callbacks[request_id] = {
+                'event': threading.Event(),
+                'response': None,
+            }
+            callback['event'].wait()
+            response = callback.get('response')
+        return response
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               wait_for_response=False):
         """ Helper method to send a message to the platform. """
-        self.send_message(PLATFORM_DESTINATION_ID, namespace, message,
-                          inc_session_id, wait_for_response)
+        return self.send_message(PLATFORM_DESTINATION_ID, namespace, message,
+                                 inc_session_id, wait_for_response)
 
     def send_app_message(self, namespace, message, inc_session_id=False,
                          wait_for_response=False):
@@ -353,8 +550,14 @@ class SocketClient(threading.Thread):
                  "Supported are {}").format(namespace,
                                             ", ".join(self.app_namespaces)))
 
-        self.send_message(self.destination_id, namespace, message,
-                          inc_session_id, wait_for_response)
+        return self.send_message(self.destination_id, namespace, message,
+                                 inc_session_id, wait_for_response)
+
+    def register_connection_listener(self, listener):
+        """ Register a connection listener for when the socket connection
+            changes. Listeners will be called with
+            listener.new_connection_status(status) """
+        self._connection_listeners.append(listener)
 
     def _ensure_channel_connected(self, destination_id):
         """ Ensure we opened a channel to destination_id. """
@@ -424,6 +627,8 @@ class HeartbeatController(BaseController):
     def __init__(self):
         super(HeartbeatController, self).__init__(
             NS_HEARTBEAT, target_platform=True)
+        self.last_ping = 0
+        self.last_pong = time.time()
 
     def receive_message(self, message, data):
         """ Called when a heartbeat message is received. """
@@ -442,12 +647,28 @@ class HeartbeatController(BaseController):
 
             return True
 
+        elif data[MESSAGE_TYPE] == TYPE_PONG:
+            self.reset()
+            return True
+
         else:
             return False
 
     def ping(self):
         """ Send a ping message. """
+        self.last_ping = time.time()
         self.send_message({MESSAGE_TYPE: TYPE_PING})
+
+    def reset(self):
+        """ Reset expired counter. """
+        self.last_pong = time.time()
+
+    def is_expired(self):
+        """ Indicates if connection has expired. """
+        if time.time() - self.last_ping > HB_PING_TIME:
+            self.ping()
+
+        return (time.time() - self.last_pong) > HB_PING_TIME + HB_PONG_TIME
 
 
 class ReceiverController(BaseController):
@@ -458,8 +679,12 @@ class ReceiverController(BaseController):
             NS_RECEIVER, target_platform=True)
 
         self.status = None
+        self.launch_failure = None
+        self.app_to_launch = None
+        self.app_launch_event = threading.Event()
 
         self._status_listeners = []
+        self._launch_error_listeners = []
 
     @property
     def app_id(self):
@@ -473,6 +698,11 @@ class ReceiverController(BaseController):
 
             return True
 
+        elif data[MESSAGE_TYPE] == TYPE_LAUNCH_ERROR:
+            self._process_launch_error(data)
+
+            return True
+
         else:
             return False
 
@@ -481,6 +711,12 @@ class ReceiverController(BaseController):
             has been received. Listeners will be called with
             listener.new_cast_status(status) """
         self._status_listeners.append(listener)
+
+    def register_launch_error_listener(self, listener):
+        """ Register a listener for when a new launch error message
+            has been received. Listeners will be called with
+            listener.new_launch_error(launch_failure) """
+        self._launch_error_listeners.append(listener)
 
     def update_status(self, blocking=False):
         """ Sends a message to the Chromecast to update the status. """
@@ -492,7 +728,7 @@ class ReceiverController(BaseController):
         """ Launches an app on the Chromecast.
 
             Will only launch if it is not currently running unless
-            force_launc=True. """
+            force_launch=True. """
         # If this is called too quickly after launch, we don't have the info.
         # We need the info if we are not force launching to check running app.
         if not force_launch and self.app_id is None:
@@ -500,18 +736,53 @@ class ReceiverController(BaseController):
 
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
-            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
-                              wait_for_response=block_till_launched)
+
+            # If we are blocking we need to wait for the status update or
+            # launch failure before returning
+            self.launch_failure = None
+            if block_till_launched:
+                self.app_to_launch = app_id
+                self.app_launch_event.clear()
+
+            response = self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
+                                          APP_ID: app_id},
+                                         wait_for_response=block_till_launched)
+
+            if block_till_launched:
+                is_app_started = False
+                if response:
+                    response_type = response[MESSAGE_TYPE]
+                    if response_type == TYPE_RECEIVER_STATUS:
+                        new_status = self._parse_status(response)
+                        new_app_id = new_status.app_id
+                        if new_app_id == app_id:
+                            is_app_started = True
+                            self.app_to_launch = None
+                            self.app_launch_event.clear()
+                    elif response_type == TYPE_LAUNCH_ERROR:
+                        self.app_to_launch = None
+                        self.app_launch_event.clear()
+                        launch_error = self._parse_launch_error(response)
+                        raise LaunchError(
+                            "Failed to launch app: {}, Reason: {}".format(
+                                app_id, launch_error.reason))
+
+                if not is_app_started:
+                    self.app_launch_event.wait()
+                    if self.launch_failure:
+                        raise LaunchError(
+                            "Failed to launch app: {}, Reason: {}".format(
+                                app_id, self.launch_failure.reason))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
 
-    def stop_app(self):
+    def stop_app(self, block_till_stopped=True):
         """ Stops the current running app on the Chromecast. """
-        self.logger.info("Receiver:Stopping current app")
-        self.send_message(
+        self.logger.info("Receiver:Stopping current app '%s'", self.app_id)
+        return self.send_message(
             {MESSAGE_TYPE: 'STOP'},
-            inc_session_id=True, wait_for_response=True)
+            inc_session_id=True, wait_for_response=block_till_stopped)
 
     def set_volume(self, volume):
         """ Allows to set volume. Should be value between 0..1.
@@ -530,8 +801,14 @@ class ReceiverController(BaseController):
             {MESSAGE_TYPE: 'SET_VOLUME',
              'volume': {'muted': muted}})
 
-    def _process_get_status(self, data):
-        """ Processes a received STATUS message and notifies listeners. """
+    @staticmethod
+    def _parse_status(data):
+        """
+        Parses a STATUS message and returns a CastStatus object.
+
+        :type data: dict
+        :rtype: CastStatus
+        """
         data = data.get('status', {})
 
         volume_data = data.get('volume', {})
@@ -541,7 +818,7 @@ class ReceiverController(BaseController):
         except KeyError:
             app_data = {}
 
-        self.status = CastStatus(
+        status = CastStatus(
             data.get('isActiveInput', False),
             data.get('isStandBy', True),
             volume_data.get('level', 1.0),
@@ -551,19 +828,73 @@ class ReceiverController(BaseController):
             [item['name'] for item in app_data.get('namespaces', [])],
             app_data.get(SESSION_ID),
             app_data.get('transportId'),
-            app_data.get('status_text', '')
+            app_data.get('statusText', '')
             )
+        return status
 
-        self.logger.debug("Received: %s", self.status)
+    def _process_get_status(self, data):
+        """ Processes a received STATUS message and notifies listeners. """
+        status = self._parse_status(data)
+        is_new_app = self.app_id != status.app_id and self.app_to_launch
+        self.status = status
 
+        if is_new_app and self.app_to_launch == self.app_id:
+            self.app_to_launch = None
+            self.app_launch_event.set()
+
+        self.logger.debug("Received status: %s", self.status)
+
+        self._report_status()
+
+    def _report_status(self):
+        """ Reports the current status to all listeners. """
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
             except Exception:  # pylint: disable=broad-except
                 pass
 
+    @staticmethod
+    def _parse_launch_error(data):
+        """
+        Parses a LAUNCH_ERROR message and returns a LaunchFailure object.
+
+        :type data: dict
+        :rtype: LaunchFailure
+        """
+        return LaunchFailure(
+            data.get(ERROR_REASON, None),
+            data.get(APP_ID),
+            data.get(REQUEST_ID),
+        )
+
+    def _process_launch_error(self, data):
+        """
+        Processes a received LAUNCH_ERROR message and notifies listeners.
+        """
+        launch_failure = self._parse_launch_error(data)
+        self.launch_failure = launch_failure
+
+        if self.app_to_launch:
+            self.app_to_launch = None
+            self.app_launch_event.set()
+
+        self.logger.debug("Launch status: %s", launch_failure)
+
+        for listener in self._launch_error_listeners:
+            try:
+                listener.new_launch_error(launch_failure)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
     def tear_down(self):
         """ Called when controller is destroyed. """
         super(ReceiverController, self).tear_down()
+
+        self.status = None
+        self.launch_failure = None
+        self.app_to_launch = None
+        self.app_launch_event.clear()
+        self._report_status()
 
         self._status_listeners[:] = []

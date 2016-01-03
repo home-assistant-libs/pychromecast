@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import namedtuple
 
 import requests
-
+import six
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -28,6 +28,15 @@ def get_device_status(host):
         req = CC_SESSION.get(
             FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml",
             timeout=10)
+
+        # The Requests library will fall back to guessing the encoding in case
+        # no encoding is specified in the response headers - which is the case
+        # for the Chromecast.
+        # The standard mandates utf-8 encoding, let's fall back to that instead
+        # if no encoding is provided, since the autodetection does not always
+        # provide correct results.
+        if req.encoding is None:
+            req.encoding = 'utf-8'
 
         status_el = ET.fromstring(req.text.encode("UTF-8"))
 
@@ -57,7 +66,11 @@ def get_device_status(host):
 def _read_xml_element(element, xml_ns, tag_name, default=""):
     """ Helper method to read text from an element. """
     try:
-        return element.find(xml_ns + tag_name).text
+        text = element.find(xml_ns + tag_name).text
+        if isinstance(text, six.text_type):
+            return text
+        else:
+            return six.u(text)
 
     except AttributeError:
         return default
