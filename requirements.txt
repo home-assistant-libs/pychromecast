@@ -1,5 +1,6 @@
 requests>=2.0
-protobuf>=3.0.0a3
+protobuf>=3.0.0b1.post2
 zeroconf>=0.16.0
+six==1.10.0
 netifaces>=0.10.4
 python-magic>=0.4.6

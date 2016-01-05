@@ -80,7 +80,7 @@ class BaseController(object):
                     ("Namespace {} is not supported by running"
                      "application.").format(self.namespace))
 
-        self._message_func(
+        return self._message_func(
             self.namespace, data, inc_session_id, wait_for_response)
 
     # pylint: disable=unused-argument,no-self-use
@@ -94,6 +94,7 @@ class BaseController(object):
     def tear_down(self):
         """ Called when we are shutting down. """
         self._socket_client = None
+        self._message_func = None
 
     def _check_registered(self):
         """ Helper method to see if we are registered with a Cast object. """
