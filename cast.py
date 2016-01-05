@@ -192,13 +192,21 @@ def cast(args):
 if __name__ == "__main__":
 	import argparse
 
-	parser = argparse.ArgumentParser(version="0.4")
-	parser.add_argument("names",             type=str,                     nargs="+",                      help="files, directories, and/or URLs to cast")
+	parser = argparse.ArgumentParser(version="0.5")
+	parser.add_argument("names",             type=str,                     nargs="*",                      help="files, directories, and/or URLs to cast")
 	parser.add_argument("-r", "--recursive", type=int, const=float("inf"), nargs="?", metavar="MAX_DEPTH", help="recurse directories to find files")
 	parser.add_argument("-w", "--wait",      type=int, default=1,                                          help="seconds to wait between each file")
 	parser.add_argument("-n", "--host",      type=str, default=get_localhost(),                            help="hostname or IP to serve content")
 	parser.add_argument("-p", "--port",      type=int, default=5403,                                       help="port on which to serve content")
 	parser.add_argument("-d", "--device",    type=str, default=None,                                       help="name of cast target")
+	parser.add_argument("-l", "--list",      action="store_true",                                          help="list available devices and exit")
 	args = parser.parse_args()
 
-	cast(args)
+	if args.list:
+		import pychromecast
+		for device in pychromecast.get_chromecasts():
+			print(device)
+	else:
+		if len(args.names) == 0:
+			parser.error("must specify one or more names to cast")
+		cast(args)
