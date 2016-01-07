@@ -3,6 +3,7 @@ Implements the DIAL-protocol to communicate with the Chromecast
 """
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from uuid import UUID
 
 import requests
 import six
@@ -77,7 +78,7 @@ def get_device_status(host):
 
         uuid = None
         if udn and udn.startswith('uuid:'):
-            uuid = udn[len('uuid:'):].replace("-", "")
+            uuid = UUID(udn[len('uuid:'):].replace("-", ""))
 
         return DeviceStatus(friendly_name, model_name, manufacturer,
                             api_version, uuid, cast_type)

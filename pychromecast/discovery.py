@@ -1,5 +1,6 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import time
+from uuid import UUID
 
 import six
 from zeroconf import ServiceBrowser, Zeroconf
@@ -47,6 +48,8 @@ class CastListener(object):
             if not isinstance(model_name, six.text_type):
                 model_name = model_name.decode('utf-8')
             uuid = service.properties.get('id')
+            if uuid:
+                uuid = UUID(uuid)
             friendly_name = service.properties.get('fn')
             if not isinstance(friendly_name, six.text_type):
                 friendly_name = friendly_name.decode('utf-8')
