@@ -253,6 +253,37 @@ class Chromecast(object):
                 (not self.status.is_active_input and not self.ignore_cec))
 
     @property
+    def uuid(self):
+        """ Returns the unique UUID of the Chromecast device. """
+        return self.device.uuid
+
+    @property
+    def name(self):
+        """
+        Returns the friendly name set for the Chromecast device.
+        This is the name that the end-user chooses for the cast device.
+        """
+        return self.device.friendly_name
+
+    @property
+    def model_name(self):
+        """ Returns the model name of the Chromecast device. """
+        return self.device.model_name
+
+    @property
+    def cast_type(self):
+        """
+        Returns the type of the Chromecast device.
+        This is one of CAST_TYPE_CHROMECAST for regular Chromecast device,
+        CAST_TYPE_AUDIO for Chromecast devices that only support audio
+        and CAST_TYPE_GROUP for virtual a Chromecast device that groups
+        together two or more cast (Audio for now) devices.
+
+        :rtype: str
+        """
+        return self.device.cast_type
+
+    @property
     def app_id(self):
         """ Returns the current app_id. """
         return self.status.app_id if self.status else None
