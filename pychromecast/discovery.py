@@ -32,7 +32,12 @@ class CastListener(object):
         service = None
         tries = 0
         while service is None and tries < 4:
-            service = zconf.get_service_info(typ, name)
+            try:
+                service = zconf.get_service_info(typ, name)
+            except IOError:
+                # If the zerconf fails to receive the necesarry data we abort
+                # adding the service
+                break
             tries += 1
 
         if service:
