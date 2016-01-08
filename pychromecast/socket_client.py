@@ -212,13 +212,13 @@ class SocketClient(threading.Thread):
                                      (self.host, 8009)))
                 self.socket.connect((self.host, 8009))
                 self.connecting = False
+                self._force_recon = False
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTED,
                                      (self.host, 8009)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
-                self._force_recon = False
 
                 self.logger.debug("Connected!")
                 break
@@ -363,9 +363,18 @@ class SocketClient(threading.Thread):
                  reset.
         """
         # check if connection is expired
-        if self.heartbeat_controller.is_expired() or self._force_recon:
+        reset = False
+        if self._force_recon:
             self.logger.error(
                 "Error communicating with socket, resetting connection")
+            reset = True
+
+        elif self.heartbeat_controller.is_expired():
+            self.logger.error(
+                "Heartbeat timeout, resetting connection")
+            reset = True
+
+        if reset:
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_LOST, None))
             try:
@@ -447,7 +456,7 @@ class SocketClient(threading.Thread):
             try:
                 chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
                 if chunk == b'':
-                    raise RuntimeError("socket connection broken")
+                    raise socket.error("socket connection broken")
                 chunks.append(chunk)
                 bytes_recd += len(chunk)
             except socket.timeout:
@@ -657,7 +666,11 @@ class HeartbeatController(BaseController):
     def ping(self):
         """ Send a ping message. """
         self.last_ping = time.time()
-        self.send_message({MESSAGE_TYPE: TYPE_PING})
+        try:
+            self.send_message({MESSAGE_TYPE: TYPE_PING})
+        except NotConnected:
+            self._socket_client.logger.error("Chromecast is disconnected. " +
+                                             "Cannot ping until reconnected.")
 
     def reset(self):
         """ Reset expired counter. """
