@@ -70,7 +70,7 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
         if isinstance(text, six.text_type):
             return text
         else:
-            return six.u(text)
+            return text.decode('utf-8')
 
     except AttributeError:
         return default
