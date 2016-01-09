@@ -202,6 +202,7 @@ class SocketClient(threading.Thread):
         self._open_channels = []
 
         self.connecting = True
+        retry_log_fun = self.logger.exception
 
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
@@ -231,8 +232,10 @@ class SocketClient(threading.Thread):
 
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_FAILED, None))
-                self.logger.exception("Failed to connect, retrying in %fs",
-                                      self.retry_wait)
+                retry_log_fun("Failed to connect, retrying in %fs",
+                              self.retry_wait)
+                retry_log_fun = self.logger.debug
+
                 time.sleep(self.retry_wait)
                 if tries:
                     tries -= 1
@@ -330,7 +333,7 @@ class SocketClient(threading.Thread):
                     raise
                 except socket.error:
                     self._force_recon = True
-                    self.logger.error('Error reading from socket.')
+                    self.logger.info('Error reading from socket.')
                 else:
                     data = _json_from_message(message)
             if not message:
@@ -365,13 +368,12 @@ class SocketClient(threading.Thread):
         # check if connection is expired
         reset = False
         if self._force_recon:
-            self.logger.error(
+            self.logger.warning(
                 "Error communicating with socket, resetting connection")
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.error(
-                "Heartbeat timeout, resetting connection")
+            self.logger.warning("Heartbeat timeout, resetting connection")
             reset = True
 
         if reset:
@@ -402,7 +404,7 @@ class SocketClient(threading.Thread):
 
                 if not handled:
                     if data.get(REQUEST_ID) not in self._request_callbacks:
-                        self.logger.warning(
+                        self.logger.debug(
                             "Message unhandled: %s",
                             _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
@@ -527,10 +529,9 @@ class SocketClient(threading.Thread):
         if not self.connecting and not self._force_recon:
             try:
                 self.socket.sendall(be_size + msg.SerializeToString())
-            except socket.error as err:
+            except socket.error:
                 self._force_recon = True
-                self.logger.error('Error writing to socket.')
-                raise err
+                self.logger.info('Error writing to socket.')
         else:
             raise NotConnected("Chromecast is connecting...")
 
@@ -733,7 +734,7 @@ class ReceiverController(BaseController):
 
     def update_status(self, blocking=False):
         """ Sends a message to the Chromecast to update the status. """
-        self.logger.info("Receiver:Updating status")
+        self.logger.debug("Receiver:Updating status")
         self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS},
                           wait_for_response=blocking)
 
