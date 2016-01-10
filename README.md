@@ -108,6 +108,13 @@ below.
     pychromecast.IGNORE_CEC.append('*')  # Ignore CEC on all devices
     pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
 
+Maintainers
+-----------
+
+ - Jan Borsodi ([@am0s](https://github.com/am0s))
+ - Ryan Kraus ([@rmkraus](https://github.com/rmkraus))
+ - Paulus Schoutsen ([@balloob](https://github.com/balloob), original author)
+
 Thanks
 ------
 I would like to thank [Fred Clift](https://github.com/minektur) for laying the socket client ground work. Without him it would not have been possible!
