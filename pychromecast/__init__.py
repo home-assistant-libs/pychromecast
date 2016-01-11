@@ -206,14 +206,24 @@ class Chromecast(object):
         self.device = device
         if device:
             dev_status = get_device_status(self.host)
-            self.device = DeviceStatus(
-                friendly_name=device.friendly_name or dev_status.friendly_name,
-                model_name=device.model_name or dev_status.model_name,
-                manufacturer=device.manufacturer or dev_status.manufacturer,
-                api_version=device.api_version or dev_status.api_version,
-                uuid=device.uuid or dev_status.uuid,
-                cast_type=device.cast_type or dev_status.cast_type,
-            )
+            if dev_status:
+                self.device = DeviceStatus(
+                    friendly_name=device.friendly_name or dev_status.friendly_name,
+                    model_name=device.model_name or dev_status.model_name,
+                    manufacturer=device.manufacturer or dev_status.manufacturer,
+                    api_version=device.api_version or dev_status.api_version,
+                    uuid=device.uuid or dev_status.uuid,
+                    cast_type=device.cast_type or dev_status.cast_type,
+                )
+            else:
+                self.device = DeviceStatus(
+                    friendly_name=device.friendly_name,
+                    model_name=device.model_name,
+                    manufacturer=device.manufacturer,
+                    api_version=device.api_version,
+                    uuid=device.uuid,
+                    cast_type=device.cast_type,
+                )
         else:
             self.device = get_device_status(self.host)
 
