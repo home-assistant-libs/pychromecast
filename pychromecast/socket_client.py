@@ -142,6 +142,7 @@ class SocketClient(threading.Thread):
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST,
                  **kwargs):
         tries = kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
 
         super(SocketClient, self).__init__()
@@ -154,6 +155,7 @@ class SocketClient(threading.Thread):
 
         self.cast_type = cast_type
         self.tries = tries
+        self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
         self.port = port or 8009
@@ -219,7 +221,7 @@ class SocketClient(threading.Thread):
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
-                self.socket.settimeout(TIMEOUT_TIME)
+                self.socket.settimeout(self.timeout)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                      (self.host, self.port)))

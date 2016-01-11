@@ -23,7 +23,7 @@ IGNORE_CEC = []
 NON_UNICODE_REPR = sys.version_info < (3, )
 
 
-def _get_all_chromecasts(tries=None, retry_wait=None):
+def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
@@ -44,13 +44,14 @@ def _get_all_chromecasts(tries=None, retry_wait=None):
             )
             cc_list.append(Chromecast(host=ip_address, port=port,
                                       device=device,
-                                      tries=tries, retry_wait=retry_wait))
+                                      tries=tries, timeout=timeout,
+                                      retry_wait=retry_wait))
         except ChromecastConnectionError:
             pass
     return cc_list
 
 
-def get_chromecasts(tries=None, retry_wait=None, **filters):
+def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -76,7 +77,7 @@ def get_chromecasts(tries=None, retry_wait=None, **filters):
     """
     logger = logging.getLogger(__name__)
 
-    cc_list = set(_get_all_chromecasts(tries, retry_wait))
+    cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout))
     excluded_cc = set()
 
     if not filters:
@@ -103,7 +104,7 @@ def get_chromecasts(tries=None, retry_wait=None, **filters):
     return list(filtered_cc)
 
 
-def get_chromecasts_as_dict(tries=None, retry_wait=None, **filters):
+def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -117,10 +118,12 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, **filters):
     """
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                      timeout=timeout,
                                       **filters)}
 
 
-def get_chromecast(strict=False, tries=None, retry_wait=None, **filters):
+def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
+                   **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
@@ -144,6 +147,7 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, **filters):
     # If no filters given and not strict just use the first dicsovered one.
     if filters or strict:
         results = get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                  timeout=timeout,
                                   **filters)
     else:
         results = _get_all_chromecasts(tries, retry_wait)
@@ -180,6 +184,8 @@ class Chromecast(object):
     :type device: pychromecast.dial.DeviceStatus
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
+    :param timeout: A floating point number specifying the socket timeout in
+                    seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
@@ -187,6 +193,7 @@ class Chromecast(object):
 
     def __init__(self, host, port=None, device=None, **kwargs):
         tries = kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
 
         self.logger = logging.getLogger(__name__)
@@ -219,7 +226,7 @@ class Chromecast(object):
 
         self.socket_client = socket_client.SocketClient(
             host, port=port, cast_type=self.device.cast_type,
-            tries=tries, retry_wait=retry_wait)
+            tries=tries, timeout=timeout, retry_wait=retry_wait)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
