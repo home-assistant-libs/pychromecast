@@ -107,6 +107,10 @@ def _is_ssl_timeout(exc):
                            "The read operation timed out")
 
 
+NetworkAddress = namedtuple('NetworkAddress',
+                            ['address', 'port'])
+
+
 ConnectionStatus = namedtuple('ConnectionStatus',
                               ['status', 'address'])
 
@@ -193,7 +197,8 @@ class SocketClient(threading.Thread):
             self.initialize_connection()
         except ChromecastConnectionError:
             self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                                 NetworkAddress(self.host, self.port)))
             raise
 
     def initialize_connection(self):
@@ -224,13 +229,13 @@ class SocketClient(threading.Thread):
                 self.socket.settimeout(self.timeout)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
-                                     (self.host, self.port)))
+                                     NetworkAddress(self.host, self.port)))
                 self.socket.connect((self.host, self.port))
                 self.connecting = False
                 self._force_recon = False
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTED,
-                                     (self.host, self.port)))
+                                     NetworkAddress(self.host, self.port)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
@@ -245,7 +250,8 @@ class SocketClient(threading.Thread):
                     raise ChromecastConnectionError("Failed to connect")
 
                 self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_FAILED, None))
+                    ConnectionStatus(CONNECTION_STATUS_FAILED,
+                                     NetworkAddress(self.host, self.port)))
                 retry_log_fun("Failed to connect, retrying in %fs",
                               self.retry_wait)
                 retry_log_fun = self.logger.debug
@@ -392,7 +398,8 @@ class SocketClient(threading.Thread):
 
         if reset:
             self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_LOST, None))
+                ConnectionStatus(CONNECTION_STATUS_LOST,
+                                 NetworkAddress(self.host, self.port)))
             try:
                 self.initialize_connection()
             except ChromecastConnectionError:
@@ -449,7 +456,8 @@ class SocketClient(threading.Thread):
 
         self.socket.close()
         self._report_connection_status(
-            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                             NetworkAddress(self.host, self.port)))
         self.connecting = True
 
     def _report_connection_status(self, status):
