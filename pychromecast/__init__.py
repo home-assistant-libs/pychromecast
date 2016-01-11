@@ -104,7 +104,8 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
     return list(filtered_cc)
 
 
-def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None, **filters):
+def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
+                            **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -208,12 +209,18 @@ class Chromecast(object):
             dev_status = get_device_status(self.host)
             if dev_status:
                 self.device = DeviceStatus(
-                    friendly_name=device.friendly_name or dev_status.friendly_name,
-                    model_name=device.model_name or dev_status.model_name,
-                    manufacturer=device.manufacturer or dev_status.manufacturer,
-                    api_version=device.api_version or dev_status.api_version,
-                    uuid=device.uuid or dev_status.uuid,
-                    cast_type=device.cast_type or dev_status.cast_type,
+                    friendly_name=(device.friendly_name or
+                                   dev_status.friendly_name),
+                    model_name=(device.model_name or
+                                dev_status.model_name),
+                    manufacturer=(device.manufacturer or
+                                  dev_status.manufacturer),
+                    api_version=(device.api_version or
+                                 dev_status.api_version),
+                    uuid=(device.uuid or
+                          dev_status.uuid),
+                    cast_type=(device.cast_type or
+                               dev_status.cast_type),
                 )
             else:
                 self.device = DeviceStatus(
