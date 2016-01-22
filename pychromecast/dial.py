@@ -36,7 +36,12 @@ def reboot(host):
 
 
 def get_device_status(host):
-    """ Returns the device status as a named tuple. """
+    """
+    :param host: Hostname or ip to fetch status from
+    :type host: str
+    :return: The device status as a named tuple.
+    :rtype: pychromecast.dial.DeviceStatus or None
+    """
 
     try:
         req = CC_SESSION.get(
