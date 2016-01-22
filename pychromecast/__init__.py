@@ -13,8 +13,17 @@ from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts
-from .dial import get_device_status, reboot
+from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
+    CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
+
+__all__ = (
+    '__version__', '__version_info__',
+    'get_chromecasts', 'get_chromecasts_as_dict', 'get_chromecast',
+    'Chromecast'
+)
+__version_info__ = ('0', '6', '14')
+__version__ = '.'.join(__version_info__)
 
 IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
@@ -22,23 +31,35 @@ IGNORE_CEC = []
 NON_UNICODE_REPR = sys.version_info < (3, )
 
 
-def _get_all_chromecasts(tries=None, retry_wait=None):
+def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
     """
     hosts = discover_chromecasts()
     cc_list = []
-    for ip_address, _ in hosts:
+    for ip_address, port, uuid, model_name, friendly_name in hosts:
         try:
-            cc_list.append(Chromecast(host=ip_address, tries=tries,
+            # Build device status from the mDNS info, this information is
+            # the primary source and the remaining will be fetched
+            # later on.
+            cast_type = CAST_TYPES.get(model_name.lower(),
+                                       CAST_TYPE_CHROMECAST)
+            device = DeviceStatus(
+                friendly_name=friendly_name, model_name=model_name,
+                manufacturer=None, api_version=None,
+                uuid=uuid, cast_type=cast_type,
+            )
+            cc_list.append(Chromecast(host=ip_address, port=port,
+                                      device=device,
+                                      tries=tries, timeout=timeout,
                                       retry_wait=retry_wait))
         except ChromecastConnectionError:
             pass
     return cc_list
 
 
-def get_chromecasts(tries=None, retry_wait=None, **filters):
+def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -64,7 +85,7 @@ def get_chromecasts(tries=None, retry_wait=None, **filters):
     """
     logger = logging.getLogger(__name__)
 
-    cc_list = set(_get_all_chromecasts(tries, retry_wait))
+    cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout))
     excluded_cc = set()
 
     if not filters:
@@ -91,7 +112,8 @@ def get_chromecasts(tries=None, retry_wait=None, **filters):
     return list(filtered_cc)
 
 
-def get_chromecasts_as_dict(tries=None, retry_wait=None, **filters):
+def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
+                            **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -105,10 +127,12 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, **filters):
     """
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                      timeout=timeout,
                                       **filters)}
 
 
-def get_chromecast(strict=False, tries=None, retry_wait=None, **filters):
+def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
+                   **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
@@ -132,6 +156,7 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, **filters):
     # If no filters given and not strict just use the first dicsovered one.
     if filters or strict:
         results = get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                  timeout=timeout,
                                   **filters)
     else:
         results = _get_all_chromecasts(tries, retry_wait)
@@ -161,31 +186,69 @@ class Chromecast(object):
     """
     Class to interface with a ChromeCast.
 
+    :param port: The port to use when connecting to the device, set to None to
+                 use the default of 8009. Special devices such as Cast Groups
+                 may return a different port number so we need to use that.
+    :param device: DeviceStatus with initial information for the device.
+    :type device: pychromecast.dial.DeviceStatus
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
+    :param timeout: A floating point number specifying the socket timeout in
+                    seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
     """
 
-    def __init__(self, host, device=None, tries=None, retry_wait=None):
+    def __init__(self, host, port=None, device=None, **kwargs):
+        tries = kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
         self.host = host
+        self.port = port or 8009
 
         self.logger.info("Querying device status")
-        self.device = device or get_device_status(self.host)
+        self.device = device
+        if device:
+            dev_status = get_device_status(self.host)
+            if dev_status:
+                # Values from `device` have priority over `dev_status`
+                # as they come from the dial information.
+                # `dev_status` may add extra information such as `manufacturer`
+                # which dial does not supply
+                self.device = DeviceStatus(
+                    friendly_name=(device.friendly_name or
+                                   dev_status.friendly_name),
+                    model_name=(device.model_name or
+                                dev_status.model_name),
+                    manufacturer=(device.manufacturer or
+                                  dev_status.manufacturer),
+                    api_version=(device.api_version or
+                                 dev_status.api_version),
+                    uuid=(device.uuid or
+                          dev_status.uuid),
+                    cast_type=(device.cast_type or
+                               dev_status.cast_type),
+                )
+            else:
+                self.device = device
+        else:
+            self.device = get_device_status(self.host)
 
         if not self.device:
             raise ChromecastConnectionError(
-                "Could not connect to {}".format(self.host))
+                "Could not connect to {}:{}".format(self.host, self.port))
 
         self.status = None
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host, tries, retry_wait=retry_wait)
+            host, port=port, cast_type=self.device.cast_type,
+            tries=tries, timeout=timeout, retry_wait=retry_wait)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
@@ -217,6 +280,37 @@ class Chromecast(object):
         return (self.status is None or
                 self.app_id in (None, IDLE_APP_ID) or
                 (not self.status.is_active_input and not self.ignore_cec))
+
+    @property
+    def uuid(self):
+        """ Returns the unique UUID of the Chromecast device. """
+        return self.device.uuid
+
+    @property
+    def name(self):
+        """
+        Returns the friendly name set for the Chromecast device.
+        This is the name that the end-user chooses for the cast device.
+        """
+        return self.device.friendly_name
+
+    @property
+    def model_name(self):
+        """ Returns the model name of the Chromecast device. """
+        return self.device.model_name
+
+    @property
+    def cast_type(self):
+        """
+        Returns the type of the Chromecast device.
+        This is one of CAST_TYPE_CHROMECAST for regular Chromecast device,
+        CAST_TYPE_AUDIO for Chromecast devices that only support audio
+        and CAST_TYPE_GROUP for virtual a Chromecast device that groups
+        together two or more cast (Audio for now) devices.
+
+        :rtype: str
+        """
+        return self.device.cast_type
 
     @property
     def app_id(self):
@@ -313,15 +407,15 @@ class Chromecast(object):
         self.socket_client.stop.set()
 
     def __repr__(self):
-        txt = u"Chromecast({!r}, device={!r})".format(
-            self.host, self.device)
+        txt = u"Chromecast({!r}, port={!r}, device={!r})".format(
+            self.host, self.port, self.device)
         # Python 2.x does not work well with unicode returned from repr
         if NON_UNICODE_REPR:
             return txt.encode('utf-8')
         return txt
 
     def __unicode__(self):
-        return u"Chromecast({}, {}, {}, {}, api={}.{})".format(
-            self.host, self.device.friendly_name,
+        return u"Chromecast({}, {}, {}, {}, {}, api={}.{})".format(
+            self.host, self.port, self.device.friendly_name,
             self.device.model_name, self.device.manufacturer,
             self.device.api_version[0], self.device.api_version[1])

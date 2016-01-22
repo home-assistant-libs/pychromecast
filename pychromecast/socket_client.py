@@ -20,6 +20,7 @@ from struct import pack, unpack
 import sys
 
 from . import cast_channel_pb2
+from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .error import (
@@ -106,6 +107,10 @@ def _is_ssl_timeout(exc):
                            "The read operation timed out")
 
 
+NetworkAddress = namedtuple('NetworkAddress',
+                            ['address', 'port'])
+
+
 ConnectionStatus = namedtuple('ConnectionStatus',
                               ['status', 'address'])
 
@@ -126,6 +131,11 @@ class SocketClient(threading.Thread):
     """
     Class to interact with a Chromecast through a socket.
 
+    :param port: The port to use when connecting to the device, set to None to
+                 use the default of 8009. Special devices such as Cast Groups
+                 may return a different port number so we need to use that.
+    :param cast_type: The type of chromecast to connect to, see
+                      dial.CAST_TYPE_* for types.
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -133,7 +143,12 @@ class SocketClient(threading.Thread):
                        which is 5 seconds.
     """
 
-    def __init__(self, host, tries=None, retry_wait=None):
+    def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST,
+                 **kwargs):
+        tries = kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+
         super(SocketClient, self).__init__()
 
         self.daemon = True
@@ -142,9 +157,12 @@ class SocketClient(threading.Thread):
 
         self._force_recon = False
 
+        self.cast_type = cast_type
         self.tries = tries
+        self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
+        self.port = port or 8009
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
@@ -164,7 +182,7 @@ class SocketClient(threading.Thread):
         self._handlers = {}
         self._connection_listeners = []
 
-        self.receiver_controller = ReceiverController()
+        self.receiver_controller = ReceiverController(cast_type)
         self.media_controller = MediaController()
         self.heartbeat_controller = HeartbeatController()
 
@@ -179,7 +197,8 @@ class SocketClient(threading.Thread):
             self.initialize_connection()
         except ChromecastConnectionError:
             self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                                 NetworkAddress(self.host, self.port)))
             raise
 
     def initialize_connection(self):
@@ -207,16 +226,16 @@ class SocketClient(threading.Thread):
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
                 self.socket = ssl.wrap_socket(socket.socket())
-                self.socket.settimeout(TIMEOUT_TIME)
+                self.socket.settimeout(self.timeout)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
-                                     (self.host, 8009)))
-                self.socket.connect((self.host, 8009))
+                                     NetworkAddress(self.host, self.port)))
+                self.socket.connect((self.host, self.port))
                 self.connecting = False
                 self._force_recon = False
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTED,
-                                     (self.host, 8009)))
+                                     NetworkAddress(self.host, self.port)))
                 self.receiver_controller.update_status()
                 self.heartbeat_controller.ping()
                 self.heartbeat_controller.reset()
@@ -231,7 +250,8 @@ class SocketClient(threading.Thread):
                     raise ChromecastConnectionError("Failed to connect")
 
                 self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_FAILED, None))
+                    ConnectionStatus(CONNECTION_STATUS_FAILED,
+                                     NetworkAddress(self.host, self.port)))
                 retry_log_fun("Failed to connect, retrying in %fs",
                               self.retry_wait)
                 retry_log_fun = self.logger.debug
@@ -378,7 +398,8 @@ class SocketClient(threading.Thread):
 
         if reset:
             self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_LOST, None))
+                ConnectionStatus(CONNECTION_STATUS_LOST,
+                                 NetworkAddress(self.host, self.port)))
             try:
                 self.initialize_connection()
             except ChromecastConnectionError:
@@ -435,7 +456,8 @@ class SocketClient(threading.Thread):
 
         self.socket.close()
         self._report_connection_status(
-            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED, None))
+            ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                             NetworkAddress(self.host, self.port)))
         self.connecting = True
 
     def _report_connection_status(self, status):
@@ -686,15 +708,20 @@ class HeartbeatController(BaseController):
 
 
 class ReceiverController(BaseController):
-    """ Controller to interact with the Chromecast platform. """
+    """
+    Controller to interact with the Chromecast platform.
 
-    def __init__(self):
+    :param cast_type: Type of Chromecast device.
+    """
+
+    def __init__(self, cast_type=CAST_TYPE_CHROMECAST):
         super(ReceiverController, self).__init__(
             NS_RECEIVER, target_platform=True)
 
         self.status = None
         self.launch_failure = None
         self.app_to_launch = None
+        self.cast_type = cast_type
         self.app_launch_event = threading.Event()
 
         self._status_listeners = []
@@ -767,7 +794,8 @@ class ReceiverController(BaseController):
                 if response:
                     response_type = response[MESSAGE_TYPE]
                     if response_type == TYPE_RECEIVER_STATUS:
-                        new_status = self._parse_status(response)
+                        new_status = self._parse_status(response,
+                                                        self.cast_type)
                         new_app_id = new_status.app_id
                         if new_app_id == app_id:
                             is_app_started = True
@@ -816,11 +844,12 @@ class ReceiverController(BaseController):
              'volume': {'muted': muted}})
 
     @staticmethod
-    def _parse_status(data):
+    def _parse_status(data, cast_type):
         """
         Parses a STATUS message and returns a CastStatus object.
 
         :type data: dict
+        :param cast_type: Type of Chromecast.
         :rtype: CastStatus
         """
         data = data.get('status', {})
@@ -832,9 +861,11 @@ class ReceiverController(BaseController):
         except KeyError:
             app_data = {}
 
+        is_audio = cast_type in (CAST_TYPE_AUDIO, CAST_TYPE_GROUP)
+
         status = CastStatus(
-            data.get('isActiveInput', False),
-            data.get('isStandBy', True),
+            data.get('isActiveInput', None if is_audio else False),
+            data.get('isStandBy', None if is_audio else True),
             volume_data.get('level', 1.0),
             volume_data.get('muted', False),
             app_data.get(APP_ID),
@@ -848,7 +879,7 @@ class ReceiverController(BaseController):
 
     def _process_get_status(self, data):
         """ Processes a received STATUS message and notifies listeners. """
-        status = self._parse_status(data)
+        status = self._parse_status(data, self.cast_type)
         is_new_app = self.app_id != status.app_id and self.app_to_launch
         self.status = status
 
