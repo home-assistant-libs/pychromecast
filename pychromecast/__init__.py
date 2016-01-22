@@ -17,6 +17,14 @@ from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
     CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
+__all__ = (
+    '__version__', '__version_info__',
+    'get_chromecasts', 'get_chromecasts_as_dict', 'get_chromecast',
+    'Chromecast'
+)
+__version_info__ = ('0', '6', '14')
+__version__ = '.'.join(__version_info__)
+
 IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
 # For Python 2.x we need to decode __repr__ Unicode return values to str
