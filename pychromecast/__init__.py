@@ -223,14 +223,7 @@ class Chromecast(object):
                                dev_status.cast_type),
                 )
             else:
-                self.device = DeviceStatus(
-                    friendly_name=device.friendly_name,
-                    model_name=device.model_name,
-                    manufacturer=device.manufacturer,
-                    api_version=device.api_version,
-                    uuid=device.uuid,
-                    cast_type=device.cast_type,
-                )
+                self.device = device
         else:
             self.device = get_device_status(self.host)
 
