@@ -208,6 +208,10 @@ class Chromecast(object):
         if device:
             dev_status = get_device_status(self.host)
             if dev_status:
+                # Values from `device` have priority over `dev_status`
+                # as they come from the dial information.
+                # `dev_status` may add extra information such as `manufacturer`
+                # which dial does not supply
                 self.device = DeviceStatus(
                     friendly_name=(device.friendly_name or
                                    dev_status.friendly_name),
