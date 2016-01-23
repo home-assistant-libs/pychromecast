@@ -33,6 +33,9 @@ develop-eggs
 lib
 lib64
 
+# Build files
+README.rst
+
 # Installer logs
 pip-log.txt
 
