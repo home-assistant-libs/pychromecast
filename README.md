@@ -8,6 +8,7 @@ Library for Python 2 and 3 to communicate with the Google Chromecast. It current
  - Implement Google Chromecast api v2
  - Communicate with apps via channels
  - Easily extendable to add support for unsupported namespaces
+ - Multi-room setups with Audio cast devices
 
 *PyChromecast 0.6 introduces some backward incompatible changes due to the migration from DIAL to socket for retrieving the app status.*
 
@@ -31,7 +32,7 @@ How to use
     >> # Wait for cast device to be ready
     >> cast.wait()
     >> print(cast.device)
-    DeviceStatus(friendly_name='Living Room', model_name='Eureka Dongle', manufacturer='Google Inc.', api_version=(1, 0))
+    DeviceStatus(friendly_name='Living Room', model_name='Chromecast', manufacturer='Google Inc.', api_version=(1, 0), uuid=UUID('df6944da-f016-4cb8-97d0-3da2ccaa380b'), cast_type='cast')
 
     >> print(cast.status)
     CastStatus(is_active_input=True, is_stand_by=False, volume_level=1.0, volume_muted=False, app_id=u'CC1AD845', display_name=u'Default Media Receiver', namespaces=[u'urn:x-cast:com.google.cast.player.message', u'urn:x-cast:com.google.cast.media'], session_id=u'CCA39713-9A4F-34A6-A8BF-5D97BE7ECA5C', transport_id=u'web-9', status_text='')
