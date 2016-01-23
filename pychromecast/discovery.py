@@ -41,21 +41,29 @@ class CastListener(object):
                 break
             tries += 1
 
-        if service:
-            ips = zconf.cache.entries_with_name(service.server.lower())
-            host = repr(ips[0]) if ips else service.server
-            model_name = service.properties.get('md')
-            if not isinstance(model_name, six.text_type):
-                model_name = model_name.decode('utf-8')
-            uuid = service.properties.get('id')
-            if uuid:
-                uuid = UUID(uuid)
-            friendly_name = service.properties.get('fn')
-            if not isinstance(friendly_name, six.text_type):
-                friendly_name = friendly_name.decode('utf-8')
+        if not service:
+            return
 
-            self.services[name] = (host, service.port, uuid, model_name,
-                                   friendly_name)
+        def get_value(key):
+            """Retrieve value and decode for Python 2/3."""
+            value = service.properties.get(key.encode('utf-8'))
+
+            if value is None or isinstance(value, six.text_type):
+                return value
+            return value.decode('utf-8')
+
+        ips = zconf.cache.entries_with_name(service.server.lower())
+        host = repr(ips[0]) if ips else service.server
+
+        model_name = get_value('md')
+        uuid = get_value('id')
+        friendly_name = get_value('fn')
+
+        if uuid:
+            uuid = UUID(uuid)
+
+        self.services[name] = (host, service.port, uuid, model_name,
+                               friendly_name)
 
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
