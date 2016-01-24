@@ -22,7 +22,7 @@ __all__ = (
     'get_chromecasts', 'get_chromecasts_as_dict', 'get_chromecast',
     'Chromecast'
 )
-__version_info__ = ('0', '7')
+__version_info__ = ('0', '7', '1')
 __version__ = '.'.join(__version_info__)
 
 IDLE_APP_ID = 'E8C28D3C'
