@@ -11,7 +11,6 @@ def build():
     if not os.path.exists("build"):
         os.mkdir("build")
     local("date >> build/log")
-    local("pandoc README.md -f markdown -t rst -s -o README.rst")
     local("python setup.py sdist >> build/log")
     local("python setup.py bdist_wheel >> build/log")
 
