@@ -394,7 +394,8 @@ class MediaController(BaseController):
     # pylint: disable=too-many-arguments
     def play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,
-                   stream_type=STREAM_TYPE_BUFFERED):
+                   stream_type=STREAM_TYPE_BUFFERED,
+                   metadata=None):
         """ Plays media on the Chromecast. Start default media receiver if not
             already started. """
 
@@ -423,6 +424,9 @@ class MediaController(BaseController):
                 msg['customData']['payload'] = {}
 
             msg['customData']['payload']['thumb'] = thumb
+
+        if metadata:
+            msg['media']['metadata'] = metadata
 
         self.send_message(msg, inc_session_id=True)
 
