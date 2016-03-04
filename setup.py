@@ -5,7 +5,7 @@ long_description = open('README.rst').read()
 
 setup(
     name='PyChromecast',
-    version='0.7.1',
+    version='0.7.2',
     license='MIT',
     url='https://github.com/balloob/pychromecast',
     author='Paulus Schoutsen',
