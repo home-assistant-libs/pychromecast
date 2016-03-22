@@ -425,27 +425,27 @@ class MediaController(BaseController):
                 'contentId': url,
                 'streamType': stream_type,
                 'contentType': content_type,
+                'metadata': {}
             },
             MESSAGE_TYPE: TYPE_LOAD,
             'currentTime': current_time,
             'autoplay': autoplay,
-            'customData': {}
+            'customData': {'payload': {}}
         }
-
-        if title:
-            if 'payload' not in msg['customData']:
-                msg['customData']['payload'] = {}
-
-            msg['customData']['payload']['title'] = title
-
-        if thumb:
-            if 'payload' not in msg['customData']:
-                msg['customData']['payload'] = {}
-
-            msg['customData']['payload']['thumb'] = thumb
 
         if metadata:
             msg['media']['metadata'] = metadata
+
+        if title:
+            msg['media']['metadata']['title'] = title
+
+        if thumb:
+            msg['media']['metadata']['images'] = []
+            msg['media']['metadata']['images'].append({'url': thumb})
+
+        for key, value in msg['media']['metadata'].iteritems():
+            if value:
+                msg['customData']['payload'][key] = value
 
         self.send_message(msg, inc_session_id=True)
 
