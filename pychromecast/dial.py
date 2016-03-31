@@ -3,6 +3,7 @@ Implements the DIAL-protocol to communicate with the Chromecast
 """
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from uuid import UUID
 
 import requests
 import six
@@ -14,6 +15,19 @@ FORMAT_BASE_URL = "http://{}:8008"
 CC_SESSION = requests.Session()
 CC_SESSION.headers['content-type'] = 'application/json'
 
+# Regular chromecast, supports video/audio
+CAST_TYPE_CHROMECAST = 'cast'
+# Cast Audio device, supports only audio
+CAST_TYPE_AUDIO = 'audio'
+# Cast Audio group device, supports only audio
+CAST_TYPE_GROUP = 'group'
+
+CAST_TYPES = {
+    u'chromecast': CAST_TYPE_CHROMECAST,
+    u'chromecast audio': CAST_TYPE_AUDIO,
+    u'google cast group': CAST_TYPE_GROUP,
+}
+
 
 def reboot(host):
     """ Reboots the chromecast. """
@@ -22,7 +36,12 @@ def reboot(host):
 
 
 def get_device_status(host):
-    """ Returns the device status as a named tuple. """
+    """
+    :param host: Hostname or ip to fetch status from
+    :type host: str
+    :return: The device status as a named tuple.
+    :rtype: pychromecast.dial.DeviceStatus or None
+    """
 
     try:
         req = CC_SESSION.get(
@@ -50,14 +69,24 @@ def get_device_status(host):
         manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
                                          "manufacturer",
                                          "Unknown manufacturer")
+        udn = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
+                                "UDN",
+                                None)
 
         api_version = (int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "major", -1)),
                        int(_read_xml_element(api_version_el,
                                              XML_NS_UPNP_DEVICE, "minor", -1)))
 
+        cast_type = CAST_TYPES.get(model_name.lower(),
+                                   CAST_TYPE_CHROMECAST)
+
+        uuid = None
+        if udn and udn.startswith('uuid:'):
+            uuid = UUID(udn[len('uuid:'):].replace("-", ""))
+
         return DeviceStatus(friendly_name, model_name, manufacturer,
-                            api_version)
+                            api_version, uuid, cast_type)
 
     except (requests.exceptions.RequestException, ET.ParseError):
         return None
@@ -70,7 +99,7 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
         if isinstance(text, six.text_type):
             return text
         else:
-            return six.u(text)
+            return text.decode('utf-8')
 
     except AttributeError:
         return default
@@ -78,4 +107,5 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
 
 DeviceStatus = namedtuple("DeviceStatus",
                           ["friendly_name", "model_name",
-                           "manufacturer", "api_version"])
+                           "manufacturer", "api_version",
+                           "uuid", "cast_type"])

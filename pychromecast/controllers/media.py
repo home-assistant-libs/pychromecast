@@ -394,9 +394,29 @@ class MediaController(BaseController):
     # pylint: disable=too-many-arguments
     def play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,
-                   stream_type=STREAM_TYPE_BUFFERED):
-        """ Plays media on the Chromecast. Start default media receiver if not
-            already started. """
+                   stream_type=STREAM_TYPE_BUFFERED,
+                   metadata=None):
+        """
+        Plays media on the Chromecast. Start default media receiver if not
+        already started.
+
+        Parameters:
+        url: str - url of the media.
+        content_type: str - mime type. Example: 'video/mp4'.
+        title: str - title of the media.
+        thumb: str - thumbnail image url.
+        current_time: float - seconds from the beginning of the media
+            to start playback.
+        autoplay: bool - whether the media will automatically play.
+        stream_type: str - describes the type of media artifact as one of the
+            following: "NONE", "BUFFERED", "LIVE".
+        metadata: dict - media metadata object, one of the following:
+            GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
+            MusicTrackMediaMetadata, PhotoMediaMetadata.
+
+        Docs:
+        https://developers.google.com/cast/docs/reference/messages#MediaData
+        """
 
         self._socket_client.receiver_controller.launch_app(APP_MEDIA_RECEIVER)
 
@@ -423,6 +443,9 @@ class MediaController(BaseController):
                 msg['customData']['payload'] = {}
 
             msg['customData']['payload']['thumb'] = thumb
+
+        if metadata:
+            msg['media']['metadata'] = metadata
 
         self.send_message(msg, inc_session_id=True)
 
