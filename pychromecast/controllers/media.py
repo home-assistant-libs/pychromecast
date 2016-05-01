@@ -256,6 +256,7 @@ class MediaStatus(object):
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
+    # pylint: disable=too-many-public-methods
     def __init__(self):
         super(MediaController, self).__init__(
             "urn:x-cast:com.google.cast.media")
