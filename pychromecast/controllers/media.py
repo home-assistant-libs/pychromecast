@@ -473,3 +473,4 @@ class MediaController(BaseController):
         super(MediaController, self).tear_down()
 
         self._status_listeners[:] = []
+        self._load_error_listeners[:] = []
