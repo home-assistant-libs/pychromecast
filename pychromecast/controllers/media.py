@@ -26,6 +26,8 @@ TYPE_STOP = "STOP"
 TYPE_LOAD = "LOAD"
 TYPE_SEEK = "SEEK"
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
+TYPE_LOAD_FAILED = "LOAD_FAILED"
+TYPE_LOAD_CANCELLED = "LOAD_CANCELLED"
 
 METADATA_TYPE_GENERIC = 0
 METADATA_TYPE_TVSHOW = 1
@@ -262,6 +264,7 @@ class MediaController(BaseController):
         self.status = MediaStatus()
 
         self._status_listeners = []
+        self._load_error_listeners = []
 
     def channel_connected(self):
         """ Called when media channel is connected. Will update status. """
@@ -274,18 +277,27 @@ class MediaController(BaseController):
 
     def receive_message(self, message, data):
         """ Called when a media message is received. """
+        if data[MESSAGE_TYPE] not in (TYPE_MEDIA_STATUS,
+                                      TYPE_LOAD_FAILED,
+                                      TYPE_LOAD_CANCELLED):
+            return False
+
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)
-
-            return True
-
         else:
-            return False
+            self._fire_load_error(data[MESSAGE_TYPE])
+
+        return True
 
     def register_status_listener(self, listener):
         """ Register a listener for new media statusses. A new status will
             call listener.new_media_status(status) """
         self._status_listeners.append(listener)
+
+    def register_load_error_listener(self, listener):
+        """ Register a listener for media load errors. A load error message
+            will call listener.media_load_error(error). """
+        self._load_error_listeners.append(listener)
 
     def update_status(self, blocking=False):
         """ Send message to update the status. """
@@ -388,6 +400,15 @@ class MediaController(BaseController):
         for listener in self._status_listeners:
             try:
                 listener.new_media_status(self.status)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    def _fire_load_error(self, error):
+        """ Tells listeners of a load failure. 'error' will be one of the
+            constants TYPE_LOAD_FAILED or TYPE_LOAD_CANCELLED. """
+        for listener in self._load_error_listeners:
+            try:
+                listener.media_load_error(error)
             except Exception:  # pylint: disable=broad-except
                 pass
 
