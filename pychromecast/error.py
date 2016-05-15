@@ -1,7 +1,10 @@
 """
 Errors to be used by PyChromecast.
 """
-from .controllers.media import TYPE_LOAD_FAILED, TYPE_LOAD_CANCELLED
+
+
+TYPE_LOAD_FAILED = "LOAD_FAILED"
+TYPE_LOAD_CANCELLED = "LOAD_CANCELLED"
 
 
 # pylint: disable=super-init-not-called
@@ -78,13 +81,14 @@ class MediaLoadError(PyChromecastError):
     :vartype media: str
     :ivar request_id: ID of the request that generated this error.
     :vartype request_id: int
-    :ivar reason: None, as Load Error messages do not have a 'reason' attribute.
+    :ivar reason: None; Load Error messages do not have a 'reason' attribute.
     :vartype reason: None
     :ivar custom_data: App specific dict of data defined by the receiver app,
          if any, otherwise None.
     :vartype custom_data: dict or None
     :ivar load_failed: True if the load error type is TYPE_LOAD_FAILED, which
-        can mean a number of things, such as network issue or unsupported media.
+        indicates a number of possibilities, such as network issue or
+        unsupported media.
     :vartype load_failed: bool
     :ivar load_cancelled: True if the load error type is TYPE_LOAD_CANCELLED,
         which means the load request was replaced by another.
