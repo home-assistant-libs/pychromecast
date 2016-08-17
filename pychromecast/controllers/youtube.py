@@ -11,7 +11,7 @@ ATTR_SCREEN_ID = "screenId"
 
 
 class YouTubeController(BaseController):
-    """ Controller to interact with Plex namespace. """
+    """ Controller to interact with Youtube namespace. """
 
     def __init__(self):
         super(YouTubeController, self).__init__(
