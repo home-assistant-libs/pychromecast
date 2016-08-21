@@ -5,6 +5,7 @@ on the Chromecast.
 from collections import namedtuple
 
 from ..config import APP_MEDIA_RECEIVER
+from ..error import MediaLoadError
 from . import BaseController
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
@@ -26,6 +27,11 @@ TYPE_STOP = "STOP"
 TYPE_LOAD = "LOAD"
 TYPE_SEEK = "SEEK"
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
+TYPE_LOAD_FAILED = "LOAD_FAILED"
+TYPE_LOAD_CANCELLED = "LOAD_CANCELLED"
+
+REQUEST_ID = "requestId"
+ERROR_REASON = 'reason'
 
 METADATA_TYPE_GENERIC = 0
 METADATA_TYPE_TVSHOW = 1
@@ -42,6 +48,10 @@ CMD_SUPPORT_SKIP_BACKWARD = 32
 
 
 MediaImage = namedtuple('MediaImage', 'url height width')
+
+
+#: A namedtuple for represeting media error messages.
+MediaError = namedtuple('MediaError', 'request_id type reason custom_data')
 
 
 class MediaStatus(object):
@@ -254,6 +264,7 @@ class MediaStatus(object):
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
+    # pylint: disable=too-many-public-methods
     def __init__(self):
         super(MediaController, self).__init__(
             "urn:x-cast:com.google.cast.media")
@@ -262,6 +273,7 @@ class MediaController(BaseController):
         self.status = MediaStatus()
 
         self._status_listeners = []
+        self._load_error_listeners = []
 
     def channel_connected(self):
         """ Called when media channel is connected. Will update status. """
@@ -279,6 +291,11 @@ class MediaController(BaseController):
 
             return True
 
+        elif data[MESSAGE_TYPE] in (TYPE_LOAD_FAILED, TYPE_LOAD_CANCELLED):
+            self._process_load_error(data)
+
+            return True
+
         else:
             return False
 
@@ -286,6 +303,12 @@ class MediaController(BaseController):
         """ Register a listener for new media statusses. A new status will
             call listener.new_media_status(status) """
         self._status_listeners.append(listener)
+
+    def register_load_error_listener(self, listener):
+        """ Register a listener for media load errors. A load error message
+            will call listener.media_load_error(load_error), where load_error
+            is a :class:`.MediaError` object. """
+        self._load_error_listeners.append(listener)
 
     def update_status(self, blocking=False):
         """ Send message to update the status. """
@@ -354,7 +377,7 @@ class MediaController(BaseController):
 
     def skip(self):
         """ Skips rest of the media. Values less then -5 behaved flaky. """
-        self.seek(int(self.status.duration)-5)
+        self.seek(int(self.status.duration) - 5)
 
     def seek(self, position):
         """ Seek the media to a specific location. """
@@ -391,11 +414,42 @@ class MediaController(BaseController):
             except Exception:  # pylint: disable=broad-except
                 pass
 
+    @staticmethod
+    def _parse_load_error(data):
+        """
+        Parses a LOAD_FAILED/LOAD_CANCELLED message and
+        returns a MediaError object.
+
+        :type data: dict
+        :rtype: :class:`.MediaError`
+        """
+        return MediaError(
+            data.get(REQUEST_ID),
+            data.get(MESSAGE_TYPE),  # TYPE_LOAD_FAILED or TYPE_LOAD_CANCELLED
+            data.get(ERROR_REASON, None),  # Will always be None.
+            data.get('customData', None)
+        )
+
+    def _process_load_error(self, data):
+        """ Processes a STATUS message. """
+        load_error = self._parse_load_error(data)
+
+        self.logger.debug("Media Load Error: %s", load_error)
+        self._fire_load_error(load_error)
+
+    def _fire_load_error(self, load_error):
+        """ Tells listeners of a load error. """
+        for listener in self._load_error_listeners:
+            try:
+                listener.media_load_error(load_error)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
     # pylint: disable=too-many-arguments
     def play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,
                    stream_type=STREAM_TYPE_BUFFERED,
-                   metadata=None):
+                   metadata=None, blocking=False):
         """
         Plays media on the Chromecast. Start default media receiver if not
         already started.
@@ -413,6 +467,10 @@ class MediaController(BaseController):
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
+
+        Raises:
+        MediaLoadError: If 'blocking' is True and there is an error loading
+            the media on the Chromecast.
 
         Docs:
         https://developers.google.com/cast/docs/reference/messages#MediaData
@@ -444,10 +502,20 @@ class MediaController(BaseController):
 
             msg['media']['metadata']['images'].append({'url': thumb})
 
-        self.send_message(msg, inc_session_id=True)
+        response = self.send_message(msg, inc_session_id=True,
+                                     wait_for_response=blocking)
+
+        if blocking and response:
+            response_type = response[MESSAGE_TYPE]
+
+            if response_type in (TYPE_LOAD_FAILED, TYPE_LOAD_CANCELLED):
+                media = title or url
+                load_error = self._parse_load_error(response)
+                raise MediaLoadError(media, load_error)
 
     def tear_down(self):
         """ Called when controller is destroyed. """
         super(MediaController, self).tear_down()
 
         self._status_listeners[:] = []
+        self._load_error_listeners[:] = []
