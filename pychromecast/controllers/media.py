@@ -395,7 +395,8 @@ class MediaController(BaseController):
     def play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,
                    stream_type=STREAM_TYPE_BUFFERED,
-                   metadata=None):
+                   metadata=None, subtitles=None, subtitles_lang='en-US',
+                   subtitles_mime='text/vtt', subtitle_id=1):
         """
         Plays media on the Chromecast. Start default media receiver if not
         already started.
@@ -410,6 +411,10 @@ class MediaController(BaseController):
         autoplay: bool - whether the media will automatically play.
         stream_type: str - describes the type of media artifact as one of the
             following: "NONE", "BUFFERED", "LIVE".
+        subtitles: str - url of subtitle file to be shown on chromecast.
+        subtitles_lang: str - language for subtitles.
+        subtitles_mime: str - mimetype of subtitles.
+        subtitle_id: int - id of subtitle to be loaded.
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
@@ -443,7 +448,17 @@ class MediaController(BaseController):
                 msg['media']['metadata']['images'] = []
 
             msg['media']['metadata']['images'].append({'url': thumb})
-
+        if subtitles:
+            sub_msg = {
+                'trackId': subtitle_id,
+                'trackContentId': subtitles,
+                'language': subtitles_lang,
+                'subtype': 'SUBTITLES',
+                'type': 'TEXT',
+                'ttrackContentType': subtitles_mime,
+                'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
+                }
+            msg['media']['tracks'] = sub_msg
         self.send_message(msg, inc_session_id=True)
 
     def tear_down(self):
