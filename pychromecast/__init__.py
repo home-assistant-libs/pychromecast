@@ -54,7 +54,7 @@ def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None):
                                       device=device,
                                       tries=tries, timeout=timeout,
                                       retry_wait=retry_wait))
-        except ChromecastConnectionError:
+        except ChromecastConnectionError:  # noqa
             pass
     return cc_list
 
@@ -163,7 +163,7 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
 
     if len(results) > 1:
         if strict:
-            raise MultipleChromecastsFoundError(
+            raise MultipleChromecastsFoundError(  # noqa
                 'More than one Chromecast was found specifying '
                 'the filter criteria: {}'.format(filters))
         else:
@@ -171,7 +171,7 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
 
     elif not results:
         if strict:
-            raise NoChromecastFoundError(
+            raise NoChromecastFoundError(  # noqa
                 'No Chromecasts matching filter critera were found:'
                 ' {}'.format(filters))
         else:
@@ -240,7 +240,7 @@ class Chromecast(object):
             self.device = get_device_status(self.host)
 
         if not self.device:
-            raise ChromecastConnectionError(
+            raise ChromecastConnectionError(  # noqa
                 "Could not connect to {}:{}".format(self.host, self.port))
 
         self.status = None
