@@ -395,7 +395,7 @@ class MediaController(BaseController):
     def play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,
                    stream_type=STREAM_TYPE_BUFFERED,
-                   metadata=None, subtitles=None, subtitles_lang='en-US', 
+                   metadata=None, subtitles=None, subtitles_lang='en-US',
                    subtitles_mime='text/vtt', subtitle_id=1):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -450,13 +450,13 @@ class MediaController(BaseController):
             msg['media']['metadata']['images'].append({'url': thumb})
         if subtitles:
             sub_msg = {
-                'trackId': subtitle_id, 
+                'trackId': subtitle_id,
                 'trackContentId': subtitles,
-                'language': subtitles_lang, 
+                'language': subtitles_lang,
                 'subtype': 'SUBTITLES',
                 'type': 'TEXT',
-                'ttrackContentType': subtitles_mime, 
-                'name': "%s-%d Subtitle"%(subtitles_lang, subtitle_id)
+                'ttrackContentType': subtitles_mime,
+                'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
                 }
             msg['media']['tracks'] = sub_msg
         self.send_message(msg, inc_session_id=True)
