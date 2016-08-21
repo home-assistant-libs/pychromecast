@@ -411,10 +411,10 @@ class MediaController(BaseController):
         autoplay: bool - whether the media will automatically play.
         stream_type: str - describes the type of media artifact as one of the
             following: "NONE", "BUFFERED", "LIVE".
-        subtitles: str - url of subtitle file to be shown on chromecast
-        subtitles_lang: str - language for subtitles
-        subtitles_mime: str - mimetype of subtitles.    
-        subtitle_id: int - id of subtitle to be loaded
+        subtitles: str - url of subtitle file to be shown on chromecast.
+        subtitles_lang: str - language for subtitles.
+        subtitles_mime: str - mimetype of subtitles.
+        subtitle_id: int - id of subtitle to be loaded.
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
@@ -456,7 +456,7 @@ class MediaController(BaseController):
                 'subtype': 'SUBTITLES',
                 'type': 'TEXT',
                 'ttrackContentType': subtitles_mime, 
-                'name': subtitles_lang + '-' + str(subtitle_id) + ' Subtitle'
+                'name': "%s-%d Subtitle"%(subtitles_lang, subtitle_id)
                 }
             msg['media']['tracks'] = sub_msg
         self.send_message(msg, inc_session_id=True)
