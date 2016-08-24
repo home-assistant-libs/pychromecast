@@ -260,7 +260,7 @@ class MediaController(BaseController):
 
         self.media_session_id = 0
         self.status = MediaStatus()
-
+        self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
     def channel_connected(self):
@@ -423,7 +423,7 @@ class MediaController(BaseController):
         https://developers.google.com/cast/docs/reference/messages#MediaData
         """
 
-        self._socket_client.receiver_controller.launch_app(APP_MEDIA_RECEIVER)
+        self._socket_client.receiver_controller.launch_app(self.app_id)
 
         msg = {
             'media': {
