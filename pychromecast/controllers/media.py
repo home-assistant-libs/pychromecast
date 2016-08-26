@@ -449,15 +449,15 @@ class MediaController(BaseController):
 
             msg['media']['metadata']['images'].append({'url': thumb})
         if subtitles:
-            sub_msg = {
+            sub_msg = [{
                 'trackId': subtitle_id,
                 'trackContentId': subtitles,
                 'language': subtitles_lang,
                 'subtype': 'SUBTITLES',
                 'type': 'TEXT',
-                'ttrackContentType': subtitles_mime,
+                'trackContentType': subtitles_mime,
                 'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
-                }
+                }]
             msg['media']['tracks'] = sub_msg
         self.send_message(msg, inc_session_id=True)
 
