@@ -404,7 +404,10 @@ class Chromecast(object):
         self.socket_client.join(timeout=timeout)
 
     def __del__(self):
-        self.socket_client.stop.set()
+        try:
+            self.socket_client.stop.set()
+        except AttributeError:
+            pass
 
     def __repr__(self):
         txt = u"Chromecast({!r}, port={!r}, device={!r})".format(
