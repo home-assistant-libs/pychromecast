@@ -78,7 +78,13 @@ class InterruptLoop(Exception):
 
 def _json_from_message(message):
     """ Parses a PB2 message into JSON format. """
-    return json.loads(message.payload_utf8)
+    try:
+        return json.loads(message.payload_utf8)
+    except json.decoder.JSONDecodeError:
+        logger = logging.getLogger(__name__)
+        logger.warning("Ignoring invalid json in namespace %s: %s",
+                       message.namespace, message.payload_utf8)
+        return {}
 
 
 def _message_to_string(message, data=None):
