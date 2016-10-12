@@ -12,6 +12,7 @@ STREAM_TYPE_BUFFERED = "BUFFERED"
 STREAM_TYPE_LIVE = "LIVE"
 
 MEDIA_PLAYER_STATE_PLAYING = "PLAYING"
+MEDIA_PLAYER_STATE_BUFFERING = "BUFFERING"
 MEDIA_PLAYER_STATE_PAUSED = "PAUSED"
 MEDIA_PLAYER_STATE_IDLE = "IDLE"
 MEDIA_PLAYER_STATE_UNKNOWN = "UNKNOWN"
@@ -73,7 +74,8 @@ class MediaStatus(object):
     @property
     def player_is_playing(self):
         """ Return True if player is PLAYING. """
-        return self.player_state == MEDIA_PLAYER_STATE_PLAYING
+        return (self.player_state == MEDIA_PLAYER_STATE_PLAYING or
+                self.player_state == MEDIA_PLAYER_STATE_BUFFERING)
 
     @property
     def player_is_paused(self):
