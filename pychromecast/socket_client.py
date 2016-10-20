@@ -80,7 +80,7 @@ def _json_from_message(message):
     """ Parses a PB2 message into JSON format. """
     try:
         return json.loads(message.payload_utf8)
-    except json.decoder.JSONDecodeError:
+    except ValueError:
         logger = logging.getLogger(__name__)
         logger.warning("Ignoring invalid json in namespace %s: %s",
                        message.namespace, message.payload_utf8)
