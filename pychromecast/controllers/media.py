@@ -358,7 +358,7 @@ class MediaController(BaseController):
         """ Skips rest of the media. Values less then -5 behaved flaky. """
         self.seek(int(self.status.duration)-5)
 
-    def seek(self, position,start=True):
+    def seek(self, position, start=True):
         """ Seek the media to a specific location. """
         self._send_command({MESSAGE_TYPE: TYPE_SEEK,
                             "currentTime": position,
