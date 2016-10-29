@@ -461,6 +461,11 @@ class MediaController(BaseController):
                 'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
                 }]
             msg['media']['tracks'] = sub_msg
+            msg['media']['textTrackStyle'] = {
+                'backgroundColor': '#FFFFFF00',
+                'edgeType': 'OUTLINE',
+                'edgeColor': '#000000FF'
+            }
             msg['activeTrackIds'] = [subtitle_id]
         self.send_message(msg, inc_session_id=True)
 
