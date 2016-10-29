@@ -65,6 +65,7 @@ class MediaStatus(object):
         self.media_custom_data = {}
         self.media_metadata = {}
         self.subtitle_tracks = {}
+        self.current_subtitle_tracks = []
 
     @property
     def metadata_type(self):
@@ -228,6 +229,8 @@ class MediaStatus(object):
             'customData', self.media_custom_data)
         self.media_metadata = media_data.get('metadata', self.media_metadata)
         self.subtitle_tracks = media_data.get('tracks', self.subtitle_tracks)
+        self.current_subtitle_tracks = status_data.get(
+            'activeTrackIds', self.current_subtitle_tracks)
 
     def __repr__(self):
         info = {
@@ -461,6 +464,12 @@ class MediaController(BaseController):
                 'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
                 }]
             msg['media']['tracks'] = sub_msg
+            msg['media']['textTrackStyle'] = {
+                'backgroundColor': '#FFFFFF00',
+                'edgeType': 'OUTLINE',
+                'edgeColor': '#000000FF'
+            }
+            msg['activeTrackIds'] = [subtitle_id]
         self.send_message(msg, inc_session_id=True)
 
     def tear_down(self):
