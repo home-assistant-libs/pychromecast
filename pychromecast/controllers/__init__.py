@@ -36,7 +36,7 @@ class BaseController(object):
         return (self._socket_client is not None and
                 self.namespace in self._socket_client.app_namespaces)
 
-    def launch(self, callback_function):
+    def launch(self, callback_function=None):
         """ If set, launches app related to the controller. """
         self._check_registered()
 

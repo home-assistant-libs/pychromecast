@@ -440,10 +440,11 @@ class MediaController(BaseController):
                                                   subtitles_mime, subtitle_id))
 
     def _send_start_play_media(self, url, content_type, title=None, thumb=None,
-                   current_time=0, autoplay=True,
-                   stream_type=STREAM_TYPE_BUFFERED,
-                   metadata=None, subtitles=None, subtitles_lang='en-US',
-                   subtitles_mime='text/vtt', subtitle_id=1):
+                               current_time=0, autoplay=True,
+                               stream_type=STREAM_TYPE_BUFFERED,
+                               metadata=None, subtitles=None,
+                               subtitles_lang='en-US',
+                               subtitles_mime='text/vtt', subtitle_id=1):
 
         msg = {
             'media': {
