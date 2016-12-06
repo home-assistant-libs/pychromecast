@@ -41,7 +41,7 @@ class BaseController(object):
         self._check_registered()
 
         self._socket_client.receiver_controller.launch_app(
-            self.supporting_app_id,callback_function=callback_function)
+            self.supporting_app_id, callback_function=callback_function)
 
     def registered(self, socket_client):
         """ Called when a controller is registered. """

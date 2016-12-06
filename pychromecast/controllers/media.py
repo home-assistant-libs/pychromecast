@@ -429,12 +429,13 @@ class MediaController(BaseController):
         """
 
         self._socket_client.receiver_controller.launch_app(self.app_id,
-                   callback_function=lambda: self._send_start_play_media(url, content_type,
-                                                                         title, thumb,
-                                                                         current_time, autoplay,
-                                                                         stream_type,
-                                                                         metadata, subtitles, subtitles_lang,
-                                                                         subtitles_mime, subtitle_id))
+                   callback_function=lambda response:
+                     self._send_start_play_media(url, content_type,
+                       title, thumb,
+                       current_time, autoplay,
+                       stream_type,
+                       metadata, subtitles, subtitles_lang,
+                       subtitles_mime, subtitle_id))
 
     def _send_start_play_media(self, url, content_type, title=None, thumb=None,
                    current_time=0, autoplay=True,

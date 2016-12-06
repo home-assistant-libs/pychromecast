@@ -407,7 +407,7 @@ class SocketClient(threading.Thread):
         Returns the socket of the connection to use it in you own
         main loop.
         """
-        return self.socket;
+        return self.socket
 
     def _check_connection(self):
         """
@@ -818,8 +818,8 @@ class ReceiverController(BaseController):
 
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
                               APP_ID: app_id},
-                              callback_function=lambda:
-                                                self._block_till_launched(app_id))
+                              callback_function=lambda response:
+                                self._block_till_launched(app_id))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
