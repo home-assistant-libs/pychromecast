@@ -62,7 +62,7 @@ class BaseController(object):
         pass
 
     def send_message(self, data, inc_session_id=False,
-                     callback_function=False):
+                     callback_function=None):
         """
         Send a message on this namespace to the Chromecast.
 

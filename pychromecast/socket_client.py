@@ -66,7 +66,7 @@ ERROR_REASON = 'reason'
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-POLL_TIME_BLOCKING = 5
+POLL_TIME_BLOCKING = 5.00
 POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30
 RETRY_TIME = 5
@@ -752,6 +752,7 @@ class ReceiverController(BaseController):
         self.cast_type = cast_type
         self.blocking = blocking
         self.app_launch_event = threading.Event()
+        self.app_launch_event_function = None
 
         self._status_listeners = []
         self._launch_error_listeners = []
@@ -817,9 +818,9 @@ class ReceiverController(BaseController):
             self.logger.info("Receiver:Launching app %s", app_id)
 
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
-                              APP_ID: app_id},
+                               APP_ID: app_id},
                               callback_function=lambda response:
-                                self._block_till_launched(app_id))
+                              self._block_till_launched(app_id))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
