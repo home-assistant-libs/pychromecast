@@ -589,7 +589,7 @@ class SocketClient(threading.Thread):
             raise NotConnected("Chromecast is connecting...")
 
         if not no_add_request_id and callback_function:
-            callback = self._request_callbacks[request_id] = {
+            self._request_callbacks[request_id] = {
                 'event': threading.Event(),
                 'response': None,
                 'function': callback_function,
