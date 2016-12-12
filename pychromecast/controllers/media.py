@@ -433,7 +433,7 @@ class MediaController(BaseController):
                                  callback_function=lambda response:
                                  self._send_start_play_media(url, content_type,
                                                              title, thumb,
-                                                             current_time
+                                                             current_time,
                                                              autoplay,
                                                              stream_type,
                                                              metadata,
