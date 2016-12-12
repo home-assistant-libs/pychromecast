@@ -330,7 +330,6 @@ class SocketClient(threading.Thread):
 
     def run(self):
         """ Start polling the socket. """
-        # pylint: disable=too-many-branches
         self.heartbeat_controller.reset()
         self._force_recon = False
         logging.debug("Thread started...")
@@ -347,12 +346,14 @@ class SocketClient(threading.Thread):
         Use run_once() in your own main loop after you
         receive something on the socket (get_socket()).
         """
+        # pylint: disable=too-many-branches
+
         try:
             if not self._check_connection():
                 return 0
         except ChromecastConnectionError:
             return 1
-
+                
         # poll the socket
         can_read, _, _ = select.select([self.socket], [], [], self.polltime)
 
@@ -365,12 +366,11 @@ class SocketClient(threading.Thread):
                 if self.stop.is_set():
                     self.logger.info(
                         "Stopped while reading message, disconnecting.")
-                    return 1
                 else:
                     self.logger.exception(
                         "Interruption caught without being stopped %s",
                         exc)
-                    return 1
+                return 1
             except ssl.SSLError as exc:
                 if exc.errno == ssl.SSL_ERROR_EOF:
                     if self.stop.is_set():
