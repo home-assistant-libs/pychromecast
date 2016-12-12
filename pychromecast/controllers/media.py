@@ -428,24 +428,19 @@ class MediaController(BaseController):
         https://developers.google.com/cast/docs/reference/messages#MediaData
         """
 
-        receiver_ctrl = self._socket_client.receiver_controller
-        receiver_ctrl.launch_app(self.app_id,
-                                 callback_function=lambda response:
-                                 self._send_start_play_media(url, content_type,
-                                                             title, thumb,
-                                                             current_time, autoplay,
-                                                             stream_type,
-                                                             metadata, subtitles,
-                                                             subtitles_lang,
-                                                             subtitles_mime,
-                                                             subtitle_id))
+        self._socket_client.receiver_controller.launch_app(self.app_id,
+                   callback_function=lambda: self._send_start_play_media(url, content_type,
+                                                                         title, thumb,
+                                                                         current_time, autoplay,
+                                                                         stream_type,
+                                                                         metadata, subtitles, subtitles_lang,
+                                                                         subtitles_mime, subtitle_id))
 
     def _send_start_play_media(self, url, content_type, title=None, thumb=None,
-                               current_time=0, autoplay=True,
-                               stream_type=STREAM_TYPE_BUFFERED,
-                               metadata=None, subtitles=None,
-                               subtitles_lang='en-US',
-                               subtitles_mime='text/vtt', subtitle_id=1):
+                   current_time=0, autoplay=True,
+                   stream_type=STREAM_TYPE_BUFFERED,
+                   metadata=None, subtitles=None, subtitles_lang='en-US',
+                   subtitles_mime='text/vtt', subtitle_id=1):
 
         msg = {
             'media': {

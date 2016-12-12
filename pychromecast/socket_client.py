@@ -66,7 +66,7 @@ ERROR_REASON = 'reason'
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-POLL_TIME_BLOCKING = 5.00
+POLL_TIME_BLOCKING = 5
 POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30
 RETRY_TIME = 5
@@ -156,12 +156,12 @@ class SocketClient(threading.Thread):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         self.blocking = kwargs.pop('blocking', True)
-
+        
         if self.blocking:
             self.polltime = POLL_TIME_BLOCKING
         else:
             self.polltime = POLL_TIME_NON_BLOCKING
-
+            
         super(SocketClient, self).__init__()
 
         self.daemon = True
@@ -407,7 +407,7 @@ class SocketClient(threading.Thread):
         Returns the socket of the connection to use it in you own
         main loop.
         """
-        return self.socket
+        return self.socket;
 
     def _check_connection(self):
         """
@@ -589,7 +589,7 @@ class SocketClient(threading.Thread):
             raise NotConnected("Chromecast is connecting...")
 
         if not no_add_request_id and callback_function:
-            self._request_callbacks[request_id] = {
+            callback = self._request_callbacks[request_id] = {
                 'event': threading.Event(),
                 'response': None,
                 'function': callback_function,
@@ -752,7 +752,6 @@ class ReceiverController(BaseController):
         self.cast_type = cast_type
         self.blocking = blocking
         self.app_launch_event = threading.Event()
-        self.app_launch_event_function = None
 
         self._status_listeners = []
         self._launch_error_listeners = []
@@ -800,30 +799,31 @@ class ReceiverController(BaseController):
 
             Will only launch if it is not currently running unless
             force_launch=True. """
-        # If this is called too quickly after launch, we don't have the info.
-        # We need the info if we are not force launching to check running app.
-        self.app_to_launch = app_id
-        self.app_launch_event.clear()
-        self.app_launch_event_function = callback_function
-        self.launch_failure = None
 
         if not force_launch and self.app_id is None:
-            self.update_status(lambda:
-                               self._send_launch_message(app_id, force_launch))
+            self.update_status(lambda response:
+                               self._send_launch_message(app_id, force_launch,
+                                                         callback_function))
         else:
-            self._send_launch_message(app_id, force_launch)
+            self._send_launch_message(app_id, force_launch, callback_function)
 
-    def _send_launch_message(self, app_id, force_launch=False):
+    def _send_launch_message(self, app_id, force_launch=False, callback_function=False):
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
+            
+            self.app_to_launch = app_id
+            self.app_launch_event.clear()
+            self.app_launch_event_function = callback_function
+            self.launch_failure = None
 
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
-                               APP_ID: app_id},
+                              APP_ID: app_id},
                               callback_function=lambda response:
-                              self._block_till_launched(app_id))
+                                                self._block_till_launched(app_id))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
+            callback_function()
 
     def _block_till_launched(self, app_id):
         if self.blocking:
