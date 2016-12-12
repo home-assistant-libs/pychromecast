@@ -130,7 +130,7 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
     """
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                      timeout=timeout, blocking,
+                                      timeout=timeout, blocking=blocking,
                                       **filters)}
 
 

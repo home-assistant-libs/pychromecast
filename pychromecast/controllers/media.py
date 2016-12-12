@@ -433,9 +433,11 @@ class MediaController(BaseController):
                                  callback_function=lambda response:
                                  self._send_start_play_media(url, content_type,
                                                              title, thumb,
-                                                             current_time, autoplay,
+                                                             current_time
+                                                             autoplay,
                                                              stream_type,
-                                                             metadata, subtitles,
+                                                             metadata,
+                                                             subtitles,
                                                              subtitles_lang,
                                                              subtitles_mime,
                                                              subtitle_id))
@@ -443,7 +445,8 @@ class MediaController(BaseController):
     def _send_start_play_media(self, url, content_type, title=None, thumb=None,
                                current_time=0, autoplay=True,
                                stream_type=STREAM_TYPE_BUFFERED,
-                               metadata=None, subtitles=None, subtitles_lang='en-US',
+                               metadata=None, subtitles=None,
+                               subtitles_lang='en-US',
                                subtitles_mime='text/vtt', subtitle_id=1):
 
         msg = {
