@@ -1,4 +1,3 @@
-
 """
 PyChromecast: remote control your Chromecast
 """
@@ -62,7 +61,8 @@ def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
     return cc_list
 
 
-def get_chromecasts(tries=None, retry_wait=None, timeout=None, blocking=True, **filters):
+def get_chromecasts(tries=None, retry_wait=None, timeout=None,
+                    blocking=True, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -116,7 +116,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None, blocking=True, **
 
 
 def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
-                            **filters):
+                            blocking=True, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -130,7 +130,7 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
     """
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                      timeout=timeout,
+                                      timeout=timeout, blocking,
                                       **filters)}
 
 

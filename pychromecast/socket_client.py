@@ -66,7 +66,7 @@ ERROR_REASON = 'reason'
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-POLL_TIME_BLOCKING = 5
+POLL_TIME_BLOCKING = 5.0
 POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30
 RETRY_TIME = 5
@@ -156,12 +156,12 @@ class SocketClient(threading.Thread):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         self.blocking = kwargs.pop('blocking', True)
-        
+
         if self.blocking:
             self.polltime = POLL_TIME_BLOCKING
         else:
             self.polltime = POLL_TIME_NON_BLOCKING
-            
+
         super(SocketClient, self).__init__()
 
         self.daemon = True
@@ -407,7 +407,7 @@ class SocketClient(threading.Thread):
         Returns the socket of the connection to use it in you own
         main loop.
         """
-        return self.socket;
+        return self.socket
 
     def _check_connection(self):
         """
@@ -589,7 +589,7 @@ class SocketClient(threading.Thread):
             raise NotConnected("Chromecast is connecting...")
 
         if not no_add_request_id and callback_function:
-            callback = self._request_callbacks[request_id] = {
+            self._request_callbacks[request_id] = {
                 'event': threading.Event(),
                 'response': None,
                 'function': callback_function,
@@ -807,17 +807,18 @@ class ReceiverController(BaseController):
         else:
             self._send_launch_message(app_id, force_launch, callback_function)
 
-    def _send_launch_message(self, app_id, force_launch=False, callback_function=False):
+    def _send_launch_message(self, app_id, force_launch=False,
+                             callback_function=False):
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
-            
+
             self.app_to_launch = app_id
             self.app_launch_event.clear()
             self.app_launch_event_function = callback_function
             self.launch_failure = None
 
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
-                              APP_ID: app_id},
+                               APP_ID: app_id},
                               callback_function=lambda response:
                                                 self._block_till_launched(app_id))
         else:
