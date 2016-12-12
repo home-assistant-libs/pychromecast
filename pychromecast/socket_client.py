@@ -353,7 +353,7 @@ class SocketClient(threading.Thread):
                 return 0
         except ChromecastConnectionError:
             return 1
-                
+
         # poll the socket
         can_read, _, _ = select.select([self.socket], [], [], self.polltime)
 
