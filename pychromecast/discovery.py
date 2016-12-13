@@ -1,5 +1,4 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
-import time
 from uuid import UUID
 
 import six
@@ -10,8 +9,9 @@ DISCOVER_TIMEOUT = 5
 
 class CastListener(object):
     """Zeroconf Cast Services collection."""
-    def __init__(self):
+    def __init__(self, callback=None):
         self.services = {}
+        self.callback = callback
 
     @property
     def count(self):
@@ -65,26 +65,51 @@ class CastListener(object):
         self.services[name] = (host, service.port, uuid, model_name,
                                friendly_name)
 
+        if self.callback:
+            self.callback(name)
+
+
+def start_discovery(callback=None):
+    """
+    Start discovering chromecasts on the network.
+
+    This method will start discovering chromecasts on a separate thread. When
+    a chromecast is discovered, the callback will be called with the
+    discovered chromecast's zeroconf name. This is the dictionary key to find
+    the chromecast metadata in listener.services.
+
+    This method returns the CastListener object and the zeroconf ServiceBrowser
+    object. The CastListener object will contain information for the discovered
+    chromecasts. To stop discovery, call the stop_discovery method with the
+    ServiceBrowser object.
+    """
+    listener = CastListener(callback)
+    return listener, \
+        ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+
+
+def stop_discovery(browser):
+    """Stop the chromecast discovery thread."""
+    browser.cancel()
+    browser.zc.close()
+
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
+    from threading import Event
     try:
-        zconf = Zeroconf()
-        listener = CastListener()
-        browser = ServiceBrowser(zconf, "_googlecast._tcp.local.", listener)
+        # pylint: disable=unused-argument
+        def callback(name):
+            """Called when zeroconf has discovered a new chromecast."""
+            if max_devices is not None and listener.count >= max_devices:
+                discover_complete.set()
 
-        if max_devices is None:
-            time.sleep(timeout)
-            return listener.devices
+        discover_complete = Event()
+        listener, browser = start_discovery(callback)
 
-        else:
-            start = time.time()
+        # Wait for the timeout or the maximum number of devices
+        discover_complete.wait(timeout)
 
-            while (time.time() - start < timeout and
-                   listener.count < max_devices):
-                time.sleep(.1)
-
-            return listener.devices
+        return listener.devices
     finally:
-        browser.cancel()
-        zconf.close()
+        stop_discovery(browser)
