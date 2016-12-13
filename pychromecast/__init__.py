@@ -19,7 +19,7 @@ from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 __all__ = (
     '__version__', '__version_info__',
-    'get_chromecasts', 'get_chromecasts_as_dict', 'get_chromecast',
+    'get_chromecasts', 'get_chromecast',
     'Chromecast'
 )
 __version_info__ = ('0', '7', '6')
@@ -166,25 +166,6 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
 
         listener, browser = start_discovery(internal_callback)
         return internal_stop
-
-
-def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
-                            blocking=True, **filters):
-    """
-    Returns a dictionary of chromecasts with the friendly name as
-    the key.  The value is the pychromecast object itself.
-
-    Tries is specified if you want to limit the number of times the
-    underlying socket associated with your Chromecast objects will
-    retry connecting if connection is lost or it fails to connect
-    in the first place. The number of seconds spent between each retry
-    can be defined by passing the retry_wait parameter, the default is
-    to wait 5 seconds.
-    """
-    return {cc.device.friendly_name: cc
-            for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                      timeout=timeout, blocking=blocking,
-                                      **filters)}
 
 
 # pylint: disable=too-many-arguments,too-many-branches

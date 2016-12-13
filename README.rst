@@ -40,7 +40,7 @@ How to use
     >> import time
     >> import pychromecast
 
-    >> pychromecast.get_chromecasts_as_dict().keys()
+    >> [cc.device.friendly_name for cc in pychromecast.get_chromecasts()]
     ['Dev', 'Living Room', 'Den', 'Bedroom']
 
     >> cast = pychromecast.get_chromecast(friendly_name="Living Room")
