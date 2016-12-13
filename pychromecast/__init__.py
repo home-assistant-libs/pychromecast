@@ -169,10 +169,16 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
 
 
 def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
-                            blocking=True, **filters):
+                            blocking=True, callback=None, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
+
+    If blocking = True, returns a dictionary of discovered chromecast devices.
+    If blocking = False, triggers a callback for each discovered chromecast,
+                         passing the dictionary of all discovered chromecasts.
+                         Returns a function which can be executed to stop
+                         discovery.
 
     Tries is specified if you want to limit the number of times the
     underlying socket associated with your Chromecast objects will
@@ -181,10 +187,28 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
     can be defined by passing the retry_wait parameter, the default is
     to wait 5 seconds.
     """
-    return {cc.device.friendly_name: cc
-            for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                      timeout=timeout, blocking=blocking,
-                                      **filters)}
+    if blocking:
+        # Thread blocking chromecast discovery
+        return {cc.device.friendly_name: cc
+                for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                          timeout=timeout, blocking=blocking,
+                                          **filters)}
+    else:
+        # Callback based chromecast discovery
+        if not callable(callback):
+            raise ValueError(
+                "Nonblocking discovery requires a callback function.")
+
+        cc_dict = {}
+
+        def internal_callback(chromecast):
+            """Updates the cc dict and calls parent callback."""
+            cc_dict[chromecast.device.friendly_name] = chromecast
+            callback(cc_dict.copy())
+
+        return get_chromecasts(tries=tries, retry_wait=retry_wait,
+                               timeout=timeout, blocking=blocking,
+                               callback=internal_callback, **filters)
 
 
 # pylint: disable=too-many-arguments,too-many-branches
