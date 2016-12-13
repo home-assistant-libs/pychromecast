@@ -15,32 +15,32 @@ import logging
 import pychromecast
 
 """
-Put this code into your startup/init code.
-This one is the only blocking part.
-"""
-def initialize_chromecast():
-    print("Initialize Chromecast (blocking)...takes some time")
-    cast = pychromecast.get_chromecast(friendly_name="Wohnzimmer",
-                                       blocking=False)
-    return cast
-
-"""
 Check for cast.socket_client.get_socket() and
 handle it with cast.socket_client.run_once()
 """
-def your_main_loop(cast):
+def your_main_loop():
     t = 1
+    cast = None
+    def callback(chromecast):
+        nonlocal cast
+        cast = chromecast
+
+    pychromecast.get_chromecast(blocking=False, callback=callback)
+
     while True:
-        polltime = 0.1
-        can_read, _, _ = select.select([cast.socket_client.get_socket()], [], [], polltime)
-        if can_read:
-            #received something on the socket, handle it with run_once()
-            cast.socket_client.run_once()
-        do_actions(cast, t)
+        if cast:
+            polltime = 0.1
+            can_read, _, _ = select.select([cast.socket_client.get_socket()], [], [], polltime)
+            if can_read:
+                #received something on the socket, handle it with run_once()
+                cast.socket_client.run_once()
+            do_actions(cast, t)
+            t += 1
+            if(t > 50):
+               break
+        else:
+            print("=> Waiting for cast discovery...")
         time.sleep(1)
-        t += 1
-        if(t > 50):
-           break
 
 """
 Your code which is called by main loop
@@ -77,6 +77,5 @@ if '--show-debug' in sys.argv:
 else:
     logging.basicConfig(level=logging.INFO)
 
-cast = initialize_chromecast()
-your_main_loop(cast)
+your_main_loop()
 
