@@ -49,6 +49,7 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                       timeout=timeout, retry_wait=retry_wait,
                       blocking=blocking)
 
+
 def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
                          blocking=True):
     """
@@ -102,7 +103,8 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
 
     if blocking:
         # Thread blocking chromecast discovery
-        cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout, blocking))
+        cc_list = set(_get_all_chromecasts(
+            tries, retry_wait, timeout, blocking))
         excluded_cc = set()
 
         if not filters:
