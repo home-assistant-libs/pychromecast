@@ -67,6 +67,7 @@ def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
     return cc_list
 
 
+# pylint: disable=too-many-locals
 def get_chromecasts(tries=None, retry_wait=None, timeout=None,
                     blocking=True, callback=None, **filters):
     """
@@ -158,6 +159,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
             callback(chromecast)
 
         def internal_stop():
+            """Stops discovery of new chromecasts."""
             stop_discovery(browser)
 
         listener, browser = start_discovery(internal_callback)
@@ -183,6 +185,7 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
                                       **filters)}
 
 
+# pylint: disable=too-many-arguments,too-many-branches
 def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
                    blocking=True, callback=None, **filters):
     """
@@ -252,12 +255,13 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
                 "Strict mode not valid for non-blocking discovery.")
 
         def internal_callback(chromecast):
+            """Calls external callback and stops further discovery."""
             callback(chromecast)
             stop()
 
         stop = get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                  timeout=timeout, blocking=blocking,
-                                  callback=internal_callback, **filters)
+                               timeout=timeout, blocking=blocking,
+                               callback=internal_callback, **filters)
         return stop
 
 
