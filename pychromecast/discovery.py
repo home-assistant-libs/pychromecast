@@ -90,7 +90,6 @@ def start_discovery(callback=None):
 
 def stop_discovery(browser):
     """Stop the chromecast discovery thread."""
-    browser.cancel()
     browser.zc.close()
 
 

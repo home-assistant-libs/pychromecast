@@ -12,7 +12,7 @@ import threading
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
-from .discovery import discover_chromecasts
+from .discovery import discover_chromecasts, start_discovery, stop_discovery
 from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
     CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
@@ -31,6 +31,25 @@ IGNORE_CEC = []
 NON_UNICODE_REPR = sys.version_info < (3, )
 
 
+def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
+                              blocking=True):
+    """Creates a Chromecast object from a zeroconf host."""
+    # Build device status from the mDNS info, this information is
+    # the primary source and the remaining will be fetched
+    # later on.
+    ip_address, port, uuid, model_name, friendly_name = host
+    cast_type = CAST_TYPES.get(model_name.lower(),
+                               CAST_TYPE_CHROMECAST)
+    device = DeviceStatus(
+        friendly_name=friendly_name, model_name=model_name,
+        manufacturer=None, api_version=None,
+        uuid=uuid, cast_type=cast_type,
+    )
+    return Chromecast(host=ip_address, port=port, device=device, tries=tries,
+                      timeout=timeout, retry_wait=retry_wait,
+                      blocking=blocking)
+
+
 def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
                          blocking=True):
     """
@@ -39,33 +58,27 @@ def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
     """
     hosts = discover_chromecasts()
     cc_list = []
-    for ip_address, port, uuid, model_name, friendly_name in hosts:
+    for host in hosts:
         try:
-            # Build device status from the mDNS info, this information is
-            # the primary source and the remaining will be fetched
-            # later on.
-            cast_type = CAST_TYPES.get(model_name.lower(),
-                                       CAST_TYPE_CHROMECAST)
-            device = DeviceStatus(
-                friendly_name=friendly_name, model_name=model_name,
-                manufacturer=None, api_version=None,
-                uuid=uuid, cast_type=cast_type,
-            )
-            cc_list.append(Chromecast(host=ip_address, port=port,
-                                      device=device,
-                                      tries=tries, timeout=timeout,
-                                      retry_wait=retry_wait,
-                                      blocking=blocking))
+            cc_list.append(_get_chromecast_from_host(
+                host, tries=tries, retry_wait=retry_wait, timeout=timeout,
+                blocking=blocking))
         except ChromecastConnectionError:  # noqa
             pass
     return cc_list
 
 
+# pylint: disable=too-many-locals
 def get_chromecasts(tries=None, retry_wait=None, timeout=None,
-                    blocking=True, **filters):
+                    blocking=True, callback=None, **filters):
     """
-    Searches the network and returns a list of Chromecast objects.
+    Searches the network for chromecast devices.
     Filter is a list of options to filter the chromecasts by.
+
+    If blocking = True, returns a list of discovered chromecast devices.
+    If blocking = False, triggers a callback for each discovered chromecast,
+                         and returns a function which can be executed to stop
+                         discovery.
 
     ex: get_chromecasts(friendly_name="Living Room")
 
@@ -88,31 +101,71 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
     """
     logger = logging.getLogger(__name__)
 
-    cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout, blocking))
-    excluded_cc = set()
+    if blocking:
+        # Thread blocking chromecast discovery
+        cc_list = set(_get_all_chromecasts(
+            tries, retry_wait, timeout, blocking))
+        excluded_cc = set()
 
-    if not filters:
-        return list(cc_list)
+        if not filters:
+            return list(cc_list)
 
-    if 'ip' in filters:
-        for chromecast in cc_list:
-            if chromecast.host != filters['ip']:
-                excluded_cc.add(chromecast)
-        filters.pop('ip')
-
-    for key, val in filters.items():
-        for chromecast in cc_list:
-            for tup in [chromecast.device, chromecast.status]:
-                if hasattr(tup, key) and val != getattr(tup, key):
+        if 'ip' in filters:
+            for chromecast in cc_list:
+                if chromecast.host != filters['ip']:
                     excluded_cc.add(chromecast)
+            filters.pop('ip')
 
-    filtered_cc = cc_list - excluded_cc
+        for key, val in filters.items():
+            for chromecast in cc_list:
+                for tup in [chromecast.device, chromecast.status]:
+                    if hasattr(tup, key) and val != getattr(tup, key):
+                        excluded_cc.add(chromecast)
 
-    for cast in excluded_cc:
-        logger.debug("Stopping excluded chromecast %s", cast)
-        cast.socket_client.stop.set()
+        filtered_cc = cc_list - excluded_cc
 
-    return list(filtered_cc)
+        for cast in excluded_cc:
+            logger.debug("Stopping excluded chromecast %s", cast)
+            cast.socket_client.stop.set()
+
+        return list(filtered_cc)
+    else:
+        # Callback based chromecast discovery
+        if not callable(callback):
+            raise ValueError(
+                "Nonblocking discovery requires a callback function.")
+
+        def internal_callback(name):
+            """Called when zeroconf has discovered a new chromecast."""
+            try:
+                chromecast = _get_chromecast_from_host(
+                    listener.services[name], tries=tries,
+                    retry_wait=retry_wait, timeout=timeout, blocking=blocking)
+            except ChromecastConnectionError:  # noqa
+                return
+
+            if not filters:
+                callback(chromecast)
+                return
+
+            if 'ip' in filters:
+                if chromecast.host != filters['ip']:
+                    return
+                filters.pop('ip')
+
+            for key, val in filters.items():
+                for tup in [chromecast.device, chromecast.status]:
+                    if hasattr(tup, key) and val != getattr(tup, key):
+                        return
+
+            callback(chromecast)
+
+        def internal_stop():
+            """Stops discovery of new chromecasts."""
+            stop_discovery(browser)
+
+        listener, browser = start_discovery(internal_callback)
+        return internal_stop
 
 
 def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
@@ -134,15 +187,22 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
                                       **filters)}
 
 
+# pylint: disable=too-many-arguments,too-many-branches
 def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
-                   blocking=True, **filters):
+                   blocking=True, callback=None, **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
 
     Returns a Chromecast matching exactly the fitler specified.
+    If blocking = True, returns a Chromecast matching exactly the filter
+                        specified.
+    If blocking = False, triggers a callback when a matching Chromecast is
+                         and returns a function which can be executed to stop
+                         discovery. Callback will only be triggered once.
 
-    If strict, return one and only one chromecast
+    If strict, return one and only one chromecast. Not valid for non-blocking
+    discovery.
 
     Tries is specified if you want to limit the number of times the
     underlying socket associated with your Chromecast objects will
@@ -153,36 +213,58 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
 
     :type retry_wait: float or None
     """
+    if blocking:
+        # Thread blocking chromecast discovery
 
-    # If we have filters or are operating in strict mode we have to scan
-    # for all Chromecasts to ensure there is only 1 matching chromecast.
-    # If no filters given and not strict just use the first dicsovered one.
-    if filters or strict:
-        results = get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                  timeout=timeout, blocking=blocking,
-                                  **filters)
-    else:
-        results = _get_all_chromecasts(tries, retry_wait,
-                                       blocking=blocking)
+        # If we have filters or are operating in strict mode we have to scan
+        # for all Chromecasts to ensure there is only 1 matching chromecast.
+        # If no filters given and not strict just use the first dicsovered one.
+        if filters or strict:
+            results = get_chromecasts(tries=tries, retry_wait=retry_wait,
+                                      timeout=timeout, blocking=blocking,
+                                      **filters)
+        else:
+            results = _get_all_chromecasts(tries, retry_wait,
+                                           blocking=blocking)
 
-    if len(results) > 1:
-        if strict:
-            raise MultipleChromecastsFoundError(  # noqa
-                'More than one Chromecast was found specifying '
-                'the filter criteria: {}'.format(filters))
+        if len(results) > 1:
+            if strict:
+                raise MultipleChromecastsFoundError(  # noqa
+                    'More than one Chromecast was found specifying '
+                    'the filter criteria: {}'.format(filters))
+            else:
+                return results[0]
+
+        elif not results:
+            if strict:
+                raise NoChromecastFoundError(  # noqa
+                    'No Chromecasts matching filter critera were found:'
+                    ' {}'.format(filters))
+            else:
+                return None
+
         else:
             return results[0]
 
-    elif not results:
-        if strict:
-            raise NoChromecastFoundError(  # noqa
-                'No Chromecasts matching filter critera were found:'
-                ' {}'.format(filters))
-        else:
-            return None
-
     else:
-        return results[0]
+        # Callback based chromecast discovery
+        if not callable(callback):
+            raise ValueError(
+                "Nonblocking discovery requires a callback function.")
+
+        if strict:
+            raise ValueError(
+                "Strict mode not valid for non-blocking discovery.")
+
+        def internal_callback(chromecast):
+            """Calls external callback and stops further discovery."""
+            callback(chromecast)
+            stop()
+
+        stop = get_chromecasts(tries=tries, retry_wait=retry_wait,
+                               timeout=timeout, blocking=blocking,
+                               callback=internal_callback, **filters)
+        return stop
 
 
 # pylint: disable=too-many-instance-attributes
