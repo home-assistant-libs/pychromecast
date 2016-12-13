@@ -36,12 +36,12 @@ class BaseController(object):
         return (self._socket_client is not None and
                 self.namespace in self._socket_client.app_namespaces)
 
-    def launch(self):
+    def launch(self, callback_function=None):
         """ If set, launches app related to the controller. """
         self._check_registered()
 
         self._socket_client.receiver_controller.launch_app(
-            self.supporting_app_id)
+            self.supporting_app_id, callback_function=callback_function)
 
     def registered(self, socket_client):
         """ Called when a controller is registered. """
@@ -62,7 +62,7 @@ class BaseController(object):
         pass
 
     def send_message(self, data, inc_session_id=False,
-                     wait_for_response=False):
+                     callback_function=None):
         """
         Send a message on this namespace to the Chromecast.
 
@@ -81,7 +81,7 @@ class BaseController(object):
                      "application.").format(self.namespace))
 
         return self._message_func(
-            self.namespace, data, inc_session_id, wait_for_response)
+            self.namespace, data, inc_session_id, callback_function)
 
     # pylint: disable=unused-argument,no-self-use
     def receive_message(self, message, data):

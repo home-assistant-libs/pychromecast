@@ -31,7 +31,8 @@ IGNORE_CEC = []
 NON_UNICODE_REPR = sys.version_info < (3, )
 
 
-def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None):
+def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None,
+                         blocking=True):
     """
     Returns a list of all chromecasts on the network as PyChromecast
     objects.
@@ -53,13 +54,15 @@ def _get_all_chromecasts(tries=None, retry_wait=None, timeout=None):
             cc_list.append(Chromecast(host=ip_address, port=port,
                                       device=device,
                                       tries=tries, timeout=timeout,
-                                      retry_wait=retry_wait))
+                                      retry_wait=retry_wait,
+                                      blocking=blocking))
         except ChromecastConnectionError:  # noqa
             pass
     return cc_list
 
 
-def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
+def get_chromecasts(tries=None, retry_wait=None, timeout=None,
+                    blocking=True, **filters):
     """
     Searches the network and returns a list of Chromecast objects.
     Filter is a list of options to filter the chromecasts by.
@@ -85,7 +88,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
     """
     logger = logging.getLogger(__name__)
 
-    cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout))
+    cc_list = set(_get_all_chromecasts(tries, retry_wait, timeout, blocking))
     excluded_cc = set()
 
     if not filters:
@@ -113,7 +116,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None, **filters):
 
 
 def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
-                            **filters):
+                            blocking=True, **filters):
     """
     Returns a dictionary of chromecasts with the friendly name as
     the key.  The value is the pychromecast object itself.
@@ -127,12 +130,12 @@ def get_chromecasts_as_dict(tries=None, retry_wait=None, timeout=None,
     """
     return {cc.device.friendly_name: cc
             for cc in get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                      timeout=timeout,
+                                      timeout=timeout, blocking=blocking,
                                       **filters)}
 
 
 def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
-                   **filters):
+                   blocking=True, **filters):
     """
     Same as get_chromecasts but only if filter matches exactly one
     ChromeCast.
@@ -156,10 +159,11 @@ def get_chromecast(strict=False, tries=None, retry_wait=None, timeout=None,
     # If no filters given and not strict just use the first dicsovered one.
     if filters or strict:
         results = get_chromecasts(tries=tries, retry_wait=retry_wait,
-                                  timeout=timeout,
+                                  timeout=timeout, blocking=blocking,
                                   **filters)
     else:
-        results = _get_all_chromecasts(tries, retry_wait)
+        results = _get_all_chromecasts(tries, retry_wait,
+                                       blocking=blocking)
 
     if len(results) > 1:
         if strict:
@@ -204,6 +208,7 @@ class Chromecast(object):
         tries = kwargs.pop('tries', None)
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
+        blocking = kwargs.pop('blocking', True)
 
         self.logger = logging.getLogger(__name__)
 
@@ -248,7 +253,8 @@ class Chromecast(object):
 
         self.socket_client = socket_client.SocketClient(
             host, port=port, cast_type=self.device.cast_type,
-            tries=tries, timeout=timeout, retry_wait=retry_wait)
+            tries=tries, timeout=timeout, retry_wait=retry_wait,
+            blocking=blocking)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
@@ -265,7 +271,8 @@ class Chromecast(object):
         self.register_connection_listener = \
             self.socket_client.register_connection_listener
 
-        self.socket_client.start()
+        if blocking:
+            self.socket_client.start()
 
     @property
     def ignore_cec(self):

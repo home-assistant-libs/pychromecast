@@ -35,8 +35,12 @@ class YouTubeController(BaseController):
 
         Only works if there is no video playing.
         """
-        self.launch()
+        self.launch(lambda reponse: self.start_play(youtube_id))
 
+    def start_play(self, youtube_id):
+        """
+        Sends the play message to the YouTube app.
+        """
         msg = {
             "type": "flingVideo",
             "data": {
