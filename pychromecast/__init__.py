@@ -360,7 +360,6 @@ class Chromecast(object):
         """ Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
-        import sys
         return self.set_volume(self.status.volume_level - abs(delta))
 
     def wait(self, timeout=None):
