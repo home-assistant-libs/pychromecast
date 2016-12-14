@@ -70,8 +70,6 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
     can be defined by passing the retry_wait parameter, the default is
     to wait 5 seconds.
     """
-    logger = logging.getLogger(__name__)
-
     if blocking:
         # Thread blocking chromecast discovery
         hosts = discover_chromecasts()
