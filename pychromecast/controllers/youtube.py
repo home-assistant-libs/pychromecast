@@ -36,6 +36,7 @@ class YouTubeController(BaseController):
         Only works if there is no video playing.
         """
         def callback():
+            """Plays requested video after app launched."""
             self.start_play(youtube_id)
 
         self.launch(callback)
