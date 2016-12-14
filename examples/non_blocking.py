@@ -24,8 +24,9 @@ def your_main_loop():
     def callback(chromecast):
         nonlocal cast
         cast = chromecast
+        stop_discovery()
 
-    pychromecast.get_chromecast(blocking=False, callback=callback)
+    stop_discovery = pychromecast.get_chromecasts(blocking=False, callback=callback)
 
     while True:
         if cast:

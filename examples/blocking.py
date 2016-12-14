@@ -16,7 +16,12 @@ import pychromecast.controllers.youtube as youtube
 if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
 
-cast = pychromecast.get_chromecast()
+casts = pychromecast.get_chromecasts()
+if len(casts) == 0:
+    print("No Devices Found")
+    exit()
+cast = casts[0]
+
 yt = youtube.YouTubeController()
 cast.register_handler(yt)
 
