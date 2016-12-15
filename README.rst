@@ -40,10 +40,11 @@ How to use
     >> import time
     >> import pychromecast
 
-    >> [cc.device.friendly_name for cc in pychromecast.get_chromecasts()]
+    >> chromecasts = pychromecast.get_chromecasts()
+    >> [cc.device.friendly_name for cc in chromecasts]
     ['Dev', 'Living Room', 'Den', 'Bedroom']
 
-    >> cast = pychromecast.get_chromecast(friendly_name="Living Room")
+    >> cast = next(cc for cc in chromecasts if cc.device.friendly_name == "Living Room")
     >> # Wait for cast device to be ready
     >> cast.wait()
     >> print(cast.device)
