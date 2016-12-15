@@ -355,7 +355,8 @@ class Chromecast(object):
 
         """
         if delta <= 0:
-            raise ValueError("volume delta must be greater than zero, not {}".format(delta))
+            raise ValueError(
+                "volume delta must be greater than zero, not {}".format(delta))
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
@@ -363,7 +364,8 @@ class Chromecast(object):
         Returns the new volume.
         """
         if delta <= 0:
-            raise ValueError("volume delta must be greater than zero, not {}".format(delta))
+            raise ValueError(
+                "volume delta must be greater than zero, not {}".format(delta))
         return self.set_volume(self.status.volume_level - delta)
 
     def wait(self, timeout=None):
