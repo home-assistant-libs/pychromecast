@@ -3,6 +3,7 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 from collections import namedtuple
+import threading
 
 from ..config import APP_MEDIA_RECEIVER
 from . import BaseController
@@ -256,6 +257,7 @@ class MediaStatus(object):
         return '<MediaStatus {}>'.format(info)
 
 
+# pylint: disable=too-many-public-methods
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
@@ -265,6 +267,7 @@ class MediaController(BaseController):
 
         self.media_session_id = 0
         self.status = MediaStatus()
+        self.status_event = threading.Event()
         self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
@@ -300,6 +303,9 @@ class MediaController(BaseController):
     def _send_command(self, command):
         """ Send a command to the Chromecast on media channel. """
         if self.status is None or self.status.media_session_id is None:
+            self.logger.warning(
+                "%s command requested but no session is active.",
+                command[MESSAGE_TYPE])
             return
 
         command['mediaSessionId'] = self.status.media_session_id
@@ -381,11 +387,26 @@ class MediaController(BaseController):
             "activeTrackIds": []
         })
 
+    def wait(self, timeout=None):
+        """
+        Waits until the media status has been updated at least once. The
+        controller is ready as soon a status message has been received.
+
+        If the status has already been received then the method returns
+        immediately.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        """
+        self.status_event.wait(timeout=timeout)
+
     def _process_media_status(self, data):
         """ Processes a STATUS message. """
         self.status.update(data)
 
         self.logger.debug("Media:Received status %s", data)
+        self.status_event.set()
         self._fire_status_changed()
 
     def _fire_status_changed(self):
