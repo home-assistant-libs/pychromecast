@@ -300,13 +300,16 @@ class MediaController(BaseController):
         self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS},
                           callback_function=callback_function_param)
 
-    def _send_command(self, command):
+    def _send_command(self, command, blocking=True, timeout=None):
         """ Send a command to the Chromecast on media channel. """
         if self.status is None or self.status.media_session_id is None:
-            self.logger.warning(
-                "%s command requested but no session is active.",
-                command[MESSAGE_TYPE])
-            return
+            if blocking:
+                self.wait(timeout)
+            else:
+                self.logger.warning(
+                    "%s command requested but no session is active.",
+                    command[MESSAGE_TYPE])
+                return
 
         command['mediaSessionId'] = self.status.media_session_id
 
@@ -347,17 +350,17 @@ class MediaController(BaseController):
 
         return images[0].url if images and len(images) > 0 else None
 
-    def play(self):
+    def play(self, blocking=True, timeout=None):
         """ Send the PLAY command. """
-        self._send_command({MESSAGE_TYPE: TYPE_PLAY})
+        self._send_command({MESSAGE_TYPE: TYPE_PLAY}, blocking, timeout)
 
-    def pause(self):
+    def pause(self, blocking=True, timeout=None):
         """ Send the PAUSE command. """
-        self._send_command({MESSAGE_TYPE: TYPE_PAUSE})
+        self._send_command({MESSAGE_TYPE: TYPE_PAUSE}, blocking, timeout)
 
-    def stop(self):
+    def stop(self, blocking=True, timeout=None):
         """ Send the STOP command. """
-        self._send_command({MESSAGE_TYPE: TYPE_STOP})
+        self._send_command({MESSAGE_TYPE: TYPE_STOP}, blocking, timeout)
 
     def rewind(self):
         """ Starts playing the media from the beginning. """
@@ -367,25 +370,30 @@ class MediaController(BaseController):
         """ Skips rest of the media. Values less then -5 behaved flaky. """
         self.seek(int(self.status.duration)-5)
 
-    def seek(self, position):
+    def seek(self, position, blocking=True, timeout=None):
         """ Seek the media to a specific location. """
-        self._send_command({MESSAGE_TYPE: TYPE_SEEK,
-                            "currentTime": position,
-                            "resumeState": "PLAYBACK_START"})
+        self._send_command(
+            {MESSAGE_TYPE: TYPE_SEEK,
+             "currentTime": position,
+             "resumeState": "PLAYBACK_START"},
+            blocking, timeout
+        )
 
-    def enable_subtitle(self, track_id):
+    def enable_subtitle(self, track_id, blocking=True, timeout=None):
         """ Enable specific text track. """
-        self._send_command({
-            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
-            "activeTrackIds": [track_id]
-        })
+        self._send_command(
+            {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
+             "activeTrackIds": [track_id]},
+            blocking, timeout
+        )
 
-    def disable_subtitle(self):
+    def disable_subtitle(self, blocking=True, timeout=None):
         """ Disable subtitle. """
-        self._send_command({
-            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
-            "activeTrackIds": []
-        })
+        self._send_command(
+            {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
+             "activeTrackIds": []},
+            blocking, timeout
+        )
 
     def wait(self, timeout=None):
         """
