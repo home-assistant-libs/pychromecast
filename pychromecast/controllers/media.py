@@ -387,10 +387,11 @@ class MediaController(BaseController):
             "activeTrackIds": []
         })
 
-    def wait(self, timeout=None):
+    def block_until_status_received(self, timeout=None):
         """
-        Waits until the media status has been updated at least once. The
-        controller is ready as soon a status message has been received.
+        Blocks thread until the media status has been updated at least once.
+        The media controller only accepts playback controll commands after a
+        status message has been received.
 
         If the status has already been received then the method returns
         immediately.
