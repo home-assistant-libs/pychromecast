@@ -267,7 +267,7 @@ class MediaController(BaseController):
 
         self.media_session_id = 0
         self.status = MediaStatus()
-        self.status_event = threading.Event()
+        self.session_active_event = threading.Event()
         self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
@@ -387,27 +387,32 @@ class MediaController(BaseController):
             "activeTrackIds": []
         })
 
-    def block_until_status_received(self, timeout=None):
+    def block_until_active(self, timeout=None):
         """
-        Blocks thread until the media status has been updated at least once.
-        The media controller only accepts playback controll commands after a
-        status message has been received.
+        Blocks thread until the media controller session is active on the
+        chromecast. The media controller only accepts playback control
+        commands when a media session is active.
 
-        If the status has already been received then the method returns
-        immediately.
+        If a session is already active then the method returns immediately.
 
         :param timeout: a floating point number specifying a timeout for the
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        self.status_event.wait(timeout=timeout)
+        self.session_active_event.wait(timeout=timeout)
 
     def _process_media_status(self, data):
         """ Processes a STATUS message. """
         self.status.update(data)
 
         self.logger.debug("Media:Received status %s", data)
-        self.status_event.set()
+
+        # Update session active threading event
+        if self.status.media_session_id is None:
+            self.session_active_event.clear()
+        else:
+            self.session_active_event.set()
+
         self._fire_status_changed()
 
     def _fire_status_changed(self):
