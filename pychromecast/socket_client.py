@@ -269,10 +269,10 @@ class SocketClient(threading.Thread):
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_FAILED,
                                      NetworkAddress(self.host, self.port)))
-                
+
                 if not self.blocking:
                     break
-                    
+
                 retry_log_fun("Failed to connect, retrying in %fs",
                               self.retry_wait)
                 retry_log_fun = self.logger.debug
