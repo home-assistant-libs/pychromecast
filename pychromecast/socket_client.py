@@ -68,7 +68,8 @@ HB_PING_TIME = 10
 HB_PONG_TIME = 10
 POLL_TIME_BLOCKING = 5.0
 POLL_TIME_NON_BLOCKING = 0.01
-TIMEOUT_TIME = 30
+TIMEOUT_TIME_BLOCKING = 30
+TIMEOUT_TIME_NON_BLOCKING = 0.1
 RETRY_TIME = 5
 
 
@@ -172,7 +173,10 @@ class SocketClient(threading.Thread):
 
         self.cast_type = cast_type
         self.tries = tries
-        self.timeout = timeout or TIMEOUT_TIME
+        if self.blocking:
+            self.timeout = timeout or TIMEOUT_TIME_BLOCKING
+        else:
+            self.timeout = TIMEOUT_TIME_NON_BLOCKING
         self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
         self.port = port or 8009
@@ -265,6 +269,10 @@ class SocketClient(threading.Thread):
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_FAILED,
                                      NetworkAddress(self.host, self.port)))
+                
+                if not self.blocking:
+                    break
+                    
                 retry_log_fun("Failed to connect, retrying in %fs",
                               self.retry_wait)
                 retry_log_fun = self.logger.debug
