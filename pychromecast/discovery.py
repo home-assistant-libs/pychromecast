@@ -60,7 +60,10 @@ class CastListener(object):
         friendly_name = get_value('fn')
 
         if uuid:
-            uuid = UUID(uuid)
+            try:
+                uuid = UUID(uuid)
+            except ValueError:
+                pass
 
         self.services[name] = (host, service.port, uuid, model_name,
                                friendly_name)
