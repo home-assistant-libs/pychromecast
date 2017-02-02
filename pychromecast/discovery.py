@@ -53,6 +53,7 @@ class CastListener(object):
             return value.decode('utf-8')
 
         ips = zconf.cache.entries_with_name(service.server.lower())
+        ips = [ip for ip in ips if len(ip.address) == 4]
         host = repr(ips[0]) if ips else service.server
 
         model_name = get_value('md')
