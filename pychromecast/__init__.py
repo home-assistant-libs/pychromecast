@@ -30,27 +30,31 @@ NON_UNICODE_REPR = sys.version_info < (3, )
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
-                              blocking=True):
+                              blocking=True, ssdp=False):
     """Creates a Chromecast object from a zeroconf host."""
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
     # later on.
-    ip_address, port, uuid, model_name, friendly_name = host
-    cast_type = CAST_TYPES.get(model_name.lower(),
-                               CAST_TYPE_CHROMECAST)
-    device = DeviceStatus(
-        friendly_name=friendly_name, model_name=model_name,
-        manufacturer=None, api_version=None,
-        uuid=uuid, cast_type=cast_type,
-    )
-    return Chromecast(host=ip_address, port=port, device=device, tries=tries,
-                      timeout=timeout, retry_wait=retry_wait,
-                      blocking=blocking)
+    if ssdp:
+        return Chromecast(host=host, tries=tries, timeout=timeout,
+                          retry_wait=retry_wait, blocking=blocking)
+    else:
+        ip_address, port, uuid, model_name, friendly_name = host
+        cast_type = CAST_TYPES.get(model_name.lower(),
+                                   CAST_TYPE_CHROMECAST)
+        device = DeviceStatus(
+            friendly_name=friendly_name, model_name=model_name,
+            manufacturer=None, api_version=None,
+            uuid=uuid, cast_type=cast_type,
+        )
+        return Chromecast(host=ip_address, port=port, device=device, tries=tries,
+                          timeout=timeout, retry_wait=retry_wait,
+                          blocking=blocking)
 
 
 # pylint: disable=too-many-locals
 def get_chromecasts(tries=None, retry_wait=None, timeout=None,
-                    blocking=True, callback=None):
+                    blocking=True, callback=None, ssdp=False):
     """
     Searches the network for chromecast devices.
 
@@ -72,13 +76,13 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
     """
     if blocking:
         # Thread blocking chromecast discovery
-        hosts = discover_chromecasts()
+        hosts = discover_chromecasts(ssdp=ssdp)
         cc_list = []
         for host in hosts:
             try:
                 cc_list.append(_get_chromecast_from_host(
                     host, tries=tries, retry_wait=retry_wait, timeout=timeout,
-                    blocking=blocking))
+                    blocking=blocking, ssdp=ssdp))
             except ChromecastConnectionError:  # noqa
                 pass
         return cc_list
@@ -92,16 +96,22 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
             """Called when zeroconf has discovered a new chromecast."""
             try:
                 callback(_get_chromecast_from_host(
-                    listener.services[name], tries=tries,
-                    retry_wait=retry_wait, timeout=timeout, blocking=blocking))
+                    name, tries=tries,
+                    retry_wait=retry_wait, timeout=timeout, blocking=blocking,
+                    ssdp=ssdp))
             except ChromecastConnectionError:  # noqa
                 pass
 
-        def internal_stop():
-            """Stops discovery of new chromecasts."""
-            stop_discovery(browser)
+        if ssdp:
+            def internal_stop():
+                """Stops discovery of new chromecasts."""
+                browser.set()
+        else:
+            def internal_stop():
+                """Stops discovery of new chromecasts."""
+                stop_discovery(browser)
 
-        listener, browser = start_discovery(internal_callback)
+        listener, browser = start_discovery(internal_callback, ssdp=ssdp)
         return internal_stop
 
 
