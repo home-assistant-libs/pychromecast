@@ -15,8 +15,7 @@ currently supports:
 -  Easily extendable to add support for unsupported namespaces
 -  Multi-room setups with Audio cast devices
 
-*PyChromecast 0.6 introduces some backward incompatible changes due to
-the migration from DIAL to socket for retrieving the app status.*
+*Check out [Home Assistant](https://home-assistant.io) for a ready-made solution using PyChromecast for controlling and automating your Chromecast or Cast-enabled device like Google Home.*
 
 Dependencies
 ------------
