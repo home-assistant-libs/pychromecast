@@ -234,7 +234,7 @@ class SocketClient(threading.Thread):
         self._open_channels = []
 
         self.connecting = True
-        retry_log_fun = self.logger.exception
+        retry_log_fun = self.logger.error
 
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
@@ -255,17 +255,18 @@ class SocketClient(threading.Thread):
 
                 self.logger.debug("Connected!")
                 break
-            except socket.error:
+            except socket.error as err:
                 self.connecting = True
                 if self.stop.is_set():
-                    self.logger.exception(
-                        "Failed to connect, aborting due to stop signal.")
+                    self.logger.error(
+                        "Failed to connect: %s. aborting due to stop signal.",
+                        err)
                     raise ChromecastConnectionError("Failed to connect")
 
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_FAILED,
                                      NetworkAddress(self.host, self.port)))
-                retry_log_fun("Failed to connect, retrying in %fs",
+                retry_log_fun("Failed to connect, retrying in %.1fs",
                               self.retry_wait)
                 retry_log_fun = self.logger.debug
 
@@ -367,8 +368,8 @@ class SocketClient(threading.Thread):
                     self.logger.info(
                         "Stopped while reading message, disconnecting.")
                 else:
-                    self.logger.exception(
-                        "Interruption caught without being stopped %s",
+                    self.logger.error(
+                        "Interruption caught without being stopped: %s",
                         exc)
                 return 1
             except ssl.SSLError as exc:
@@ -378,7 +379,7 @@ class SocketClient(threading.Thread):
                 raise
             except socket.error:
                 self._force_recon = True
-                self.logger.info('Error reading from socket.')
+                self.logger.error('Error reading from socket.')
             else:
                 data = _json_from_message(message)
         if not message:
@@ -701,7 +702,7 @@ class HeartbeatController(BaseController):
                     PLATFORM_DESTINATION_ID, self.namespace,
                     {MESSAGE_TYPE: TYPE_PONG}, no_add_request_id=True)
             except PyChromecastStopped:
-                self._socket_client.logger.exception(
+                self._socket_client.logger.debug(
                     "Heartbeat error when sending response, "
                     "Chromecast connection has stopped")
 
