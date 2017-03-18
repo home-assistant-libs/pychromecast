@@ -122,8 +122,8 @@ class Chromecast(object):
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
-    :param dynamic_host: Dynamic or non_dynamic host, if True dynamic host 
-                         tracking is enabled. Will be True by default for 
+    :param dynamic_host: Dynamic or non_dynamic host, if True dynamic host
+                         tracking is enabled. Will be True by default for
                          cast_type == CAST_TYPE_GROUP.
     """
 
@@ -132,7 +132,6 @@ class Chromecast(object):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
-        
 
         self.logger = logging.getLogger(__name__)
 
@@ -203,7 +202,6 @@ class Chromecast(object):
         self.dynamic_host = kwargs.pop('dynamic_host', self.dynamic_host)
         if self.dynamic_host:
             self.start_dynamic_host_tracking()
-            
 
     @property
     def ignore_cec(self):
@@ -351,12 +349,11 @@ class Chromecast(object):
         """
         self.tracker, self.browser = start_discovery(self._dynamic_host_callback)
 
-    def _dynamic_host_callback(self, id):
+    def _dynamic_host_callback(self, unit_id):
         """
         Callback for dynamic discovery of host ip changes
         """
-        unit = self.tracker.services[id]
-        self.logger.info('Found device: {}'.format(unit))
+        unit = self.tracker.services[unit_id]
         host = unit[0]
         port = unit[1]
         name = unit[4]
