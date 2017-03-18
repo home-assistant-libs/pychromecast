@@ -14,7 +14,7 @@ from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts, start_discovery, stop_discovery
 from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
-    CAST_TYPE_CHROMECAST
+    CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 __all__ = (
@@ -122,6 +122,9 @@ class Chromecast(object):
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
+    :param dynamic_host: Dynamic or non_dynamic host, if True dynamic host 
+                         tracking is enabled. Will be True by default for 
+                         cast_type == CAST_TYPE_GROUP.
     """
 
     def __init__(self, host, port=None, device=None, **kwargs):
@@ -129,6 +132,7 @@ class Chromecast(object):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
+        
 
         self.logger = logging.getLogger(__name__)
 
@@ -193,6 +197,13 @@ class Chromecast(object):
 
         if blocking:
             self.socket_client.start()
+
+        # Set to True by default if cast_type == CAST_TYPE_GROUP
+        self.dynamic_host = True if self.cast_type == CAST_TYPE_GROUP else False
+        self.dynamic_host = kwargs.pop('dynamic_host', self.dynamic_host)
+        if self.dynamic_host:
+            self.start_dynamic_host_tracking()
+            
 
     @property
     def ignore_cec(self):
@@ -333,6 +344,33 @@ class Chromecast(object):
                         to block forever.
         """
         self.socket_client.join(timeout=timeout)
+
+    def start_dynamic_host_tracking(self):
+        """
+        Start dynamic non-blocking host tracking
+        """
+        self.tracker, self.browser = start_discovery(self._dynamic_host_callback)
+
+    def _dynamic_host_callback(self, id):
+        """
+        Callback for dynamic discovery of host ip changes
+        """
+        unit = self.tracker.services[id]
+        self.logger.info('Found device: {}'.format(unit))
+        host = unit[0]
+        port = unit[1]
+        name = unit[4]
+
+        if not name == self.name or not port == self.port:
+            return #Wrong group, keep discovering
+
+        if host == self.host:
+            return #No change in host, keep discovering
+
+        self.logger.info('Change in host ip detected, reinitializing object...')
+        stop_discovery(self.browser)
+        self.__init__(host, port=port, device=self.device, dynamic_host=True)
+
 
     def __del__(self):
         try:
