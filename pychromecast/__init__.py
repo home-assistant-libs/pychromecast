@@ -198,7 +198,8 @@ class Chromecast(object):
             self.socket_client.start()
 
         # Set to True by default if cast_type == CAST_TYPE_GROUP
-        self.dynamic_host = True if self.cast_type == CAST_TYPE_GROUP else False
+        self.dynamic_host = True if self.cast_type == CAST_TYPE_GROUP \
+            else False
         self.dynamic_host = kwargs.pop('dynamic_host', self.dynamic_host)
         if self.dynamic_host:
             self.start_dynamic_host_tracking()
@@ -347,7 +348,8 @@ class Chromecast(object):
         """
         Start dynamic non-blocking host tracking
         """
-        self.tracker, self.browser = start_discovery(self._dynamic_host_callback)
+        self.tracker, self.browser = \
+            start_discovery(self._dynamic_host_callback)
 
     def _dynamic_host_callback(self, unit_id):
         """
@@ -359,15 +361,15 @@ class Chromecast(object):
         name = unit[4]
 
         if not name == self.name or not port == self.port:
-            return #Wrong group, keep discovering
+            return  # Wrong group, keep discovering
 
         if host == self.host:
-            return #No change in host, keep discovering
+            return  # No change in host, keep discovering
 
-        self.logger.info('Change in host ip detected, reinitializing object...')
+        self.logger.info('Change in host ip detected, '
+                         'reinitializing object...')
         stop_discovery(self.browser)
         self.__init__(host, port=port, device=self.device, dynamic_host=True)
-
 
     def __del__(self):
         try:
