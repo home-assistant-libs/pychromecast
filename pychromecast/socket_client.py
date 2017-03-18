@@ -826,7 +826,8 @@ class ReceiverController(BaseController):
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
-            callback_function()
+            if callback_function:
+                callback_function()
 
     def _block_till_launched(self, app_id):
         if self.blocking:
