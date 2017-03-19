@@ -367,11 +367,11 @@ class MediaController(BaseController):
         """ Skips rest of the media. Values less then -5 behaved flaky. """
         self.seek(int(self.status.duration)-5)
 
-    def seek(self, position):
+    def seek(self, position, start=True):
         """ Seek the media to a specific location. """
         self._send_command({MESSAGE_TYPE: TYPE_SEEK,
                             "currentTime": position,
-                            "resumeState": "PLAYBACK_START"})
+                            "resumeState": "PLAYBACK_START" if start else "PLAYBACK_PAUSE"})
 
     def enable_subtitle(self, track_id):
         """ Enable specific text track. """
