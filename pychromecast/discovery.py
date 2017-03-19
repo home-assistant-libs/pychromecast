@@ -1,10 +1,22 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 from uuid import UUID
+import socket
+try:
+    from http.client import HTTPResponse
+    from io import BytesIO as ClassIO
+    from urllib.parse import urlparse
+except ImportError:
+    from httplib import HTTPResponse
+    from StringIO import StringIO as ClassIO
+    from urlparse import urlparse
 
 import six
 from zeroconf import ServiceBrowser, Zeroconf
 
 DISCOVER_TIMEOUT = 5
+SSDP_ADDR = '239.255.255.250'
+SSDP_PORT = 1900
+SSDP_ST = 'urn:dial-multiscreen-org:service:dial:1'
 
 
 class CastListener(object):
@@ -66,10 +78,44 @@ class CastListener(object):
                                friendly_name)
 
         if self.callback:
-            self.callback(name)
+            self.callback((host, service.port, uuid, model_name,
+                               friendly_name))
 
 
-def start_discovery(callback=None):
+class FakeSocket(ClassIO):
+    def makefile(self, *args, **kw):
+        return self
+
+
+def ssdp_discover(device_list, stop_event, callback=None, max_devices=None):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    # TODO: configurable poll interval
+    sock.settimeout(0.5)
+    ssdp_message = "\r\n".join([
+        'M-SEARCH * HTTP/1.1',
+        'HOST: {IP}:{PORT}',
+        'MAN: "ssdp:discover"',
+        'ST: {ST}',
+        'MX: 1',
+        '', '']).format(IP=SSDP_ADDR, PORT=SSDP_PORT, ST=SSDP_ST)
+    sock.sendto(six.b(ssdp_message), (SSDP_ADDR, SSDP_PORT))
+    while not stop_event.is_set():
+        try:
+            ssdp_response = HTTPResponse(FakeSocket(sock.recv(1024)))
+            ssdp_response.begin()
+            host = urlparse(ssdp_response.getheader("location")).netloc.split(":")[0]
+            device_list.append(host)
+            if callback:
+                callback(host)
+            if len(device_list) >= max_devices:
+                break
+        except socket.timeout:
+            continue
+
+
+def start_discovery(callback=None, ssdp=False):
     """
     Start discovering chromecasts on the network.
 
@@ -83,9 +129,17 @@ def start_discovery(callback=None):
     chromecasts. To stop discovery, call the stop_discovery method with the
     ServiceBrowser object.
     """
-    listener = CastListener(callback)
-    return listener, \
-        ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    from threading import Event, Thread
+    if ssdp:
+        stop_discover = Event()
+        device_list = []
+        th = Thread(target=ssdp_discover, args=(device_list, stop_discover, callback))
+        th.start()
+        return device_list, stop_discover
+    else:
+        listener = CastListener(callback)
+        return listener, \
+            ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
 
 
 def stop_discovery(browser):
@@ -93,9 +147,19 @@ def stop_discovery(browser):
     browser.zc.close()
 
 
-def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
+def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT, ssdp=False):
     """ Discover chromecasts on the network. """
-    from threading import Event
+    from threading import Event, Thread
+    if ssdp:
+        stop_discover = Event()
+        device_list = []
+        th = Thread(target=ssdp_discover, args=(device_list, stop_discover),
+                    kwargs={"max_devices": max_devices})
+        th.start()
+        th.join(DISCOVER_TIMEOUT)
+        stop_discover.set()
+        th.join()
+        return device_list
     try:
         # pylint: disable=unused-argument
         def callback(name):
