@@ -6,6 +6,7 @@ from __future__ import print_function
 import sys
 import logging
 import fnmatch
+import time
 
 # pylint: disable=wildcard-import
 import threading
@@ -27,6 +28,10 @@ IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
 # For Python 2.x we need to decode __repr__ Unicode return values to str
 NON_UNICODE_REPR = sys.version_info < (3, )
+
+CONNECTION_STATUS_CONNECTING = socket_client.CONNECTION_STATUS_CONNECTING
+CONNECTION_STATUS_FAILED = socket_client.CONNECTION_STATUS_FAILED
+CONNECTION_STATUS_CONNECTED = socket_client.CONNECTION_STATUS_CONNECTED
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
@@ -128,10 +133,8 @@ class Chromecast(object):
     """
 
     def __init__(self, host, port=None, device=None, **kwargs):
-        tries = kwargs.pop('tries', None)
-        timeout = kwargs.pop('timeout', None)
-        retry_wait = kwargs.pop('retry_wait', None)
-        blocking = kwargs.pop('blocking', True)
+
+        self.kwargs = kwargs
 
         self.logger = logging.getLogger(__name__)
 
@@ -173,6 +176,17 @@ class Chromecast(object):
 
         self.status = None
         self.status_event = threading.Event()
+        
+        self.setup(host, port, self.device, self.kwargs)
+
+    def setup(self, host, port, device, kwargs):
+        """ 
+        Method for setting up, and resetting the chromecast object
+        """
+        tries = kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+        blocking = kwargs.pop('blocking', True)
 
         self.socket_client = socket_client.SocketClient(
             host, port=port, cast_type=self.device.cast_type,
@@ -202,6 +216,7 @@ class Chromecast(object):
             else False
         self.dynamic_host = kwargs.pop('dynamic_host', self.dynamic_host)
         if self.dynamic_host:
+            self._socket_connection_status = None
             self.start_dynamic_host_tracking()
 
     @property
@@ -348,8 +363,44 @@ class Chromecast(object):
         """
         Start dynamic non-blocking host tracking
         """
-        self.tracker, self.browser = \
-            start_discovery(self._dynamic_host_callback)
+        self.socket_client.register_connection_listener(self)
+        self.browser = None
+        self.tracker = None
+        self.timer = None
+
+    def new_connection_status(self, status):
+        """
+        Callback for socket client connection status
+        """
+        if not status.address.address == self.host:
+            return # Status message for previous socket_client 
+
+        if status.status == CONNECTION_STATUS_CONNECTING:
+            return #Not interesting
+
+        if status.status == CONNECTION_STATUS_CONNECTED and self.browser:
+            stop_discovery(self.browser)
+            self.browser = None
+            self.logger.error('Reconnected, dynamic host discovery disrupted')
+
+        if self._socket_connection_status == CONNECTION_STATUS_FAILED and \
+            status.status == CONNECTION_STATUS_FAILED and not self.browser:
+            # Connection and reconnection failed, see if reconnection can
+            # be made on another ip-adress
+
+            def discovery_timeout():
+                time.sleep(5)
+                self.logger.info('Discovery timed out, stopping')
+                stop_discovery(self.browser)
+
+            self.logger.info('Dynamic host discovery started')
+            self.tracker, self.browser = \
+                start_discovery(self._dynamic_host_callback)
+
+            t = threading.Thread(target=discovery_timeout)
+            t.start()
+
+        self._socket_connection_status = status.status
 
     def _dynamic_host_callback(self, unit_id):
         """
@@ -369,7 +420,9 @@ class Chromecast(object):
         self.logger.info('Change in host ip detected, '
                          'reinitializing object...')
         stop_discovery(self.browser)
-        self.__init__(host, port=port, device=self.device, dynamic_host=True)
+        self.disconnect()
+        self.host = host
+        self.setup(host, port, self.device, self.kwargs)
 
     def __del__(self):
         try:
