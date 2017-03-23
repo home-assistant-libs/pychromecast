@@ -111,6 +111,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
 
 
 # pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-public-methods
 class Chromecast(object):
     """
     Class to interface with a ChromeCast.
@@ -176,11 +177,11 @@ class Chromecast(object):
 
         self.status = None
         self.status_event = threading.Event()
-        
+
         self.setup(host, port, self.device, self.kwargs)
 
     def setup(self, host, port, device, kwargs):
-        """ 
+        """
         Method for setting up, and resetting the chromecast object
         """
         tries = kwargs.pop('tries', None)
@@ -189,7 +190,7 @@ class Chromecast(object):
         blocking = kwargs.pop('blocking', True)
 
         self.socket_client = socket_client.SocketClient(
-            host, port=port, cast_type=self.device.cast_type,
+            host, port=port, cast_type=device.cast_type,
             tries=tries, timeout=timeout, retry_wait=retry_wait,
             blocking=blocking)
 
@@ -361,8 +362,9 @@ class Chromecast(object):
 
     def start_dynamic_host_tracking(self):
         """
-        Start dynamic non-blocking host tracking
+        Start dynamic host tracking
         """
+        # pylint: disable=attribute-defined-outside-init
         self.socket_client.register_connection_listener(self)
         self.browser = None
         self.tracker = None
@@ -372,11 +374,12 @@ class Chromecast(object):
         """
         Callback for socket client connection status
         """
+        # pylint: disable=attribute-defined-outside-init
         if not status.address.address == self.host:
-            return # Status message for previous socket_client 
+            return  # Status message for previous socket_client
 
         if status.status == CONNECTION_STATUS_CONNECTING:
-            return #Not interesting
+            return  # Not interesting
 
         if status.status == CONNECTION_STATUS_CONNECTED and self.browser:
             stop_discovery(self.browser)
@@ -384,11 +387,14 @@ class Chromecast(object):
             self.logger.error('Reconnected, dynamic host discovery disrupted')
 
         if self._socket_connection_status == CONNECTION_STATUS_FAILED and \
-            status.status == CONNECTION_STATUS_FAILED and not self.browser:
+           status.status == CONNECTION_STATUS_FAILED and not self.browser:
             # Connection and reconnection failed, see if reconnection can
             # be made on another ip-adress
 
             def discovery_timeout():
+                """
+                Internal scheduled timeout for discovery, 5 seconds
+                """
                 time.sleep(5)
                 self.logger.info('Discovery timed out, stopping')
                 stop_discovery(self.browser)
@@ -397,8 +403,8 @@ class Chromecast(object):
             self.tracker, self.browser = \
                 start_discovery(self._dynamic_host_callback)
 
-            t = threading.Thread(target=discovery_timeout)
-            t.start()
+            timeout = threading.Thread(target=discovery_timeout)
+            timeout.start()
 
         self._socket_connection_status = status.status
 
