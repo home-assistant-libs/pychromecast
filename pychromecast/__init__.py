@@ -178,6 +178,10 @@ class Chromecast(object):
         self.status = None
         self.status_event = threading.Event()
 
+        self.browser = None
+        self.tracker = None
+        self._socket_connection_status = None
+
         self.setup(host, port, self.device, self.kwargs)
 
     def setup(self, host, port, device, kwargs):
@@ -362,19 +366,14 @@ class Chromecast(object):
 
     def start_dynamic_host_tracking(self):
         """
-        Start dynamic host tracking
+        Start dynamic host tracking, register for connection status events
         """
-        # pylint: disable=attribute-defined-outside-init
         self.socket_client.register_connection_listener(self)
-        self.browser = None
-        self.tracker = None
-        self.timer = None
 
     def new_connection_status(self, status):
         """
         Callback for socket client connection status
         """
-        # pylint: disable=attribute-defined-outside-init
         if not status.address.address == self.host:
             return  # Status message for previous socket_client
 
@@ -384,7 +383,7 @@ class Chromecast(object):
         if status.status == CONNECTION_STATUS_CONNECTED and self.browser:
             stop_discovery(self.browser)
             self.browser = None
-            self.logger.error('Reconnected, dynamic host discovery disrupted')
+            self.logger.info('Reconnected, dynamic host discovery disrupted')
 
         if self._socket_connection_status == CONNECTION_STATUS_FAILED and \
            status.status == CONNECTION_STATUS_FAILED and not self.browser:
