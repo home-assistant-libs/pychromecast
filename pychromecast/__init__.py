@@ -32,6 +32,7 @@ NON_UNICODE_REPR = sys.version_info < (3, )
 CONNECTION_STATUS_CONNECTING = socket_client.CONNECTION_STATUS_CONNECTING
 CONNECTION_STATUS_FAILED = socket_client.CONNECTION_STATUS_FAILED
 CONNECTION_STATUS_CONNECTED = socket_client.CONNECTION_STATUS_CONNECTED
+CONNECTION_STATUS_DISCONNECTED = socket_client.CONNECTION_STATUS_DISCONNECTED
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
@@ -180,7 +181,6 @@ class Chromecast(object):
 
         self.browser = None
         self.tracker = None
-        self._socket_connection_status = None
 
         self.setup(host, port, self.device, self.kwargs)
 
@@ -188,7 +188,8 @@ class Chromecast(object):
         """
         Method for setting up, and resetting the chromecast object
         """
-        tries = kwargs.pop('tries', None)
+        tries = 2 if self.cast_type == CAST_TYPE_GROUP \
+            else kwargs.pop('tries', None)
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
@@ -217,11 +218,10 @@ class Chromecast(object):
             self.socket_client.start()
 
         # Set to True by default if cast_type == CAST_TYPE_GROUP
-        self.dynamic_host = True if self.cast_type == CAST_TYPE_GROUP \
-            else False
-        self.dynamic_host = kwargs.pop('dynamic_host', self.dynamic_host)
+        self.dynamic_host = kwargs.pop('dynamic_host', True if
+                                       self.cast_type == CAST_TYPE_GROUP
+                                       else False)
         if self.dynamic_host:
-            self._socket_connection_status = None
             self.start_dynamic_host_tracking()
 
     @property
@@ -374,38 +374,31 @@ class Chromecast(object):
         """
         Callback for socket client connection status
         """
-        if not status.address.address == self.host:
-            return  # Status message for previous socket_client
-
-        if status.status == CONNECTION_STATUS_CONNECTING:
+        if not status.status == CONNECTION_STATUS_DISCONNECTED:
             return  # Not interesting
 
-        if status.status == CONNECTION_STATUS_CONNECTED and self.browser:
+        def discovery_timeout():
+            """
+            Internal scheduled timeout for discovery, 5 seconds
+            """
+            time.sleep(10)
+            if not self.browser:
+                return  # Change in ip detected, discovery did not time out
+
+            self.logger.info('Discovery timed out, stopping')
             stop_discovery(self.browser)
             self.browser = None
-            self.logger.info('Reconnected, dynamic host discovery disrupted')
+            if not self.socket_client.is_connected:
+                # If no host on new ip address was found, try reconnecting
+                self.disconnect()
+                self.setup(self.host, self.port, self.device, self.kwargs)
 
-        if self._socket_connection_status == CONNECTION_STATUS_FAILED and \
-           status.status == CONNECTION_STATUS_FAILED and not self.browser:
-            # Connection and reconnection failed, see if reconnection can
-            # be made on another ip-adress
+        self.logger.info('Dynamic host discovery started')
+        self.tracker, self.browser = \
+            start_discovery(self._dynamic_host_callback)
 
-            def discovery_timeout():
-                """
-                Internal scheduled timeout for discovery, 5 seconds
-                """
-                time.sleep(5)
-                self.logger.info('Discovery timed out, stopping')
-                stop_discovery(self.browser)
-
-            self.logger.info('Dynamic host discovery started')
-            self.tracker, self.browser = \
-                start_discovery(self._dynamic_host_callback)
-
-            timeout = threading.Thread(target=discovery_timeout)
-            timeout.start()
-
-        self._socket_connection_status = status.status
+        timeout = threading.Thread(target=discovery_timeout)
+        timeout.start()
 
     def _dynamic_host_callback(self, unit_id):
         """
@@ -425,9 +418,13 @@ class Chromecast(object):
         self.logger.info('Change in host ip detected, '
                          'reinitializing object...')
         stop_discovery(self.browser)
+        self.browser = None
         self.disconnect()
         self.host = host
-        self.setup(host, port, self.device, self.kwargs)
+        try:
+            self.setup(host, port, self.device, self.kwargs)
+        except ChromecastConnectionError:  # noqa
+            pass  # DISCONNECTED status already sent, new discovery started
 
     def __del__(self):
         try:
