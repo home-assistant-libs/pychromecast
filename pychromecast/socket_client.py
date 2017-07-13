@@ -590,7 +590,7 @@ class SocketClient(threading.Thread):
                     }
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error:
-                del self._request_callbacks[request_id]
+                self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
                 self.logger.info('Error writing to socket.')
         else:
