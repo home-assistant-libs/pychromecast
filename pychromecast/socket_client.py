@@ -582,19 +582,19 @@ class SocketClient(threading.Thread):
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
+                if not no_add_request_id and callback_function:
+                    self._request_callbacks[request_id] = {
+                        'event': threading.Event(),
+                        'response': None,
+                        'function': callback_function,
+                    }
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error:
+                del self._request_callbacks[request_id]
                 self._force_recon = True
                 self.logger.info('Error writing to socket.')
         else:
             raise NotConnected("Chromecast is connecting...")
-
-        if not no_add_request_id and callback_function:
-            self._request_callbacks[request_id] = {
-                'event': threading.Event(),
-                'response': None,
-                'function': callback_function,
-            }
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               callback_function_param=False):
