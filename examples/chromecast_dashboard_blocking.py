@@ -1,5 +1,5 @@
 """
-Example that shows how the new Python 2 socket client can be used.
+Example that shows how the chromecast-dashboard controller can be used.
 
 Functions called in this example are blocking which means that
 the function doesn't return as long as no result was received.
