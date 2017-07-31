@@ -16,10 +16,14 @@ class ChromecastDashboardController(BaseController):
     """ Controller to interact with chromecast-dashboard namespace. """
 
     def __init__(self):
-        super(ChromecastDashboardController, self).__init__(APP_NAMESPACE, APP_ID)
+        super(ChromecastDashboardController, self).__init__(
+            APP_NAMESPACE, APP_ID)
 
     def load_url(self, url, refresh_seconds=0):
-        """ Starts loading a URL with an optional refresh time in seconds. """
+        """
+        Starts loading a URL with an optional refresh time
+        in seconds.
+        """
         def callback():
             """Loads requested URL after app launched."""
             msg = {
@@ -39,4 +43,3 @@ class ChromecastDashboardController(BaseController):
             callback()
         else:
             self.launch(callback)
-
