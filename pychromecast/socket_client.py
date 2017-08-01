@@ -678,8 +678,7 @@ class ConnectionController(BaseController):
 
             return True
 
-        else:
-            return False
+        return False
 
 
 class HeartbeatController(BaseController):
@@ -712,8 +711,7 @@ class HeartbeatController(BaseController):
             self.reset()
             return True
 
-        else:
-            return False
+        return False
 
     def ping(self):
         """ Send a ping message. """
@@ -775,8 +773,7 @@ class ReceiverController(BaseController):
 
             return True
 
-        else:
-            return False
+        return False
 
     def register_status_listener(self, listener):
         """ Register a status listener for when a new Chromecast status

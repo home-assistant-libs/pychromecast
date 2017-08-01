@@ -204,7 +204,7 @@ class MediaStatus(object):
 
     def update(self, data):
         """ New data will only contain the changed attributes. """
-        if len(data.get('status', [])) == 0:
+        if not data.get('status', []):
             return
 
         status_data = data['status'][0]
@@ -287,8 +287,7 @@ class MediaController(BaseController):
 
             return True
 
-        else:
-            return False
+        return False
 
     def register_status_listener(self, listener):
         """ Register a listener for new media statusses. A new status will
@@ -345,7 +344,7 @@ class MediaController(BaseController):
 
         images = self.status.images
 
-        return images[0].url if images and len(images) > 0 else None
+        return images[0].url if images else None
 
     def play(self):
         """ Send the PLAY command. """
