@@ -13,7 +13,8 @@ import logging
 import pychromecast
 import pychromecast.controllers.dashcast as dashcast
 
-if '--show-debug' in sys.argv:
+debug = '--show-debug' in sys.argv
+if debug:
     logging.basicConfig(level=logging.DEBUG)
 
 casts = pychromecast.get_chromecasts()
@@ -42,4 +43,16 @@ if not cast.is_idle:
 
 time.sleep(1)
 
-d.load_url('https://home-assistant.io')
+# Test that the callback chain works. This should send a message to
+# load the first url, but immediately after send a message load the
+# second url.
+warning_message = 'If you see this on your TV then something is broken'
+d.load_url('https://home-assistant.io/? ' + warning_message,
+           callback_function=lambda result:
+           d.load_url('https://home-assistant.io/'))
+
+
+# If debugging sleep after running so we can see any error messages.
+if debug:
+    time.sleep(10)
+
