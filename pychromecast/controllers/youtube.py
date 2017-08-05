@@ -26,8 +26,7 @@ class YouTubeController(BaseController):
 
             return True
 
-        else:
-            return False
+        return False
 
     def play_video(self, youtube_id):
         """

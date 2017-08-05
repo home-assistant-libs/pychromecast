@@ -98,8 +98,7 @@ def _read_xml_element(element, xml_ns, tag_name, default=""):
         text = element.find(xml_ns + tag_name).text
         if isinstance(text, six.text_type):
             return text
-        else:
-            return text.decode('utf-8')
+        return text.decode('utf-8')
 
     except AttributeError:
         return default
