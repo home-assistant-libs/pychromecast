@@ -1,5 +1,5 @@
 """
-Example that shows how the chromecast-dashboard controller can be used.
+Example that shows how the DashCast controller can be used.
 
 Functions called in this example are blocking which means that
 the function doesn't return as long as no result was received.
@@ -11,7 +11,7 @@ import sys
 import logging
 
 import pychromecast
-import pychromecast.controllers.chromecast_dashboard as dashboard
+import pychromecast.controllers.dashcast as dashcast
 
 if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
@@ -23,7 +23,7 @@ if len(casts) == 0:
 
 cast = casts[0]
 
-d = dashboard.ChromecastDashboardController()
+d = dashcast.DashCastController()
 cast.register_handler(d)
 
 print()
@@ -42,4 +42,4 @@ if not cast.is_idle:
 
 time.sleep(1)
 
-d.load_url('http://hass.io')
+d.load_url('https://home-assistant.io')
