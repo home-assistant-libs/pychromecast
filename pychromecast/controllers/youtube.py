@@ -39,7 +39,7 @@ class YouTubeController(BaseController):
             """Plays requested video after app launched."""
             self.start_play(youtube_id)
 
-        self.launch(callback)
+        self.launch(callback_function=callback)
 
     def start_play(self, youtube_id):
         """
