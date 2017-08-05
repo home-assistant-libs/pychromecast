@@ -13,11 +13,15 @@ APP_NAMESPACE = "urn:x-cast:com.madmod.dashcast"
 class DashCastController(BaseController):
     """ Controller to interact with DashCast app namespace. """
 
+    # pylint: disable=useless-super-delegation
+    # The pylint rule useless-super-delegation doesn't realize
+    # we are setting default values here.
     def __init__(self,
                  appNamespace=APP_NAMESPACE,
                  appId=APP_DASHCAST):
         super(DashCastController, self).__init__(
             appNamespace, appId)
+    # pylint: enable=useless-super-delegation
 
     def load_url(self, url, force=False, reload_seconds=0):
         """
@@ -30,12 +34,12 @@ class DashCastController(BaseController):
         """
         def callback():
             """Loads requested URL after app launched."""
-            reload = reload_seconds not in (0, None)
+            should_reload = reload_seconds not in (0, None)
             reload_time = reload_seconds * 1000
             msg = {
                 "url": url,
                 "force": force,
-                "reload": reload,
+                "reload": should_reload,
                 "reload_time": reload_time
             }
 
