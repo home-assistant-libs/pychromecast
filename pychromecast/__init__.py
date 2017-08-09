@@ -6,6 +6,7 @@ from __future__ import print_function
 import sys
 import logging
 import fnmatch
+import time
 
 # pylint: disable=wildcard-import
 import threading
@@ -14,7 +15,7 @@ from .error import *  # noqa
 from . import socket_client
 from .discovery import discover_chromecasts, start_discovery, stop_discovery
 from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
-    CAST_TYPE_CHROMECAST
+    CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 __all__ = (
@@ -27,6 +28,11 @@ IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
 # For Python 2.x we need to decode __repr__ Unicode return values to str
 NON_UNICODE_REPR = sys.version_info < (3, )
+
+CONNECTION_STATUS_CONNECTING = socket_client.CONNECTION_STATUS_CONNECTING
+CONNECTION_STATUS_FAILED = socket_client.CONNECTION_STATUS_FAILED
+CONNECTION_STATUS_CONNECTED = socket_client.CONNECTION_STATUS_CONNECTED
+CONNECTION_STATUS_DISCONNECTED = socket_client.CONNECTION_STATUS_DISCONNECTED
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
@@ -106,6 +112,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
 
 
 # pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-public-methods
 class Chromecast(object):
     """
     Class to interface with a ChromeCast.
@@ -122,13 +129,14 @@ class Chromecast(object):
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
+    :param dynamic_host: Dynamic or non_dynamic host, if True dynamic host
+                         tracking is enabled. Will be True by default for
+                         cast_type == CAST_TYPE_GROUP.
     """
 
     def __init__(self, host, port=None, device=None, **kwargs):
-        tries = kwargs.pop('tries', None)
-        timeout = kwargs.pop('timeout', None)
-        retry_wait = kwargs.pop('retry_wait', None)
-        blocking = kwargs.pop('blocking', True)
+
+        self.kwargs = kwargs
 
         self.logger = logging.getLogger(__name__)
 
@@ -171,8 +179,23 @@ class Chromecast(object):
         self.status = None
         self.status_event = threading.Event()
 
+        self.browser = None
+        self.tracker = None
+
+        self.setup(host, port, self.device, self.kwargs)
+
+    def setup(self, host, port, device, kwargs):
+        """
+        Method for setting up, and resetting the chromecast object
+        """
+        tries = 2 if self.cast_type == CAST_TYPE_GROUP \
+            else kwargs.pop('tries', None)
+        timeout = kwargs.pop('timeout', None)
+        retry_wait = kwargs.pop('retry_wait', None)
+        blocking = kwargs.pop('blocking', True)
+
         self.socket_client = socket_client.SocketClient(
-            host, port=port, cast_type=self.device.cast_type,
+            host, port=port, cast_type=device.cast_type,
             tries=tries, timeout=timeout, retry_wait=retry_wait,
             blocking=blocking)
 
@@ -193,6 +216,13 @@ class Chromecast(object):
 
         if blocking:
             self.socket_client.start()
+
+        # Set to True by default if cast_type == CAST_TYPE_GROUP
+        self.dynamic_host = kwargs.pop('dynamic_host', True if
+                                       self.cast_type == CAST_TYPE_GROUP
+                                       else False)
+        if self.dynamic_host:
+            self.start_dynamic_host_tracking()
 
     @property
     def ignore_cec(self):
@@ -333,6 +363,68 @@ class Chromecast(object):
                         to block forever.
         """
         self.socket_client.join(timeout=timeout)
+
+    def start_dynamic_host_tracking(self):
+        """
+        Start dynamic host tracking, register for connection status events
+        """
+        self.socket_client.register_connection_listener(self)
+
+    def new_connection_status(self, status):
+        """
+        Callback for socket client connection status
+        """
+        if not status.status == CONNECTION_STATUS_DISCONNECTED:
+            return  # Not interesting
+
+        def discovery_timeout():
+            """
+            Internal scheduled timeout for discovery, 5 seconds
+            """
+            time.sleep(10)
+            if not self.browser:
+                return  # Change in ip detected, discovery did not time out
+
+            self.logger.info('Discovery timed out, stopping')
+            stop_discovery(self.browser)
+            self.browser = None
+            if not self.socket_client.is_connected:
+                # If no host on new ip address was found, try reconnecting
+                self.disconnect()
+                self.setup(self.host, self.port, self.device, self.kwargs)
+
+        self.logger.info('Dynamic host discovery started')
+        self.tracker, self.browser = \
+            start_discovery(self._dynamic_host_callback)
+
+        timeout = threading.Thread(target=discovery_timeout)
+        timeout.start()
+
+    def _dynamic_host_callback(self, unit_id):
+        """
+        Callback for dynamic discovery of host ip changes
+        """
+        unit = self.tracker.services[unit_id]
+        host = unit[0]
+        port = unit[1]
+        name = unit[4]
+
+        if not name == self.name or not port == self.port:
+            return  # Wrong group, keep discovering
+
+        if host == self.host:
+            return  # No change in host, keep discovering
+
+        self.logger.info('Change in host ip detected, '
+                         'reinitializing object...')
+        stop_discovery(self.browser)
+        self.browser = None
+        self.disconnect()
+        self.host = host
+        try:
+            self.setup(host, port, self.device, self.kwargs)
+        except ChromecastConnectionError:  # noqa
+            pass  # DISCONNECTED status already sent, new discovery started
 
     def __del__(self):
         try:
