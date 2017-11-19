@@ -82,7 +82,6 @@ def get_device_status(host):
         return None
 
 
-DeviceStatus = namedtuple("DeviceStatus",
-                          ["friendly_name", "model_name",
-                           "manufacturer", "api_version",
-                           "uuid", "cast_type"])
+DeviceStatus = namedtuple(
+    "DeviceStatus",
+    ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"])
