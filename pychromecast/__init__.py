@@ -40,8 +40,7 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                                CAST_TYPE_CHROMECAST)
     device = DeviceStatus(
         friendly_name=friendly_name, model_name=model_name,
-        manufacturer=None, api_version=None,
-        uuid=uuid, cast_type=cast_type,
+        manufacturer=None, uuid=uuid, cast_type=cast_type,
     )
     return Chromecast(host=ip_address, port=port, device=device, tries=tries,
                       timeout=timeout, retry_wait=retry_wait,
@@ -152,8 +151,6 @@ class Chromecast(object):
                                 dev_status.model_name),
                     manufacturer=(device.manufacturer or
                                   dev_status.manufacturer),
-                    api_version=(device.api_version or
-                                 dev_status.api_version),
                     uuid=(device.uuid or
                           dev_status.uuid),
                     cast_type=(device.cast_type or
@@ -349,7 +346,6 @@ class Chromecast(object):
         return txt
 
     def __unicode__(self):
-        return u"Chromecast({}, {}, {}, {}, {}, api={}.{})".format(
+        return u"Chromecast({}, {}, {}, {}, {})".format(
             self.host, self.port, self.device.friendly_name,
-            self.device.model_name, self.device.manufacturer,
-            self.device.api_version[0], self.device.api_version[1])
+            self.device.model_name, self.device.manufacturer)
