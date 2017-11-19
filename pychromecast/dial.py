@@ -75,7 +75,8 @@ def get_device_status(host):
         if udn:
             uuid = UUID(udn.replace('-', ''))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer, None, uuid, cast_type)
+        return DeviceStatus(friendly_name, model_name, manufacturer, None,
+                            uuid, cast_type)
 
     except (requests.exceptions.RequestException, ValueError):
         return None
