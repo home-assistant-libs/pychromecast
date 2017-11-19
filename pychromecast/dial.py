@@ -1,12 +1,10 @@
 """
 Implements the DIAL-protocol to communicate with the Chromecast
 """
-import xml.etree.ElementTree as ET
 from collections import namedtuple
 from uuid import UUID
 
 import requests
-import six
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -45,8 +43,10 @@ def get_device_status(host):
 
     try:
         req = CC_SESSION.get(
-            FORMAT_BASE_URL.format(host) + "/ssdp/device-desc.xml",
+            FORMAT_BASE_URL.format(host) + "/setup/eureka_info?options=detail",
             timeout=10)
+
+        req.raise_for_status()
 
         # The Requests library will fall back to guessing the encoding in case
         # no encoding is specified in the response headers - which is the case
@@ -57,51 +57,29 @@ def get_device_status(host):
         if req.encoding is None:
             req.encoding = 'utf-8'
 
-        status_el = ET.fromstring(req.text.encode("UTF-8"))
+        status = req.json()
 
-        device_info_el = status_el.find(XML_NS_UPNP_DEVICE + "device")
-        api_version_el = status_el.find(XML_NS_UPNP_DEVICE + "specVersion")
+        friendly_name = status.get('name', "Unknown Chromecast")
+        model_name = "Unknown model name"
+        manufacturer = "Unknown manufacturer"
+        if 'detail' in status:
+            model_name = status['detail'].get('model_name', model_name)
+            manufacturer = status['detail'].get('manufacturer', manufacturer)
 
-        friendly_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                          "friendlyName", "Unknown Chromecast")
-        model_name = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                       "modelName", "Unknown model name")
-        manufacturer = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                         "manufacturer",
-                                         "Unknown manufacturer")
-        udn = _read_xml_element(device_info_el, XML_NS_UPNP_DEVICE,
-                                "UDN",
-                                None)
-
-        api_version = (int(_read_xml_element(api_version_el,
-                                             XML_NS_UPNP_DEVICE, "major", -1)),
-                       int(_read_xml_element(api_version_el,
-                                             XML_NS_UPNP_DEVICE, "minor", -1)))
+        udn = status.get('ssdp_udn', None)
 
         cast_type = CAST_TYPES.get(model_name.lower(),
                                    CAST_TYPE_CHROMECAST)
 
         uuid = None
-        if udn and udn.startswith('uuid:'):
-            uuid = UUID(udn[len('uuid:'):].replace("-", ""))
+        if udn:
+            uuid = UUID(udn.replace('-', ''))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer,
-                            api_version, uuid, cast_type)
+        return DeviceStatus(friendly_name, model_name, manufacturer, None,
+                            uuid, cast_type)
 
-    except (requests.exceptions.RequestException, ET.ParseError):
+    except (requests.exceptions.RequestException, ValueError):
         return None
-
-
-def _read_xml_element(element, xml_ns, tag_name, default=""):
-    """ Helper method to read text from an element. """
-    try:
-        text = element.find(xml_ns + tag_name).text
-        if isinstance(text, six.text_type):
-            return text
-        return text.decode('utf-8')
-
-    except AttributeError:
-        return default
 
 
 DeviceStatus = namedtuple("DeviceStatus",
