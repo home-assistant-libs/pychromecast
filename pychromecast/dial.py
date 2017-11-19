@@ -5,7 +5,6 @@ from collections import namedtuple
 from uuid import UUID
 
 import requests
-import six
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
