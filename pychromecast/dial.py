@@ -22,7 +22,9 @@ CAST_TYPE_GROUP = 'group'
 
 CAST_TYPES = {
     u'chromecast': CAST_TYPE_CHROMECAST,
+    u'eureka dongle': CAST_TYPE_CHROMECAST,
     u'chromecast audio': CAST_TYPE_AUDIO,
+    u'google home': CAST_TYPE_AUDIO,
     u'google cast group': CAST_TYPE_GROUP,
 }
 
