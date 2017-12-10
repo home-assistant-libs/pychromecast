@@ -819,24 +819,22 @@ class ReceiverController(BaseController):
             self.launch_failure = None
 
             self.send_message({MESSAGE_TYPE: TYPE_LAUNCH,
-                               APP_ID: app_id})
-
-            self._block_till_launched(app_id, callback_function)
+                               APP_ID: app_id},
+                              callback_function=lambda response:
+                              self._block_till_launched(app_id))
         else:
             self.logger.info(
                 "Not launching app %s - already running", app_id)
             if callback_function:
                 callback_function()
 
-    def _block_till_launched(self, app_id, callback_function):
+    def _block_till_launched(self, app_id):
         if self.blocking:
             self.app_launch_event.wait()
             if self.launch_failure:
                 raise LaunchError(
                     "Failed to launch app: {}, Reason: {}".format(
                         app_id, self.launch_failure.reason))
-            if callback_function:
-                callback_function()
 
     def stop_app(self, callback_function_param=False):
         """ Stops the current running app on the Chromecast. """
