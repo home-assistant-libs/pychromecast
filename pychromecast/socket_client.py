@@ -277,7 +277,7 @@ class SocketClient(threading.Thread):
 
                     time.sleep(self.retry_wait)
                     tries -= 1
-                
+
         else:
             self.stop.set()
             self.logger.error("Failed to connect. No retries.")
