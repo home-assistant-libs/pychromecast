@@ -268,11 +268,15 @@ class SocketClient(threading.Thread):
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_FAILED,
                                      NetworkAddress(self.host, self.port)))
-                retry_log_fun("Failed to connect, retrying in %.1fs",
-                              self.retry_wait)
-                retry_log_fun = self.logger.debug
 
-                time.sleep(self.retry_wait)
+                # Only sleep if we have another retry remaining
+                if tries and tries > 1:
+                    retry_log_fun("Failed to connect, retrying in %.1fs",
+                                  self.retry_wait)
+                    retry_log_fun = self.logger.debug
+
+                    time.sleep(self.retry_wait)
+
                 if tries:
                     tries -= 1
         else:
