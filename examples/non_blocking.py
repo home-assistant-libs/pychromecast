@@ -5,8 +5,6 @@ All functions (except get_chromecast()) are non-blocking and
 return immediately without waiting for the result. You can use
 that functionality to include pychromecast into your main loop.
 """
-
-from __future__ import print_function
 import time
 import select
 import sys

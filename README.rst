@@ -4,7 +4,7 @@ pychromecast |Build Status|
 .. |Build Status| image:: https://travis-ci.org/balloob/pychromecast.svg?branch=master
    :target: https://travis-ci.org/balloob/pychromecast
 
-Library for Python 2 and 3 to communicate with the Google Chromecast. It
+Library for Python 3.4+ to communicate with the Google Chromecast. It
 currently supports:
 
 -  Auto discovering connected Chromecasts on the network
@@ -26,18 +26,11 @@ PyChromecast depends on the Python packages requests, protobuf and
 zeroconf. Make sure you have these dependencies installed using
 ``pip install -r requirements.txt``
 
-Some users running Python 2.7 have `reported`_ that they had to upgrade
-their version of pip using ``pip install --upgrade pip`` before they
-were able to install the latest version of the dependencies.
-
-.. _reported: https://github.com/balloob/pychromecast/issues/47#issuecomment-107822162
-
 How to use
 ----------
 
 .. code:: python
 
-    >> from __future__ import print_function
     >> import time
     >> import pychromecast
 

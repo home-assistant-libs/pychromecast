@@ -1,8 +1,6 @@
 """
 PyChromecast: remote control your Chromecast
 """
-from __future__ import print_function
-
 import sys
 import logging
 import fnmatch

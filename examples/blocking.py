@@ -4,8 +4,6 @@ Example that shows how the new Python 2 socket client can be used.
 Functions called in this example are blocking which means that
 the function doesn't return as long as no result was received.
 """
-
-from __future__ import print_function
 import time
 import sys
 import logging
