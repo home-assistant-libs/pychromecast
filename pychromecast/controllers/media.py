@@ -453,6 +453,7 @@ class MediaController(BaseController):
         Docs:
         https://developers.google.com/cast/docs/reference/messages#MediaData
         """
+        # pylint: disable=too-many-locals
         def app_launched_callback():
             """Plays media after chromecast has switched to requested app."""
             self._send_start_play_media(
@@ -470,7 +471,7 @@ class MediaController(BaseController):
                                metadata=None, subtitles=None,
                                subtitles_lang='en-US',
                                subtitles_mime='text/vtt', subtitle_id=1):
-
+        # pylint: disable=too-many-locals
         msg = {
             'media': {
                 'contentId': url,

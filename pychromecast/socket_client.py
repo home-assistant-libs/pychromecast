@@ -352,7 +352,7 @@ class SocketClient(threading.Thread):
         Use run_once() in your own main loop after you
         receive something on the socket (get_socket()).
         """
-        # pylint: disable=too-many-branches
+        # pylint: disable=too-many-branches, too-many-return-statements
 
         try:
             if not self._check_connection():
@@ -407,6 +407,8 @@ class SocketClient(threading.Thread):
                 event.set()
                 if function:
                     function(data)
+
+        return 0
 
     def get_socket(self):
         """
