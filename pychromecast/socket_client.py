@@ -467,8 +467,8 @@ class SocketClient(threading.Thread):
                             _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    (u"Exception caught while sending message to "
-                     u"controller %s: %s"),
+                    ("Exception caught while sending message to "
+                     "controller %s: %s"),
                     type(self._handlers[message.namespace]).__name__,
                     _message_to_string(message, data))
 
