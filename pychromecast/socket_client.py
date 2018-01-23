@@ -238,12 +238,14 @@ class SocketClient(threading.Thread):
 
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
-                self.socket = ssl.wrap_socket(socket.socket())
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.settimeout(self.timeout)
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                      NetworkAddress(self.host, self.port)))
                 self.socket.connect((self.host, self.port))
+                self.socket = ssl.wrap_socket(self.socket)
                 self.connecting = False
                 self._force_recon = False
                 self._report_connection_status(

@@ -219,6 +219,11 @@ class Chromecast(object):
         return self.device.friendly_name
 
     @property
+    def uri(self):
+        """ Returns the device URI (ip:port) """
+        return "{}:{}".format(self.host, self.port)
+
+    @property
     def model_name(self):
         """ Returns the model name of the Chromecast device. """
         return self.device.model_name
