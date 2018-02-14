@@ -8,21 +8,23 @@ Without him this would not have been possible.
 # Pylint does not understand the protobuf objects correctly
 # pylint: disable=no-member
 
+import errno
+import json
 import logging
 import select
 import socket
 import ssl
-import json
+import struct
+import sys
 import threading
 import time
 from collections import namedtuple
 from struct import pack, unpack
-import sys
 
 from . import cast_channel_pb2
-from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
 from .controllers import BaseController
 from .controllers.media import MediaController
+from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
@@ -117,17 +119,14 @@ def _is_ssl_timeout(exc):
 NetworkAddress = namedtuple('NetworkAddress',
                             ['address', 'port'])
 
-
 ConnectionStatus = namedtuple('ConnectionStatus',
                               ['status', 'address'])
-
 
 CastStatus = namedtuple('CastStatus',
                         ['is_active_input', 'is_stand_by', 'volume_level',
                          'volume_muted', 'app_id', 'display_name',
                          'namespaces', 'session_id', 'transport_id',
                          'status_text'])
-
 
 LaunchFailure = namedtuple('LaunchStatus',
                            ['reason', 'app_id', 'request_id'])
@@ -238,9 +237,8 @@ class SocketClient(threading.Thread):
 
         while not self.stop.is_set() and (tries is None or tries > 0):
             try:
-                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.socket = new_socket()
                 self.socket.settimeout(self.timeout)
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                      NetworkAddress(self.host, self.port)))
@@ -897,7 +895,7 @@ class ReceiverController(BaseController):
             app_data.get(SESSION_ID),
             app_data.get('transportId'),
             app_data.get('statusText', '')
-            )
+        )
         return status
 
     def _process_get_status(self, data):
@@ -969,3 +967,29 @@ class ReceiverController(BaseController):
         self._report_status()
 
         self._status_listeners[:] = []
+
+
+def new_socket():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    # SO_REUSEADDR should be equivalent to SO_REUSEPORT for
+    # multicast UDP sockets (p 731, "TCP/IP Illustrated,
+    # Volume 2"), but some BSD-derived systems require
+    # SO_REUSEPORT to be specified explicity.  Also, not all
+    # versions of Python have SO_REUSEPORT available.
+    # Catch OSError and socket.error for kernel versions <3.9 because lacking
+    # SO_REUSEPORT support.
+    try:
+        reuseport = socket.SO_REUSEPORT
+    except AttributeError:
+        pass
+    else:
+        try:
+            s.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+        except (OSError, socket.error) as err:
+            # OSError on python 3, socket.error on python 2
+            if not err.errno == errno.ENOPROTOOPT:
+                raise
+
+    return s

@@ -9,6 +9,7 @@ DISCOVER_TIMEOUT = 5
 
 class CastListener(object):
     """Zeroconf Cast Services collection."""
+
     def __init__(self, callback=None):
         self.services = {}
         self.callback = callback
@@ -84,8 +85,13 @@ def start_discovery(callback=None):
     ServiceBrowser object.
     """
     listener = CastListener(callback)
-    return listener, \
-        ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    sb = False
+    try:
+        sb = ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    except Exception:
+        return listener, False
+    finally:
+        return listener, sb
 
 
 def stop_discovery(browser):
@@ -96,6 +102,7 @@ def stop_discovery(browser):
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
     from threading import Event
+    browser = False
     try:
         # pylint: disable=unused-argument
         def callback(name):
@@ -110,5 +117,8 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
         discover_complete.wait(timeout)
 
         return listener.devices
+    except Exception:
+        return
     finally:
-        stop_discovery(browser)
+        if browser is not False:
+            stop_discovery(browser)
