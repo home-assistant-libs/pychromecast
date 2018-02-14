@@ -88,8 +88,8 @@ def start_discovery(callback=None):
     sb = False
     try:
         sb = ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
-    except Exception:
-        return listener, False
+    except (BadTypeInNameException, NotImplementedError, OSError, socket.error, NonUniqueNameException):
+        sb = False
     finally:
         return listener, sb
 
