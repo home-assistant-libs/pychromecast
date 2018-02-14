@@ -1,8 +1,9 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
+import socket
 from uuid import UUID
 
 import six
-from zeroconf import ServiceBrowser, Zeroconf
+from zeroconf import ServiceBrowser, Zeroconf, BadTypeInNameException, NonUniqueNameException
 
 DISCOVER_TIMEOUT = 5
 
