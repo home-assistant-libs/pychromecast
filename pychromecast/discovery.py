@@ -101,7 +101,6 @@ def start_discovery(callback=None):
     return listener, service_browser
 
 
-
 def stop_discovery(browser):
     """Stop the chromecast discovery thread."""
     browser.zc.close()
