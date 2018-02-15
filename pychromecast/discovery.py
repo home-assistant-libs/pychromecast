@@ -3,7 +3,7 @@ import socket
 from uuid import UUID
 
 import six
-from zeroconf import ServiceBrowser, Zeroconf, BadTypeInNameException, NonUniqueNameException
+import zeroconf
 
 DISCOVER_TIMEOUT = 5
 
@@ -88,13 +88,16 @@ def start_discovery(callback=None):
     listener = CastListener(callback)
     service_browser = False
     try:
-        service_browser = ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
-    except (BadTypeInNameException,
+        service_browser = zeroconf.ServiceBrowser(zeroconf.Zeroconf(),
+                                                  "_googlecast._tcp.local.",
+                                                  listener)
+    except (zeroconf.BadTypeInNameException,
             NotImplementedError,
             OSError,
             socket.error,
-            NonUniqueNameException):
+            zeroconf.NonUniqueNameException):
         service_browser = False
+        pass
     finally:
         return listener, service_browser
 

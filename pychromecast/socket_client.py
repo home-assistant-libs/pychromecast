@@ -975,19 +975,20 @@ def new_socket():
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
+        # noinspection PyUnresolvedReferences
         reuseport = socket.SO_REUSEPORT
     except AttributeError:
         pass
     else:
         try:
-            new_socket.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
         except (OSError, socket.error) as err:
             # OSError on python 3, socket.error on python 2
-            if not err.errno == errno.ENOPROTOOPT:
+            if err.errno != errno.ENOPROTOOPT:
                 raise
 
-    return new_socket
+    return new_sock
