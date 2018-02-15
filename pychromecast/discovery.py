@@ -96,10 +96,10 @@ def start_discovery(callback=None):
             OSError,
             socket.error,
             zeroconf.NonUniqueNameException):
-        service_browser = False
         pass
-    finally:
-        return listener, service_browser
+
+    return listener, service_browser
+
 
 
 def stop_discovery(browser):
