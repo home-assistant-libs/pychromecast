@@ -86,13 +86,17 @@ def start_discovery(callback=None):
     ServiceBrowser object.
     """
     listener = CastListener(callback)
-    sb = False
+    service_browser = False
     try:
-        sb = ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
-    except (BadTypeInNameException, NotImplementedError, OSError, socket.error, NonUniqueNameException):
-        sb = False
+        service_browser = ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    except (BadTypeInNameException,
+            NotImplementedError,
+            OSError,
+            socket.error,
+            NonUniqueNameException):
+        service_browser = False
     finally:
-        return listener, sb
+        return listener, service_browser
 
 
 def stop_discovery(browser):
@@ -118,8 +122,8 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
         discover_complete.wait(timeout)
 
         return listener.devices
-    except Exception:
-        return
+    except Exception:  # pylint: disable=broad-except
+        raise
     finally:
         if browser is not False:
             stop_discovery(browser)

@@ -14,7 +14,6 @@ import logging
 import select
 import socket
 import ssl
-import struct
 import sys
 import threading
 import time
@@ -970,26 +969,25 @@ class ReceiverController(BaseController):
 
 
 def new_socket():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    """
+    Create a new socket with OS-specific parameters
 
-    # SO_REUSEADDR should be equivalent to SO_REUSEPORT for
-    # multicast UDP sockets (p 731, "TCP/IP Illustrated,
-    # Volume 2"), but some BSD-derived systems require
-    # SO_REUSEPORT to be specified explicity.  Also, not all
-    # versions of Python have SO_REUSEPORT available.
-    # Catch OSError and socket.error for kernel versions <3.9 because lacking
-    # SO_REUSEPORT support.
+    Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
+    Catches errors if not.
+    """
+    new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
     try:
         reuseport = socket.SO_REUSEPORT
     except AttributeError:
         pass
     else:
         try:
-            s.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+            new_socket.setsockopt(socket.SOL_SOCKET, reuseport, 1)
         except (OSError, socket.error) as err:
             # OSError on python 3, socket.error on python 2
             if not err.errno == errno.ENOPROTOOPT:
                 raise
 
-    return s
+    return new_socket
