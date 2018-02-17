@@ -254,9 +254,7 @@ class SocketClient(threading.Thread):
 
                 self.logger.debug("Connected!")
                 break
-            # socket.error is a deprecated alias of OSError in Python 3.3+,
-            # can be removed when Python 2.x support is dropped
-            except (OSError, socket.error) as err:
+            except OSError as err:
                 self.connecting = True
                 if self.stop.is_set():
                     self.logger.error(

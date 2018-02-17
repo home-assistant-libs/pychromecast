@@ -1,5 +1,5 @@
 """
-Example that shows how the new Python 2 socket client can be used.
+Example that shows how the socket client can be used.
 
 All functions (except get_chromecast()) are non-blocking and
 return immediately without waiting for the result. You can use

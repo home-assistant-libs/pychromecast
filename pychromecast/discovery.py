@@ -46,7 +46,7 @@ class CastListener(object):
             return
 
         def get_value(key):
-            """Retrieve value and decode for Python 2/3."""
+            """Retrieve value and decode to UTF-8."""
             value = service.properties.get(key.encode('utf-8'))
 
             if value is None or isinstance(value, str):
