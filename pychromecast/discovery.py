@@ -1,14 +1,16 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
+import socket
 from uuid import UUID
 
 import six
-from zeroconf import ServiceBrowser, Zeroconf
+import zeroconf
 
 DISCOVER_TIMEOUT = 5
 
 
 class CastListener(object):
     """Zeroconf Cast Services collection."""
+
     def __init__(self, callback=None):
         self.services = {}
         self.callback = callback
@@ -84,8 +86,19 @@ def start_discovery(callback=None):
     ServiceBrowser object.
     """
     listener = CastListener(callback)
-    return listener, \
-        ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    service_browser = False
+    try:
+        service_browser = zeroconf.ServiceBrowser(zeroconf.Zeroconf(),
+                                                  "_googlecast._tcp.local.",
+                                                  listener)
+    except (zeroconf.BadTypeInNameException,
+            NotImplementedError,
+            OSError,
+            socket.error,
+            zeroconf.NonUniqueNameException):
+        pass
+
+    return listener, service_browser
 
 
 def stop_discovery(browser):
@@ -96,6 +109,7 @@ def stop_discovery(browser):
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
     from threading import Event
+    browser = False
     try:
         # pylint: disable=unused-argument
         def callback(name):
@@ -110,5 +124,8 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
         discover_complete.wait(timeout)
 
         return listener.devices
+    except Exception:  # pylint: disable=broad-except
+        raise
     finally:
-        stop_discovery(browser)
+        if browser is not False:
+            stop_discovery(browser)
