@@ -240,7 +240,8 @@ class SocketClient(threading.Thread):
             try:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.settimeout(self.timeout)
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
+                                       1)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                      NetworkAddress(self.host, self.port)))
@@ -301,7 +302,7 @@ class SocketClient(threading.Thread):
         new_channel = self.destination_id != cast_status.transport_id
 
         if new_channel:
-            self._disconnect_channel(self.destination_id)
+            self.disconnect_channel(self.destination_id)
 
         self.app_namespaces = cast_status.namespaces
         self.destination_id = cast_status.transport_id
@@ -484,7 +485,7 @@ class SocketClient(threading.Thread):
         """ Cleanup open channels and handlers """
         for channel in self._open_channels:
             try:
-                self._disconnect_channel(channel)
+                self.disconnect_channel(channel)
             except Exception:  # pylint: disable=broad-except
                 pass
 
@@ -647,7 +648,7 @@ class SocketClient(threading.Thread):
                      'connectionType': 1}},
                 no_add_request_id=True)
 
-    def _disconnect_channel(self, destination_id):
+    def disconnect_channel(self, destination_id):
         """ Disconnect a channel with destination_id. """
         if destination_id in self._open_channels:
             self.send_message(
@@ -682,7 +683,11 @@ class ConnectionController(BaseController):
             return True
 
         if data[MESSAGE_TYPE] == TYPE_CLOSE:
-            self._socket_client.handle_channel_disconnected()
+            # The cast device is asking us to acknowledge closing this channel.
+            self._socket_client.disconnect_channel(message.source_id)
+
+            # Schedule a status update so that a channel is created.
+            self._socket_client.receiver_controller.update_status()
 
             return True
 
