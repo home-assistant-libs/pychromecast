@@ -240,7 +240,8 @@ class SocketClient(threading.Thread):
             try:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.settimeout(self.timeout)
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
+                                       1)
                 self._report_connection_status(
                     ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                      NetworkAddress(self.host, self.port)))
