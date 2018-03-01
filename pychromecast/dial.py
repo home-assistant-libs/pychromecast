@@ -21,11 +21,11 @@ CAST_TYPE_AUDIO = 'audio'
 CAST_TYPE_GROUP = 'group'
 
 CAST_TYPES = {
-    'chromecast': CAST_TYPE_CHROMECAST,
-    'eureka dongle': CAST_TYPE_CHROMECAST,
-    'chromecast audio': CAST_TYPE_AUDIO,
-    'google home': CAST_TYPE_AUDIO,
-    'google cast group': CAST_TYPE_GROUP,
+    u'chromecast': CAST_TYPE_CHROMECAST,
+    u'eureka dongle': CAST_TYPE_CHROMECAST,
+    u'chromecast audio': CAST_TYPE_AUDIO,
+    u'google home': CAST_TYPE_AUDIO,
+    u'google cast group': CAST_TYPE_GROUP,
 }
 
 

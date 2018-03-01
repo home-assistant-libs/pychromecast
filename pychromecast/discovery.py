@@ -2,6 +2,7 @@
 import socket
 from uuid import UUID
 
+import six
 import zeroconf
 
 DISCOVER_TIMEOUT = 5
@@ -46,10 +47,10 @@ class CastListener(object):
             return
 
         def get_value(key):
-            """Retrieve value and decode to UTF-8."""
+            """Retrieve value and decode for Python 2/3."""
             value = service.properties.get(key.encode('utf-8'))
 
-            if value is None or isinstance(value, str):
+            if value is None or isinstance(value, six.text_type):
                 return value
             return value.decode('utf-8')
 

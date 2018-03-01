@@ -1,12 +1,12 @@
 sudo: false
 language: python
 python:
+  - "2.7"
   - "3.4"
   - "3.5"
-  - "3.6"
 install:
   - pip install -r requirements.txt
-  - pip install flake8==3.3.0 pylint==1.8.1
+  - pip install flake8==3.3.0 pylint==1.7.2
 script:
   - flake8 --exclude cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py pychromecast
   - pylint pychromecast

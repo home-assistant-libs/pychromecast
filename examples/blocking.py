@@ -1,9 +1,11 @@
 """
-Example that shows how the socket client can be used.
+Example that shows how the new Python 2 socket client can be used.
 
 Functions called in this example are blocking which means that
 the function doesn't return as long as no result was received.
 """
+
+from __future__ import print_function
 import time
 import sys
 import logging
@@ -19,6 +21,9 @@ if len(casts) == 0:
     print("No Devices Found")
     exit()
 cast = casts[0]
+
+yt = youtube.YouTubeController()
+cast.register_handler(yt)
 
 print()
 print(cast.device)
@@ -60,7 +65,12 @@ while True:
         elif t == 25:
             print("Sending stop command")
             cast.media_controller.stop()
-        elif t == 32:
+        elif t == 27:
+            print("Switching to YouTube")
+            yt.play_video("L0MK7qz13bU")
+        elif t == 38:
+            cast.media_controller.pause()
+        elif t == 45:
             cast.quit_app()
             break
 

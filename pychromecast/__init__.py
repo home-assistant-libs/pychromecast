@@ -1,6 +1,9 @@
 """
 PyChromecast: remote control your Chromecast
 """
+from __future__ import print_function
+
+import sys
 import logging
 import fnmatch
 
@@ -22,6 +25,8 @@ __version__ = '.'.join(__version_info__)
 
 IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
+# For Python 2.x we need to decode __repr__ Unicode return values to str
+NON_UNICODE_REPR = sys.version_info < (3, )
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
@@ -338,11 +343,14 @@ class Chromecast(object):
             pass
 
     def __repr__(self):
-        txt = "Chromecast({!r}, port={!r}, device={!r})".format(
+        txt = u"Chromecast({!r}, port={!r}, device={!r})".format(
             self.host, self.port, self.device)
+        # Python 2.x does not work well with unicode returned from repr
+        if NON_UNICODE_REPR:
+            return txt.encode('utf-8')
         return txt
 
     def __unicode__(self):
-        return "Chromecast({}, {}, {}, {}, {})".format(
+        return u"Chromecast({}, {}, {}, {}, {})".format(
             self.host, self.port, self.device.friendly_name,
             self.device.model_name, self.device.manufacturer)
