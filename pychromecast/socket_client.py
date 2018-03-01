@@ -581,7 +581,7 @@ class SocketClient(threading.Thread):
 
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
-            self.logger.debug("Sending: %s", _message_to_string(msg, data))
+            self.logger.debug("Sending: %s", _json_to_payload(data))
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
