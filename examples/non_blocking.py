@@ -1,10 +1,12 @@
 """
-Example that shows how the socket client can be used.
+Example that shows how the new Python 2 socket client can be used.
 
 All functions (except get_chromecast()) are non-blocking and
 return immediately without waiting for the result. You can use
 that functionality to include pychromecast into your main loop.
 """
+
+from __future__ import print_function
 import time
 import select
 import sys

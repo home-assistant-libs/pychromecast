@@ -254,7 +254,9 @@ class SocketClient(threading.Thread):
 
                 self.logger.debug("Connected!")
                 break
-            except OSError as err:
+            # socket.error is a deprecated alias of OSError in Python 3.3+,
+            # can be removed when Python 2.x support is dropped
+            except (OSError, socket.error) as err:
                 self.connecting = True
                 if self.stop.is_set():
                     self.logger.error(
@@ -350,7 +352,7 @@ class SocketClient(threading.Thread):
         Use run_once() in your own main loop after you
         receive something on the socket (get_socket()).
         """
-        # pylint: disable=too-many-branches, too-many-return-statements
+        # pylint: disable=too-many-branches
 
         try:
             if not self._check_connection():
@@ -405,8 +407,6 @@ class SocketClient(threading.Thread):
                 event.set()
                 if function:
                     function(data)
-
-        return 0
 
     def get_socket(self):
         """
@@ -467,8 +467,8 @@ class SocketClient(threading.Thread):
                             _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    ("Exception caught while sending message to "
-                     "controller %s: %s"),
+                    (u"Exception caught while sending message to "
+                     u"controller %s: %s"),
                     type(self._handlers[message.namespace]).__name__,
                     _message_to_string(message, data))
 
@@ -581,7 +581,7 @@ class SocketClient(threading.Thread):
 
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
-            self.logger.debug("Sending: %s", _message_to_string(msg, data))
+            self.logger.debug("Sending: %s", _json_to_payload(data))
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
