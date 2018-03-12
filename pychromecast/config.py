@@ -10,6 +10,7 @@ APP_YOUTUBE = "YouTube"
 APP_MEDIA_RECEIVER = "CC1AD845"
 APP_PLEX = "06ee44ee-e7e3-4249-83b6-f5d0b6f07f34_1"
 APP_DASHCAST = "84912283"
+APP_SPOTIFY = "CC32E753"
 
 
 def get_possible_app_ids():
