@@ -1,6 +1,8 @@
 import logging
 import os
 import requests
+import spotipy
+import time
 
 from pychromecast.controllers import BaseController
 from ..config import APP_SPOTIFY
@@ -24,6 +26,8 @@ class SpotifyController(BaseController):
         self.session_started = False
         self.token = None
         self.expiration_date = None
+        self.client = None
+
 
     def receive_message(self, message, data):
         self.logger.debug("Cast message: {}".format(data))
@@ -62,7 +66,6 @@ class SpotifyController(BaseController):
         expiration = response.cookies['wp_expiration']
         self.expiration_date = int(expiration)//1000
 
-        # return response.cookies['wp_access_token']
 
     def start_session(self):
         # arbitrary value and can be static
@@ -94,3 +97,7 @@ class SpotifyController(BaseController):
 
         self.start_session()
         self.launch(callback_function=callback)
+
+        #TODO: Remove sleep and find another way to wait for app to go up completely
+        time.sleep(5)
+        self.client = spotipy.Spotify(auth=self.token)
