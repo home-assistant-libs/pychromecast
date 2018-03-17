@@ -2,6 +2,8 @@
 Provides a controller for controlling the default media players
 on the Chromecast.
 """
+import time
+
 from collections import namedtuple
 import threading
 
@@ -67,7 +69,14 @@ class MediaStatus(object):
         self.media_metadata = {}
         self.subtitle_tracks = {}
         self.current_subtitle_tracks = []
-        self.last_updated = now()
+        self.last_updated = time.time()
+
+    def get_current_time(self):
+        """ Get current seek time of video (does not account for buffering time) """
+        if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
+            return (self.current_time + (time.time()-self.last_updated))
+        else:
+            return (self.current_time)
 
     @property
     def metadata_type(self):
@@ -233,7 +242,7 @@ class MediaStatus(object):
         self.subtitle_tracks = media_data.get('tracks', self.subtitle_tracks)
         self.current_subtitle_tracks = status_data.get(
             'activeTrackIds', self.current_subtitle_tracks)
-        self.last_updated = now()
+        self.last_updated = time.time()
 
     def __repr__(self):
         info = {
