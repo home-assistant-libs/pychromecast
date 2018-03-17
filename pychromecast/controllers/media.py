@@ -67,6 +67,7 @@ class MediaStatus(object):
         self.media_metadata = {}
         self.subtitle_tracks = {}
         self.current_subtitle_tracks = []
+        self.last_updated = now()
 
     @property
     def metadata_type(self):
@@ -232,6 +233,7 @@ class MediaStatus(object):
         self.subtitle_tracks = media_data.get('tracks', self.subtitle_tracks)
         self.current_subtitle_tracks = status_data.get(
             'activeTrackIds', self.current_subtitle_tracks)
+        self.last_updated = now()
 
     def __repr__(self):
         info = {
