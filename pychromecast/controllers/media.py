@@ -72,7 +72,7 @@ class MediaStatus(object):
         self.last_updated = time.time()
 
     def get_current_time(self):
-        """ Get current seek time of video (does not account for buffering time) """
+        """ Get current seek time of video """
         if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
             current_time = self.current_time + (time.time()-self.last_updated)
         else:
