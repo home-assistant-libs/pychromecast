@@ -2,7 +2,7 @@
 Provides a controller for controlling the default media players
 on the Chromecast.
 """
-import datetime
+from datetime import datetime
 
 from collections import namedtuple
 import threading
