@@ -73,10 +73,8 @@ class MediaStatus(object):
 
     def get_current_time(self):
         """ Get current seek time of video (does not account for buffering time) """
-        if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
-            return (self.current_time + (time.time()-self.last_updated))
-        else:
-            return (self.current_time)
+        if :
+            return (self.current_time + (time.time()-self.last_updated)) if self.player_state == MEDIA_PLAYER_STATE_PLAYING else self.current_time
 
     @property
     def metadata_type(self):
