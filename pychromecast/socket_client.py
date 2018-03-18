@@ -267,11 +267,10 @@ class SocketClient(threading.Thread):
                                      NetworkAddress(self.host, self.port)))
 
                 # Only sleep if we have another retry remaining
-                if tries and tries > 1:
+                if (tries and tries > 1) or not tries:
                     retry_log_fun("Failed to connect, retrying in %.1fs",
                                   self.retry_wait)
                     retry_log_fun = self.logger.debug
-
                     time.sleep(self.retry_wait)
 
                 if tries:
