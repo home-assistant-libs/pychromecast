@@ -71,8 +71,9 @@ class MediaStatus(object):
         self.current_subtitle_tracks = []
         self.last_updated = None
 
-    def get_seek_time(self):
-        """ Returns current seek time of media in seconds """
+    @property
+    def adjusted_current_time(self):
+        """ Returns calculated current seek time of media in seconds """
         if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
             # Add time since last update
             return (self.current_time +
