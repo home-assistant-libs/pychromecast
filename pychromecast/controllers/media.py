@@ -76,7 +76,7 @@ class MediaStatus(object):
         if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
             # Add time since last update
             return (self.current_time +
-                    datetime.utcnow() - self.last_updated).total_seconds()
+                    (datetime.utcnow() - self.last_updated)).total_seconds()
         # Not playing, return last reported seek time
         return self.current_time
 
