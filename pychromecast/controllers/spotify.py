@@ -132,5 +132,9 @@ class SpotifyController(BaseController):
 
         self.client.start_playback(device_id=self.device_id, uris=uris)
 
+    def play_context(self, context_uri, offset=None):
+
+        self.client.start_playback(device_id=self.device_id,context_uri=context_uri, offset=offset)
+
 
 
