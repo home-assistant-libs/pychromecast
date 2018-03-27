@@ -16,6 +16,7 @@ TYPE_STATUS = "setCredentials"
 
 
 class SpotifyController(BaseController):
+    """ Controller to interact with Spotify namespace. """
     def __init__(self, friendly_name, username=None, password=None):
         super(SpotifyController, self).__init__(
               APP_NAMESPACE, APP_SPOTIFY)
@@ -31,11 +32,11 @@ class SpotifyController(BaseController):
         self.device_id = None
 
     def receive_message(self, message, data):
-        self.logger.debug("Cast message: {}".format(data))
-
+        """ Currently not doing anything with received messages. """
         return True
 
     def _get_csrf(self, session, cookies):
+        """ Get CSRF token for Spotify login. """
         headers = {'user-agent': USER_AGENT}
 
         response = session.get("https://accounts.spotify.com/login",
@@ -45,6 +46,7 @@ class SpotifyController(BaseController):
         return response.cookies['csrf_token']
 
     def _login(self, session, cookies, username, password, csrf_token):
+        """ Logs in with CSRF token and cookie within session. """
         headers = {'user-agent': USER_AGENT}
 
         data = {"remember": False, "username": username, "password": password,
@@ -56,6 +58,7 @@ class SpotifyController(BaseController):
         response.raise_for_status()
 
     def _get_access_token(self, session, cookies):
+        """ Gets access token after login has been successful. """
         headers = {'user-agent': USER_AGENT}
 
         response = session.get("https://open.spotify.com/browse",
@@ -67,7 +70,11 @@ class SpotifyController(BaseController):
         expiration = response.cookies['wp_expiration']
         self.expiration_date = int(expiration)//1000
 
+    # Access token provided by spotipy does not have enough permissions to start
+    # Spotify on Chromecast
     def start_session(self):
+        """ Starts session to get access token. """
+
         # arbitrary value and can be static
         cookies = {"__bon": "MHwwfC01ODc4MjExMzJ8LTI0Njg4NDg3NTQ0fDF8MXwxfDE="}
 
@@ -91,6 +98,7 @@ class SpotifyController(BaseController):
         return self.token
 
     def launch_app(self):
+        """ Launch main application """
 
         def callback():
             self.send_message({"type": TYPE_STATUS, "credentials": self.token})
@@ -106,15 +114,18 @@ class SpotifyController(BaseController):
             self.logger.debug("Token is: {}".format(self.token))
             self.launch(callback_function=callback)
 
-        # TODO: Remove sleep and find another way to wait for app to go up completely
+        # Need to wait for Spotify to be launched on Chromecast completely
         time.sleep(5)
         self.client = spotipy.Spotify(auth=self.token)
 
         self.device_id = self.get_spotify_device_id()
 
     def get_spotify_device_id(self):
-
-        devices_available = self.client.devices();
+        """
+        Gets device id from Spotify. This should be the same as the name of
+        the Chromecast.
+        """
+        devices_available = self.client.devices()
 
         for device in devices_available['devices']:
             self.logger.debug(device)
@@ -123,18 +134,27 @@ class SpotifyController(BaseController):
         return None
 
     def play_song(self, uri):
+        """ Play a single song with it's Spotify URI. """
         if self.device_id is None:
             raise("No device id. Try launching app again")
         else:
             self.client.start_playback(device_id=self.device_id, uris=[uri])
 
     def play_songs(self, uris):
-
-        self.client.start_playback(device_id=self.device_id, uris=uris)
+        """ Play several songs with a list of uris. """
+        if self.device_id is None:
+            raise("No device id. Try launching app again")
+        else:
+            self.client.start_playback(device_id=self.device_id, uris=uris)
 
     def play_context(self, context_uri, offset=None):
-
-        self.client.start_playback(device_id=self.device_id,context_uri=context_uri, offset=offset)
+        """ Play a Spotify context.
+            Valid contexts are albums, artists and playlists.
+        """
+        if self.device_id is None:
+            raise("No device id. Try launching app again")
+        else:
+            self.client.start_playback(device_id=self.device_id,context_uri=context_uri, offset=offset)
 
 
 
