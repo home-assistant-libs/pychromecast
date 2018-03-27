@@ -1,8 +1,11 @@
+"""
+Controller to interface with the DashCast app namespace.
+"""
 import logging
 import os
+import time
 import requests
 import spotipy
-import time
 
 from pychromecast.controllers import BaseController
 from ..config import APP_SPOTIFY
@@ -10,16 +13,20 @@ from ..config import APP_SPOTIFY
 logging.basicConfig(level=logging.DEBUG)
 
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) \
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36"
 
 TYPE_STATUS = "setCredentials"
 
-
+# pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
     """ Controller to interact with Spotify namespace. """
+
+    # pylint: disable=useless-super-delegation
+    # The pylint rule useless-super-delegation doesn't realize
+    # we are setting default values here.
     def __init__(self, friendly_name, username=None, password=None):
-        super(SpotifyController, self).__init__(
-              APP_NAMESPACE, APP_SPOTIFY)
+        super(SpotifyController, self).__init__(APP_NAMESPACE, APP_SPOTIFY)
 
         self.logger = logging.getLogger(__name__)
         self.username = username
@@ -30,7 +37,9 @@ class SpotifyController(BaseController):
         self.expiration_date = None
         self.client = None
         self.device_id = None
+    # pylint: enable=useless-super-delegation
 
+    # pylint: disable=unused-argument,no-self-use
     def receive_message(self, message, data):
         """ Currently not doing anything with received messages. """
         return True
@@ -45,6 +54,7 @@ class SpotifyController(BaseController):
 
         return response.cookies['csrf_token']
 
+    # pylint: disable=too-many-arguments
     def _login(self, session, cookies, username, password, csrf_token):
         """ Logs in with CSRF token and cookie within session. """
         headers = {'user-agent': USER_AGENT}
@@ -85,7 +95,7 @@ class SpotifyController(BaseController):
             self.password = os.getenv("SPOTIFY_PASS")
 
         if self.username is None or self.password is None:
-            raise("No username or password")
+            raise Exception("No username or password")
 
         session = requests.Session()
         token = self. _get_csrf(session, cookies)
@@ -101,17 +111,18 @@ class SpotifyController(BaseController):
         """ Launch main application """
 
         def callback():
+            """Callback function"""
             self.send_message({"type": TYPE_STATUS, "credentials": self.token})
 
         curr_time = time.time()
 
         if self.session_started and curr_time < self.expiration_date:
-            self.logger.debug("Using same token: {}".format(self.token))
+            self.logger.debug("Using same token: %s", self.token)
             self.launch(callback_function=callback)
         else:
             self.logger.debug("Creating new token")
             self.start_session()
-            self.logger.debug("Token is: {}".format(self.token))
+            self.logger.debug("Token is: %s", self.token)
             self.launch(callback_function=callback)
 
         # Need to wait for Spotify to be launched on Chromecast completely
@@ -136,14 +147,14 @@ class SpotifyController(BaseController):
     def play_song(self, uri):
         """ Play a single song with it's Spotify URI. """
         if self.device_id is None:
-            raise("No device id. Try launching app again")
+            raise Exception("No device id. Try launching app again")
         else:
             self.client.start_playback(device_id=self.device_id, uris=[uri])
 
     def play_songs(self, uris):
         """ Play several songs with a list of uris. """
         if self.device_id is None:
-            raise("No device id. Try launching app again")
+            raise Exception("No device id. Try launching app again")
         else:
             self.client.start_playback(device_id=self.device_id, uris=uris)
 
@@ -152,9 +163,7 @@ class SpotifyController(BaseController):
             Valid contexts are albums, artists and playlists.
         """
         if self.device_id is None:
-            raise("No device id. Try launching app again")
+            raise Exception("No device id. Try launching app again")
         else:
-            self.client.start_playback(device_id=self.device_id,context_uri=context_uri, offset=offset)
-
-
-
+            self.client.start_playback(device_id=self.device_id,
+                                       context_uri=context_uri, offset=offset)
