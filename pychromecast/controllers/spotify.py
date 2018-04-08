@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_STATUS = "setCredentials"
+TYPE_RESPONSE_STATUS = 'setCredentialsResponse'
 
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
@@ -33,11 +34,14 @@ class SpotifyController(BaseController):
         self.expiration_date = None
         self.client = None
         self.device_id = None
+        self.is_launched = False
     # pylint: enable=useless-super-delegation
 
     # pylint: disable=unused-argument,no-self-use
     def receive_message(self, message, data):
         """ Currently not doing anything with received messages. """
+        if data['type'] == TYPE_RESPONSE_STATUS:
+            self.is_launched = True
         return True
 
 
@@ -66,7 +70,9 @@ class SpotifyController(BaseController):
             self.launch(callback_function=callback)
 
         # Need to wait for Spotify to be launched on Chromecast completely
-        time.sleep(5)
+        while not self.is_launched:
+            time.sleep(1)
+
         self.client = spotipy.Spotify(auth=self.token)
 
         self.device_id = self.get_spotify_device_id()
