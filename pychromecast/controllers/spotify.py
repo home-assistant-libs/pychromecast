@@ -6,7 +6,7 @@ import time
 import spotipy
 import spotify_token
 
-from pychromecast.controllers import BaseController
+from . import BaseController
 from ..config import APP_SPOTIFY
 
 logging.basicConfig(level=logging.DEBUG)
