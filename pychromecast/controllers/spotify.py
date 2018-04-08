@@ -42,7 +42,8 @@ class SpotifyController(BaseController):
 
         def callback():
             """Callback function"""
-            self.send_message({"type": TYPE_STATUS, "credentials": self.access_token})
+            self.send_message({"type": TYPE_STATUS,
+                               "credentials": self.access_token})
 
         self.launch(callback_function=callback)
 
