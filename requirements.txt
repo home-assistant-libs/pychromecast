@@ -1,4 +1,5 @@
 requests>=2.0
 protobuf>=3.0.0
 zeroconf>=0.17.7
+spotify-token>=0.1.0
 git+https://github.com/plamere/spotipy.git
