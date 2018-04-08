@@ -80,7 +80,7 @@ class SpotifyController(BaseController):
 
         for device in devices_available['devices']:
             self.logger.debug(device)
-            if device['name'] == self.cast_name:
+            if device['name'] == self.cast_name and device['type'] == 'CastVideo':
                 return device['id']
         return None
 
