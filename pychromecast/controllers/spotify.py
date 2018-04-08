@@ -88,15 +88,13 @@ class SpotifyController(BaseController):
         """ Play a single song with it's Spotify URI. """
         if self.device_id is None:
             raise Exception("No device id. Try launching app again")
-        else:
-            self.client.start_playback(device_id=self.device_id, uris=[uri])
+        self.client.start_playback(device_id=self.device_id, uris=[uri])
 
     def play_songs(self, uris):
         """ Play several songs with a list of uris. """
         if self.device_id is None:
             raise Exception("No device id. Try launching app again")
-        else:
-            self.client.start_playback(device_id=self.device_id, uris=uris)
+        self.client.start_playback(device_id=self.device_id, uris=uris)
 
     def play_context(self, context_uri, offset=None):
         """ Play a Spotify context.
@@ -104,6 +102,5 @@ class SpotifyController(BaseController):
         """
         if self.device_id is None:
             raise Exception("No device id. Try launching app again")
-        else:
-            self.client.start_playback(device_id=self.device_id,
-                                       context_uri=context_uri, offset=offset)
+        self.client.start_playback(device_id=self.device_id,
+                                   context_uri=context_uri, offset=offset)
