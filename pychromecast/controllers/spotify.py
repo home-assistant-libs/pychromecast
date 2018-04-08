@@ -15,6 +15,7 @@ APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_STATUS = "setCredentials"
 TYPE_RESPONSE_STATUS = 'setCredentialsResponse'
 
+
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
     """ Controller to interact with Spotify namespace. """
@@ -43,8 +44,6 @@ class SpotifyController(BaseController):
         if data['type'] == TYPE_RESPONSE_STATUS:
             self.is_launched = True
         return True
-
-
 
     def launch_app(self):
         """ Launch main application """
@@ -86,7 +85,8 @@ class SpotifyController(BaseController):
 
         for device in devices_available['devices']:
             self.logger.debug(device)
-            if device['name'] == self.cast_name and device['type'] == 'CastVideo':
+            if (device['name'] == self.cast_name and
+                    device['type'] == 'CastVideo'):
                 return device['id']
         return None
 
