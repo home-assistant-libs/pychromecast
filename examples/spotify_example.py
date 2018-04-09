@@ -24,7 +24,7 @@ if cast.name == CAST_NAME:
 
     client = spotipy.Spotify(auth=access_token)
 
-    sp = SpotifyController(CAST_NAME, access_token)
+    sp = SpotifyController(access_token)
     cast.register_handler(sp)
     sp.launch_app()
 
@@ -35,4 +35,4 @@ if cast.name == CAST_NAME:
             device_id = device['id']
             break
 
-    client.start_playback(device_id, "spotify:track:3Zwu2K0Qa5sT6teCCHPShP")
+    client.start_playback(device_id=device_id, uris=["spotify:track:3Zwu2K0Qa5sT6teCCHPShP"])
