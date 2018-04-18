@@ -7,8 +7,6 @@ import time
 from . import BaseController
 from ..config import APP_SPOTIFY
 
-logging.basicConfig(level=logging.DEBUG)
-
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_STATUS = "setCredentials"
 TYPE_RESPONSE_STATUS = 'setCredentialsResponse'
