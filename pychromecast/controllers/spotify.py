@@ -1,5 +1,5 @@
 """
-Controller to interface with the DashCast app namespace.
+Controller to interface with Spotify.
 """
 import logging
 import time
