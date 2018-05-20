@@ -11,9 +11,11 @@ from ..error import UnsupportedNamespace
 
 YOUTUBE_BASE_URL = "https://www.youtube.com/"
 BIND_URL = YOUTUBE_BASE_URL + "api/lounge/bc/bind"
-LOUNGE_TOKEN_URL = YOUTUBE_BASE_URL + "api/lounge/pairing/get_lounge_token_batch"
+LOUNGE_TOKEN_URL = YOUTUBE_BASE_URL +\
+                   "api/lounge/pairing/get_lounge_token_batch"
 
-HEADERS = {"Origin": YOUTUBE_BASE_URL, "Content-Type": "application/x-www-form-urlencoded"}
+HEADERS = {"Origin": YOUTUBE_BASE_URL,
+           "Content-Type": "application/x-www-form-urlencoded"}
 LOUNGE_ID_HEADER = "X-YouTube-LoungeId-Token"
 REQ_PREFIX = "req{req_id}"
 
@@ -44,8 +46,9 @@ TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
 MESSAGE_TYPE = "type"
 
-BIND_DATA = {"device": "REMOTE_CONTROL", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Python",
-             "mdx-version": 3, "pairing_type": "cast", "app": "android-phone-13.14.55"}
+BIND_DATA = {"device": "REMOTE_CONTROL", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+             "name": "Python", "mdx-version": 3, "pairing_type": "cast",
+             "app": "android-phone-13.14.55"}
 
 
 class YouTubeController(BaseController):
@@ -104,8 +107,9 @@ class YouTubeController(BaseController):
 
     def update_screen_id(self):
         """
-        Sends a getMdxSessionStatus to get the screen id and waits for response.
-        This function is blocking but if connected we should always get a response
+        Sends a getMdxSessionStatus to get the screenId and waits for response.
+        This function is blocking
+        If connected we should always get a response
         (send message will launch app if it is not running).
         """
         self.status_update_event.clear()
@@ -139,8 +143,9 @@ class YouTubeController(BaseController):
         self._req_count = 0
 
         url_params = {RID: self._rid, VER: 8, CVER: 1}
-        response = self._do_post(BIND_URL, data=BIND_DATA,
-                                 headers={LOUNGE_ID_HEADER: self._lounge_token}, params=url_params)
+        headers = {LOUNGE_ID_HEADER: self._lounge_token}
+        response = self._do_post(BIND_URL, data=BIND_DATA, headers=headers,
+                                 params=url_params)
         content = str(response.content)
         sid = re.search(SID_REGEX, content)
         gsessionid = re.search(GSESSION_ID_REGEX, content)
@@ -162,7 +167,8 @@ class YouTubeController(BaseController):
         request_data = self._format_session_params(request_data)
         url_params = {SID: self._sid, GSESSIONID: self._gsession_id,
                       RID: self._rid, VER: 8, CVER: 1}
-        self._do_post(BIND_URL, data=request_data, headers={LOUNGE_ID_HEADER: self._lounge_token},
+        self._do_post(BIND_URL, data=request_data,
+                      headers={LOUNGE_ID_HEADER: self._lounge_token},
                       session_request=True, params=url_params)
 
     def _queue_action(self, video_id, action):
@@ -181,33 +187,40 @@ class YouTubeController(BaseController):
         request_data = self._format_session_params(request_data)
         url_params = {SID: self._sid, GSESSIONID: self._gsession_id,
                       RID: self._rid, VER: 8, CVER: 1}
-        self._do_post(BIND_URL, data=request_data, headers={LOUNGE_ID_HEADER: self._lounge_token},
+        self._do_post(BIND_URL, data=request_data,
+                      headers={LOUNGE_ID_HEADER: self._lounge_token},
                       session_request=True, params=url_params)
 
     def _format_session_params(self, param_dict):
         req_count = REQ_PREFIX.format(req_id=self._req_count)
-        return {req_count + k if k.startswith("_") else k: v for k, v in param_dict.items()}
+        return {req_count + k if k.startswith("_")
+                else k: v for k, v in param_dict.items()}
 
     # pylint: disable-msg=too-many-arguments
-    def _do_post(self, url, data, params=None, headers=None, session_request=False):
+    def _do_post(self, url, data, params=None, headers=None,
+                 session_request=False):
         """
-        Calls requests.post with custom headers, increments RID(request id) on every post.
+        Calls requests.post with custom headers,
+         increments RID(request id) on every post.
         will raise if response is not 200
         :param url:(str) request url
         :param data: (dict) the POST body
         :param params:(dict) POST url params
         :param headers:(dict) Additional headers for the request
-        :param session_request:(bool) True to increment session request counter(req_count)
+        :param session_request:(bool) True to increment session
+         request counter(req_count)
         :return: POST response
         """
         if headers:
             headers = dict(**dict(HEADERS, **headers))
         else:
             headers = HEADERS
-        response = requests.post(url, headers=headers, data=data, params=params)
+        response = requests.post(url, headers=headers,
+                                 data=data, params=params)
         # 404 resets the sid, session counters
         # 400 in session probably means bad sid
-        if (response.status_code == 404 or response.status_code == 400) and session_request:
+        if (response.status_code == 404 or response.status_code == 400)\
+                and session_request:
             self._bind()
         response.raise_for_status()
         if session_request:
