@@ -4,7 +4,6 @@ Use the media controller to play, pause etc.
 """
 import re
 import threading
-from json import JSONDecodeError
 
 import requests
 from . import BaseController
@@ -45,12 +44,8 @@ TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
 MESSAGE_TYPE = "type"
 
-BIND_DATA = {"device": "REMOTE_CONTROL", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Python", "mdx-version": 3,
-             "pairing_type": "cast", "app": "android-phone-13.14.55"}
-
-
-class YoutubeSessionError(Exception):
-    pass
+BIND_DATA = {"device": "REMOTE_CONTROL", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Python",
+             "mdx-version": 3, "pairing_type": "cast", "app": "android-phone-13.14.55"}
 
 
 class YouTubeController(BaseController):
@@ -70,10 +65,7 @@ class YouTubeController(BaseController):
     @property
     def in_session(self):
         """ Returns True if session params are not None."""
-        if self._gsession_id and self._lounge_token:
-            return True
-        else:
-            return False
+        return self._gsession_id and self._lounge_token
 
     def play_video(self, video_id):
         """
@@ -132,16 +124,14 @@ class YouTubeController(BaseController):
         """
         data = {"screen_ids": self._screen_id}
         response = self._do_post(LOUNGE_TOKEN_URL, data=data)
-        try:
-            lounge_token = response.json()["screens"][0]["loungeToken"]
-        except JSONDecodeError:
-            raise YoutubeSessionError("Could not get lounge id.")
+        lounge_token = response.json()["screens"][0]["loungeToken"]
         self._lounge_token = lounge_token
 
     def _bind(self):
         """
         Bind to the app and get SID, gsessionid session identifiers.
-        If the chromecast is already in another YouTube session you should get the SID, gsessionid for that session.
+        If the chromecast is already in another YouTube session you should get
+        the SID, gsessionid for that session.
         SID, gsessionid are used as url params in all further session requests.
         """
         # reset session counters before starting a new session
@@ -149,13 +139,11 @@ class YouTubeController(BaseController):
         self._req_count = 0
 
         url_params = {RID: self._rid, VER: 8, CVER: 1}
-        response = self._do_post(BIND_URL, data=BIND_DATA, headers={LOUNGE_ID_HEADER: self._lounge_token},
-                                 params=url_params)
+        response = self._do_post(BIND_URL, data=BIND_DATA,
+                                 headers={LOUNGE_ID_HEADER: self._lounge_token}, params=url_params)
         content = str(response.content)
         sid = re.search(SID_REGEX, content)
         gsessionid = re.search(GSESSION_ID_REGEX, content)
-        if not (sid and gsessionid):
-            raise YoutubeSessionError("Could not parse session parameters.")
         self._sid = sid.group(1)
         self._gsession_id = gsessionid.group(1)
 
@@ -172,7 +160,8 @@ class YouTubeController(BaseController):
                         COUNT: 1, }
 
         request_data = self._format_session_params(request_data)
-        url_params = {SID: self._sid, GSESSIONID: self._gsession_id, RID: self._rid, VER: 8, CVER: 1}
+        url_params = {SID: self._sid, GSESSIONID: self._gsession_id,
+                      RID: self._rid, VER: 8, CVER: 1}
         self._do_post(BIND_URL, data=request_data, headers={LOUNGE_ID_HEADER: self._lounge_token},
                       session_request=True, params=url_params)
 
@@ -182,14 +171,16 @@ class YouTubeController(BaseController):
         :param video_id: id to perform the action on
         :param action: the action to perform
         """
-        # If nothing is playing actions will work but won"t affect the queue. This is for binding existing sessions
+        # If nothing is playing actions will work but won"t affect the queue.
+        # This is for binding existing sessions
         if not self.in_session:
             self._start_session()
         request_data = {ACTION: action,
                         VIDEO_ID: video_id,
                         COUNT: 1}
         request_data = self._format_session_params(request_data)
-        url_params = {SID: self._sid, GSESSIONID: self._gsession_id, RID: self._rid, VER: 8, CVER: 1}
+        url_params = {SID: self._sid, GSESSIONID: self._gsession_id,
+                      RID: self._rid, VER: 8, CVER: 1}
         self._do_post(BIND_URL, data=request_data, headers={LOUNGE_ID_HEADER: self._lounge_token},
                       session_request=True, params=url_params)
 
@@ -197,6 +188,7 @@ class YouTubeController(BaseController):
         req_count = REQ_PREFIX.format(req_id=self._req_count)
         return {req_count + k if k.startswith("_") else k: v for k, v in param_dict.items()}
 
+    # pylint: disable-msg=too-many-arguments
     def _do_post(self, url, data, params=None, headers=None, session_request=False):
         """
         Calls requests.post with custom headers, increments RID(request id) on every post.
@@ -227,11 +219,9 @@ class YouTubeController(BaseController):
         """ Called when a media message is received. """
         if data[MESSAGE_TYPE] == TYPE_STATUS:
             self._process_status(data.get("data"))
-
             return True
 
-        else:
-            return False
+        return False
 
     def _process_status(self, status):
         """ Process latest status update. """
