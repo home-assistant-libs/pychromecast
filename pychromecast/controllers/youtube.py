@@ -1,10 +1,14 @@
+"""
+Controller to interface with the YouTube-app.
+Use the media controller to play, pause etc.
+"""
 import re
 import threading
 from json import JSONDecodeError
 
 import requests
-from pychromecast.controllers import BaseController
-from pychromecast.error import UnsupportedNamespace
+from . import BaseController
+from ..error import UnsupportedNamespace
 
 YOUTUBE_BASE_URL = "https://www.youtube.com/"
 BIND_URL = YOUTUBE_BASE_URL + "api/lounge/bc/bind"
@@ -195,8 +199,7 @@ class YouTubeController(BaseController):
 
     def _do_post(self, url, data, params=None, headers=None, session_request=False):
         """
-        Calls requests.post with custom headers.
-        Increments rid(request id) on every post.
+        Calls requests.post with custom headers, increments RID(request id) on every post.
         will raise if response is not 200
         :param url:(str) request url
         :param data: (dict) the POST body
