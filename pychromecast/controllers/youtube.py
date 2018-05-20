@@ -21,32 +21,32 @@ REQ_PREFIX = "req{req_id}"
 GSESSION_ID_REGEX = '"S","(.*?)"]'
 SID_REGEX = '"c","(.*?)",\"'
 
-CURRENT_INDEX = '_currentIndex'
-CURRENT_TIME = '_currentTime'
-AUDIO_ONLY = '_audioOnly'
-VIDEO_ID = '_videoId'
+CURRENT_INDEX = "_currentIndex"
+CURRENT_TIME = "_currentTime"
+AUDIO_ONLY = "_audioOnly"
+VIDEO_ID = "_videoId"
 LIST_ID = "_listId"
-ACTION = '__sc'
-COUNT = 'count'
+ACTION = "__sc"
+COUNT = "count"
 
-ACTION_SET_PLAYLIST = 'setPlaylist'
-ACTION_REMOVE = 'removeVideo'
-ACTION_INSERT = 'insertVideo'
-ACTION_ADD = 'addVideo'
+ACTION_SET_PLAYLIST = "setPlaylist"
+ACTION_REMOVE = "removeVideo"
+ACTION_INSERT = "insertVideo"
+ACTION_ADD = "addVideo"
 
-GSESSIONID = 'gsessionid'
-CVER = 'CVER'
-RID = 'RID'
-SID = 'SID'
-VER = 'VER'
+GSESSIONID = "gsessionid"
+CVER = "CVER"
+RID = "RID"
+SID = "SID"
+VER = "VER"
 
 TYPE_GET_SCREEN_ID = "getMdxSessionStatus"
 TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
 MESSAGE_TYPE = "type"
 
-BIND_DATA = {"device": "REMOTE_CONTROL", "id": 'aaaaaaaaaaaaaaaaaaaaaaaaaa', "name": "Python", "mdx-version": 3,
-             'pairing_type': 'cast', 'app': 'android-phone-13.14.55'}
+BIND_DATA = {"device": "REMOTE_CONTROL", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Python", "mdx-version": 3,
+             "pairing_type": "cast", "app": "android-phone-13.14.55"}
 
 
 class YoutubeSessionError(Exception):
@@ -117,7 +117,7 @@ class YouTubeController(BaseController):
         (send message will launch app if it is not running).
         """
         self.status_update_event.clear()
-        # This gets the screenId but always throws. Couldn't find a better way.
+        # This gets the screenId but always throws. Couldn"t find a better way.
         try:
             self.send_message({MESSAGE_TYPE: TYPE_GET_SCREEN_ID})
         except UnsupportedNamespace:
@@ -165,9 +165,9 @@ class YouTubeController(BaseController):
         """
         request_data = {LIST_ID: "",
                         ACTION: ACTION_SET_PLAYLIST,
-                        CURRENT_TIME: '0',
+                        CURRENT_TIME: "0",
                         CURRENT_INDEX: -1,
-                        AUDIO_ONLY: 'false',
+                        AUDIO_ONLY: "false",
                         VIDEO_ID: video_id,
                         COUNT: 1, }
 
@@ -182,7 +182,7 @@ class YouTubeController(BaseController):
         :param video_id: id to perform the action on
         :param action: the action to perform
         """
-        # If nothing is playing actions will work but won't affect the queue. This is for binding existing sessions
+        # If nothing is playing actions will work but won"t affect the queue. This is for binding existing sessions
         if not self.in_session:
             self._start_session()
         request_data = {ACTION: action,
@@ -195,7 +195,7 @@ class YouTubeController(BaseController):
 
     def _format_session_params(self, param_dict):
         req_count = REQ_PREFIX.format(req_id=self._req_count)
-        return {req_count + k if k.startswith('_') else k: v for k, v in param_dict.items()}
+        return {req_count + k if k.startswith("_") else k: v for k, v in param_dict.items()}
 
     def _do_post(self, url, data, params=None, headers=None, session_request=False):
         """
