@@ -7,7 +7,9 @@ from casttube import YouTubeSession
 
 from . import BaseController
 from ..error import UnsupportedNamespace
+from ..config import APP_YOUTUBE
 
+YOUTUBE_NAMESPACE = "urn:x-cast:com.google.youtube.mdx"
 TYPE_GET_SCREEN_ID = "getMdxSessionStatus"
 TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
@@ -19,7 +21,7 @@ class YouTubeController(BaseController):
 
     def __init__(self):
         super(YouTubeController, self).__init__(
-            "urn:x-cast:com.google.youtube.mdx", "233637DE")
+            YOUTUBE_NAMESPACE, APP_YOUTUBE)
         self.status_update_event = threading.Event()
         self._screen_id = None
         self._session = None
