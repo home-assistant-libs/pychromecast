@@ -3,12 +3,19 @@ Example on how to use the Spotify Controller.
 NOTE: You need to install the spotipy and spotify-token dependencies.
 
 This can be done by running the following:
-pip install spotify-token
 pip install git+https://github.com/plamere/spotipy.git
+
+You must declare your application to Spotify
+https://developer.spotify.com/dashboard/
+When you have create your app, you must specify the "Redirect URIs"
+in "EDIT SETTINGS".
+Ex value : http://localhost
+At the first launch you will be redirected to your browser to 
+allow the application.
 """
 import pychromecast
 from pychromecast.controllers.spotify import SpotifyController
-import spotify_token as st
+import spotipy.util as util
 import spotipy
 
 chromecasts = pychromecast.get_chromecasts()
@@ -17,10 +24,22 @@ cast = chromecasts[0]
 CAST_NAME = "My Chromecast"
 device_id = None
 
-if cast.name == CAST_NAME:
+# Spotify developer informations
+USERNAME="spotify_user" # edit
+CLIENT_ID= "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # edit
+CLIENT_SECRET="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # edit
+REDIRECT_URI = 'http://localhost' # edit if you have change
+# Scope for full access, adapt to needs
+SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public '\
+        'playlist-modify-private streaming ugc-image-upload user-follow-modify '\
+        'user-follow-read user-library-read user-library-modify user-read-private '\
+        'user-read-birthdate user-read-email user-top-read user-read-playback-state '\
+        'user-modify-playback-state user-read-currently-playing user-read-recently-played'
+# Request access token to spotify
+access_token = util.prompt_for_user_token(USERNAME, scope=SCOPE, client_id=CLIENT_ID, 
+                    client_secret=CLIENT_SECRET, redirect_uri=REDIRECT_URI)
 
-    data = st.start_session("SPOTIFY_USERNAME", "SPOTIFY_PASSWORD")
-    access_token = data[0]
+if cast.name == CAST_NAME:
 
     client = spotipy.Spotify(auth=access_token)
 
