@@ -1,3 +1,8 @@
+"""
+Example showing how to create a simple Chromecast event listener for
+device and media status events
+"""
+
 import time
 import pychromecast
 
