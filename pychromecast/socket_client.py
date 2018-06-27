@@ -405,7 +405,7 @@ class SocketClient(threading.Thread):
                 if function:
                     try:
                         function(data)
-                    except Exception as e :
+                    except Exception as e:
                         self.logger.error("runonce: Error calling callback  : %s" % str(e))
                         # maybe do something else...
 
