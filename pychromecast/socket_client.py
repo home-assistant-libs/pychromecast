@@ -403,7 +403,11 @@ class SocketClient(threading.Thread):
                 function = callback['function']
                 event.set()
                 if function:
-                    function(data)
+                    try:
+                        function(data)
+                    except Exception as e :
+                        self.logger.error("runonce: Error calling callback  : %s" % str(e))
+                        # maybe do something else...
 
         return 0
 
