@@ -4,6 +4,9 @@ pychromecast |Build Status|
 .. |Build Status| image:: https://travis-ci.org/balloob/pychromecast.svg?branch=master
    :target: https://travis-ci.org/balloob/pychromecast
 
+.. |Reviewed by Hound| image:: https://img.shields.io/badge/Reviewed_by-Hound-8E64B0.svg
+   :target: https://houndci.com
+
 Library for Python 3.4+ to communicate with the Google Chromecast. It
 currently supports:
 
