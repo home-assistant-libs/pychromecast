@@ -38,7 +38,7 @@ class YouTubeController(BaseController):
         """
         Play video(video_id) now. This ignores the current play queue order.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
-        :param playlist_id: YouTube playlist id(http://youtube.com/watch?v=video_id&list=playlist_id)
+        :param playlist_id: youtube.com/watch?v=video_id&list=playlist_id
         """
         self.start_session_if_none()
         self._session.play_video(video_id, playlist_id)
