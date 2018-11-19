@@ -34,13 +34,14 @@ class YouTubeController(BaseController):
             self.update_screen_id()
             self._session = YouTubeSession(screen_id=self._screen_id)
 
-    def play_video(self, video_id):
+    def play_video(self, video_id, playlist_id=None):
         """
         Play video(video_id) now. This ignores the current play queue order.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
+        :param playlist_id: youtube.com/watch?v=video_id&list=playlist_id
         """
         self.start_session_if_none()
-        self._session.play_video(video_id)
+        self._session.play_video(video_id, playlist_id)
 
     def add_to_queue(self, video_id):
         """
@@ -65,6 +66,13 @@ class YouTubeController(BaseController):
         """
         self.start_session_if_none()
         self._session.remove_video(video_id)
+
+    def clear_playlist(self):
+        """
+        Clear the entire video queue
+        """
+        self.start_session_if_none()
+        self._session.clear_playlist()
 
     def update_screen_id(self):
         """
