@@ -6,7 +6,7 @@ version of this code: https://github.com/minektur/chromecast-python-poc.
 Without him this would not have been possible.
 """
 # Pylint does not understand the protobuf objects correctly
-# pylint: disable=no-member
+# pylint: disable=no-member, C0302
 
 import errno
 import json
