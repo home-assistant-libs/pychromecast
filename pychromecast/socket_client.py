@@ -490,7 +490,11 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 pass
 
-        self.socket.close()
+        try:
+            self.socket.close()
+        except Exception:  # pylint: disable=broad-except
+            pass
+
         self._report_connection_status(
             ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
                              NetworkAddress(self.host, self.port)))
