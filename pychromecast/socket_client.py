@@ -24,6 +24,7 @@ from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
+from .discovery import get_host_from_service
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
@@ -154,6 +155,8 @@ class SocketClient(threading.Thread):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         self.blocking = kwargs.pop('blocking', True)
+        services = kwargs.pop('services', None)
+        zconf = kwargs.pop('zconf', None)
 
         if self.blocking:
             self.polltime = POLL_TIME_BLOCKING
@@ -173,6 +176,8 @@ class SocketClient(threading.Thread):
         self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
         self.host = host
+        self.services = services or [None]
+        self.zconf = zconf
         self.port = port or 8009
 
         self.source_id = "sender-0"
@@ -235,49 +240,63 @@ class SocketClient(threading.Thread):
         retry_log_fun = self.logger.error
 
         while not self.stop.is_set() and (tries is None or tries > 0):
-            try:
-                self.socket = new_socket()
-                self.socket.settimeout(self.timeout)
-                self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_CONNECTING,
-                                     NetworkAddress(self.host, self.port)))
-                self.socket.connect((self.host, self.port))
-                self.socket = ssl.wrap_socket(self.socket)
-                self.connecting = False
-                self._force_recon = False
-                self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_CONNECTED,
-                                     NetworkAddress(self.host, self.port)))
-                self.receiver_controller.update_status()
-                self.heartbeat_controller.ping()
-                self.heartbeat_controller.reset()
+            for service in self.services.copy():
+                try:
+                    self.socket = new_socket()
+                    self.socket.settimeout(self.timeout)
+                    self._report_connection_status(
+                        ConnectionStatus(CONNECTION_STATUS_CONNECTING,
+                                         NetworkAddress(self.host, self.port)))
+                    if service:
+                        host, port = get_host_from_service(service, self.zconf)
+                        if host and port:
+                            self.host = host
+                            self.port = port
+                            self.logger.debug("[%s:%s] Resolved service %s to %s:%s", self.host, self.port, service, self.host, self.port)
+                        else:
+                            # If zeroconf fails to receive the necessary data, try next
+                            self.logger.debug("[%s:%s] failed to resolve service %s", self.host, self.port, service)
+                            continue
 
-                self.logger.debug("Connected!")
-                break
-            except OSError as err:
-                self.connecting = True
-                if self.stop.is_set():
-                    self.logger.error(
-                        "Failed to connect: %s. aborting due to stop signal.",
-                        err)
-                    raise ChromecastConnectionError("Failed to connect")
+                    self.logger.debug("[%s:%s] Connecting to %s", self.host, self.port, self.host)
+                    self.socket.connect((self.host, self.port))
+                    self.socket = ssl.wrap_socket(self.socket)
+                    self.connecting = False
+                    self._force_recon = False
+                    self._report_connection_status(
+                        ConnectionStatus(CONNECTION_STATUS_CONNECTED,
+                                         NetworkAddress(self.host, self.port)))
+                    self.receiver_controller.update_status()
+                    self.heartbeat_controller.ping()
+                    self.heartbeat_controller.reset()
 
-                self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_FAILED,
-                                     NetworkAddress(self.host, self.port)))
+                    self.logger.debug("[%s:%s] Connected!", self.host, self.port)
+                    return
+                except OSError as err:
+                    self.connecting = True
+                    if self.stop.is_set():
+                        self.logger.error(
+                            "[%s:%s] Failed to connect: %s. aborting due to stop signal.",
+                            self.host, self.port, err)
+                        raise ChromecastConnectionError("Failed to connect")
 
-                # Only sleep if we have another retry remaining
-                if tries is None or tries > 1:
-                    retry_log_fun("Failed to connect, retrying in %.1fs",
-                                  self.retry_wait)
-                    retry_log_fun = self.logger.debug
-                    time.sleep(self.retry_wait)
+                    self._report_connection_status(
+                        ConnectionStatus(CONNECTION_STATUS_FAILED,
+                                         NetworkAddress(self.host, self.port)))
 
-                if tries:
-                    tries -= 1
+            # Only sleep if we have another retry remaining
+            if tries is None or tries > 1:
+                retry_log_fun("[%s:%s] Failed to connect, retrying in %.1fs",
+                              self.host, self.port, self.retry_wait)
+                retry_log_fun = self.logger.debug
+                time.sleep(self.retry_wait)
+
+            if tries:
+                tries -= 1
         else:
             self.stop.set()
-            self.logger.error("Failed to connect. No retries.")
+            self.logger.error("[%s:%s] Failed to connect. No retries.",
+                              self.host, self.port)
             raise ChromecastConnectionError("Failed to connect")
 
     def disconnect(self):
@@ -368,11 +387,12 @@ class SocketClient(threading.Thread):
             except InterruptLoop as exc:
                 if self.stop.is_set():
                     self.logger.info(
-                        "Stopped while reading message, disconnecting.")
+                        "[%s:%s] Stopped while reading message, disconnecting.",
+						 self.host, self.port)
                 else:
                     self.logger.error(
-                        "Interruption caught without being stopped: %s",
-                        exc)
+                        "[%s:%s] Interruption caught without being stopped: %s",
+                        self.host, self.port, exc)
                 return 1
             except ssl.SSLError as exc:
                 if exc.errno == ssl.SSL_ERROR_EOF:
@@ -381,7 +401,8 @@ class SocketClient(threading.Thread):
                 raise
             except socket.error:
                 self._force_recon = True
-                self.logger.error('Error reading from socket.')
+                self.logger.error('[%s:%s] Error reading from socket.',
+				                  self.host, self.port)
             else:
                 data = _json_from_message(message)
         if not message:
@@ -425,11 +446,13 @@ class SocketClient(threading.Thread):
         reset = False
         if self._force_recon:
             self.logger.warning(
-                "Error communicating with socket, resetting connection")
+                "[%s:%s] Error communicating with socket, resetting connection",
+				 self.host, self.port)
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.warning("Heartbeat timeout, resetting connection")
+            self.logger.warning("[%s:%s] Heartbeat timeout, resetting connection",
+			                    self.host, self.port)
             reset = True
 
         if reset:
@@ -451,7 +474,8 @@ class SocketClient(threading.Thread):
             # debug messages
             if message.namespace != NS_HEARTBEAT:
                 self.logger.debug(
-                    "Received: %s", _message_to_string(message, data))
+                    "[%s:%s] Received: %s", self.host, self.port,
+					_message_to_string(message, data))
 
             # message handlers
             try:
@@ -462,18 +486,18 @@ class SocketClient(threading.Thread):
                 if not handled:
                     if data.get(REQUEST_ID) not in self._request_callbacks:
                         self.logger.debug(
-                            "Message unhandled: %s",
-                            _message_to_string(message, data))
+                            "[%s:%s] Message unhandled: %s",
+                            self.host, self.port, _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    ("Exception caught while sending message to "
-                     "controller %s: %s"),
+                    ("[%s:%s] Exception caught while sending message to "
+                     "controller %s: %s"), self.host, self.port,
                     type(self._handlers[message.namespace]).__name__,
                     _message_to_string(message, data))
 
         else:
             self.logger.debug(
-                "Received unknown namespace: %s",
+                "[%s:%s] Received unknown namespace: %s", self.host, self.port,
                 _message_to_string(message, data))
 
     def _cleanup(self):
@@ -490,7 +514,11 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 pass
 
-        self.socket.close()
+        try:
+            self.socket.close()
+        except Exception:
+            self.logger.exception(
+                "[%s:%s] _cleanup", self.host, self.port)
         self._report_connection_status(
             ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
                              NetworkAddress(self.host, self.port)))
@@ -500,7 +528,8 @@ class SocketClient(threading.Thread):
         """ Report a change in the connection status to any listeners """
         for listener in self._connection_listeners:
             try:
-                self.logger.debug("connection listener: %x (%s)",
+                self.logger.debug("[%s:%s] connection listener: %x (%s)",
+				                  self.host, self.port,
                                   id(listener), type(listener).__name__)
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
@@ -580,7 +609,8 @@ class SocketClient(threading.Thread):
 
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
-            self.logger.debug("Sending: %s", _message_to_string(msg, data))
+            self.logger.debug("[%s:%s] Sending: %s", self.host, self.port,
+			                  _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
@@ -596,9 +626,11 @@ class SocketClient(threading.Thread):
             except socket.error:
                 self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
-                self.logger.info('Error writing to socket.')
+                self.logger.info('[%s:%s] Error writing to socket.',
+				                 self.host, self.port)
         else:
-            raise NotConnected("Chromecast is connecting...")
+            raise NotConnected("Chromecast " + self.host + ":" + self.port +
+			                   " is connecting...")
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               callback_function_param=False):
