@@ -33,6 +33,7 @@ CAST_TYPES = {
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def reboot(host):
     """ Reboots the chromecast. """
     CC_SESSION.post(FORMAT_BASE_URL.format(host) + "/setup/reboot",

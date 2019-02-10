@@ -9,6 +9,7 @@ DISCOVER_TIMEOUT = 5
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class CastListener(object):
     """Zeroconf Cast Services collection."""
 
@@ -147,7 +148,7 @@ def get_host_from_service(service, zconf):
         if service_info and service_info.server and service_info.port:
             _LOGGER.debug(
                 "get_host_from_service resolved service %s to service_info %s",
-                 service, service_info)
+                service, service_info)
             host_info = (service_info.server.lower(), service_info.port)
     except IOError:
         pass

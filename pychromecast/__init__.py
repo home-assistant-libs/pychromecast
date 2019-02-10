@@ -25,6 +25,7 @@ IGNORE_CEC = []
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                               blocking=True):
     """Creates a Chromecast object from a zeroconf host."""

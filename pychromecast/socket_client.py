@@ -252,13 +252,20 @@ class SocketClient(threading.Thread):
                         if host and port:
                             self.host = host
                             self.port = port
-                            self.logger.debug("[%s:%s] Resolved service %s to %s:%s", self.host, self.port, service, self.host, self.port)
+                            self.logger.debug(
+                                "[%s:%s] Resolved service %s to %s:%s",
+                                self.host, self.port, service, self.host,
+                                self.port)
                         else:
-                            # If zeroconf fails to receive the necessary data, try next
-                            self.logger.debug("[%s:%s] failed to resolve service %s", self.host, self.port, service)
+                            # If zeroconf fails to receive the necessary data,
+                            # try next
+                            self.logger.debug(
+                                "[%s:%s] failed to resolve service %s",
+                                self.host, self.port, service)
                             continue
 
-                    self.logger.debug("[%s:%s] Connecting to %s", self.host, self.port, self.host)
+                    self.logger.debug("[%s:%s] Connecting to %s",
+                                      self.host, self.port, self.host)
                     self.socket.connect((self.host, self.port))
                     self.socket = ssl.wrap_socket(self.socket)
                     self.connecting = False
@@ -270,13 +277,15 @@ class SocketClient(threading.Thread):
                     self.heartbeat_controller.ping()
                     self.heartbeat_controller.reset()
 
-                    self.logger.debug("[%s:%s] Connected!", self.host, self.port)
+                    self.logger.debug("[%s:%s] Connected!",
+                                      self.host, self.port)
                     return
                 except OSError as err:
                     self.connecting = True
                     if self.stop.is_set():
                         self.logger.error(
-                            "[%s:%s] Failed to connect: %s. aborting due to stop signal.",
+                            "[%s:%s] Failed to connect: %s. "
+                            "aborting due to stop signal.",
                             self.host, self.port, err)
                         raise ChromecastConnectionError("Failed to connect")
 
@@ -387,11 +396,13 @@ class SocketClient(threading.Thread):
             except InterruptLoop as exc:
                 if self.stop.is_set():
                     self.logger.info(
-                        "[%s:%s] Stopped while reading message, disconnecting.",
-						 self.host, self.port)
+                        "[%s:%s] Stopped while reading message, "
+                        "disconnecting.",
+                        self.host, self.port)
                 else:
                     self.logger.error(
-                        "[%s:%s] Interruption caught without being stopped: %s",
+                        "[%s:%s] Interruption caught without being stopped: "
+                        "%s",
                         self.host, self.port, exc)
                 return 1
             except ssl.SSLError as exc:
@@ -402,7 +413,7 @@ class SocketClient(threading.Thread):
             except socket.error:
                 self._force_recon = True
                 self.logger.error('[%s:%s] Error reading from socket.',
-				                  self.host, self.port)
+                                  self.host, self.port)
             else:
                 data = _json_from_message(message)
         if not message:
@@ -446,13 +457,15 @@ class SocketClient(threading.Thread):
         reset = False
         if self._force_recon:
             self.logger.warning(
-                "[%s:%s] Error communicating with socket, resetting connection",
-				 self.host, self.port)
+                "[%s:%s] Error communicating with socket, resetting "
+                "connection",
+                self.host, self.port)
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.warning("[%s:%s] Heartbeat timeout, resetting connection",
-			                    self.host, self.port)
+            self.logger.warning(
+                "[%s:%s] Heartbeat timeout, resetting connection",
+                self.host, self.port)
             reset = True
 
         if reset:
@@ -475,7 +488,7 @@ class SocketClient(threading.Thread):
             if message.namespace != NS_HEARTBEAT:
                 self.logger.debug(
                     "[%s:%s] Received: %s", self.host, self.port,
-					_message_to_string(message, data))
+                    _message_to_string(message, data))
 
             # message handlers
             try:
@@ -487,7 +500,8 @@ class SocketClient(threading.Thread):
                     if data.get(REQUEST_ID) not in self._request_callbacks:
                         self.logger.debug(
                             "[%s:%s] Message unhandled: %s",
-                            self.host, self.port, _message_to_string(message, data))
+                            self.host, self.port,
+                            _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
                     ("[%s:%s] Exception caught while sending message to "
@@ -529,7 +543,7 @@ class SocketClient(threading.Thread):
         for listener in self._connection_listeners:
             try:
                 self.logger.debug("[%s:%s] connection listener: %x (%s)",
-				                  self.host, self.port,
+                                  self.host, self.port,
                                   id(listener), type(listener).__name__)
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
@@ -610,7 +624,7 @@ class SocketClient(threading.Thread):
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
             self.logger.debug("[%s:%s] Sending: %s", self.host, self.port,
-			                  _message_to_string(msg, data))
+                              _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
@@ -627,10 +641,10 @@ class SocketClient(threading.Thread):
                 self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
                 self.logger.info('[%s:%s] Error writing to socket.',
-				                 self.host, self.port)
+                                 self.host, self.port)
         else:
             raise NotConnected("Chromecast " + self.host + ":" + self.port +
-			                   " is connecting...")
+                               " is connecting...")
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               callback_function_param=False):
