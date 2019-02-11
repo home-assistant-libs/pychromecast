@@ -6,7 +6,7 @@ version of this code: https://github.com/minektur/chromecast-python-poc.
 Without him this would not have been possible.
 """
 # Pylint does not understand the protobuf objects correctly
-# pylint: disable=no-member
+# pylint: disable=no-member, too-many-lines
 
 import errno
 import json
@@ -217,6 +217,21 @@ class SocketClient(threading.Thread):
                                  NetworkAddress(self.host, self.port)))
             raise
 
+    def _get_host_from_service(self, service):
+        """ Resolve host and port from service. """
+        host = self.host
+        port = self.port
+        if service:
+            host, port = get_host_from_service(service, self.zconf)
+            if host and port:
+                self.logger.debug("[%s:%s] Resolved service %s to %s:%s",
+                                  self.host, self.port, service, self.host,
+                                  self.port)
+            else:
+                self.logger.debug("[%s:%s] failed to resolve service %s",
+                                  self.host, self.port, service)
+        return (host, port)
+
     def initialize_connection(self):
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
@@ -247,22 +262,14 @@ class SocketClient(threading.Thread):
                     self._report_connection_status(
                         ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                          NetworkAddress(self.host, self.port)))
-                    if service:
-                        host, port = get_host_from_service(service, self.zconf)
-                        if host and port:
-                            self.host = host
-                            self.port = port
-                            self.logger.debug(
-                                "[%s:%s] Resolved service %s to %s:%s",
-                                self.host, self.port, service, self.host,
-                                self.port)
-                        else:
-                            # If zeroconf fails to receive the necessary data,
-                            # try next
-                            self.logger.debug(
-                                "[%s:%s] failed to resolve service %s",
-                                self.host, self.port, service)
-                            continue
+                    host, port = self._get_host_from_service(service)
+                    if host and port:
+                        self.host = host
+                        self.port = port
+                    else:
+                        # If zeroconf fails to receive the necessary data,
+                        # try next
+                        continue
 
                     self.logger.debug("[%s:%s] Connecting to %s",
                                       self.host, self.port, self.host)
@@ -302,11 +309,11 @@ class SocketClient(threading.Thread):
 
             if tries:
                 tries -= 1
-        else:
-            self.stop.set()
-            self.logger.error("[%s:%s] Failed to connect. No retries.",
-                              self.host, self.port)
-            raise ChromecastConnectionError("Failed to connect")
+
+        self.stop.set()
+        self.logger.error("[%s:%s] Failed to connect. No retries.",
+                          self.host, self.port)
+        raise ChromecastConnectionError("Failed to connect")
 
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
@@ -530,7 +537,7 @@ class SocketClient(threading.Thread):
 
         try:
             self.socket.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             self.logger.exception(
                 "[%s:%s] _cleanup", self.host, self.port)
         self._report_connection_status(
