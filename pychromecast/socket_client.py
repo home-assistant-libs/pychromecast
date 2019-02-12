@@ -58,6 +58,8 @@ CONNECTION_STATUS_CONNECTED = "CONNECTED"
 CONNECTION_STATUS_DISCONNECTED = "DISCONNECTED"
 # Connecting to socket failed (after a CONNECTION_STATUS_CONNECTING)
 CONNECTION_STATUS_FAILED = "FAILED"
+# Failed to resolve service name
+CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 
@@ -217,22 +219,7 @@ class SocketClient(threading.Thread):
                                  NetworkAddress(self.host, self.port)))
             raise
 
-    def _get_host_from_service(self, service):
-        """ Resolve host and port from service. """
-        host = self.host
-        port = self.port
-        if service:
-            host, port = get_host_from_service(service, self.zconf)
-            if host and port:
-                self.logger.debug("[%s:%s] Resolved service %s to %s:%s",
-                                  self.host, self.port, service, self.host,
-                                  self.port)
-            else:
-                self.logger.debug("[%s:%s] failed to resolve service %s",
-                                  self.host, self.port, service)
-        return (host, port)
-
-    def initialize_connection(self):
+    def initialize_connection(self):  # pylint:disable=too-many-statements
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
@@ -262,14 +249,28 @@ class SocketClient(threading.Thread):
                     self._report_connection_status(
                         ConnectionStatus(CONNECTION_STATUS_CONNECTING,
                                          NetworkAddress(self.host, self.port)))
-                    host, port = self._get_host_from_service(service)
-                    if host and port:
-                        self.host = host
-                        self.port = port
-                    else:
-                        # If zeroconf fails to receive the necessary data,
-                        # try next
-                        continue
+                    # Resolve the service name. If service is None, we're
+                    # connecting directly to a host name or IP-address
+                    if service:
+                        host, port = get_host_from_service(service, self.zconf)
+                        if host and port:
+                            self.logger.debug(
+                                "[%s:%s] Resolved service %s to %s:%s",
+                                self.host, self.port, service, self.host,
+                                self.port)
+                            self.host = host
+                            self.port = port
+                        else:
+                            self.logger.debug(
+                                "[%s:%s] failed to resolve service %s",
+                                self.host, self.port, service)
+                            self._report_connection_status(
+                                ConnectionStatus(
+                                    CONNECTION_STATUS_FAILED_RESOLVE,
+                                    NetworkAddress(service, None)))
+                            # If zeroconf fails to receive the necessary data,
+                            # try next
+                            continue
 
                     self.logger.debug("[%s:%s] Connecting to %s",
                                       self.host, self.port, self.host)
