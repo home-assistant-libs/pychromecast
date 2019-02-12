@@ -254,8 +254,10 @@ class SocketClient(threading.Thread):
                     if service:
                         host = None
                         port = None
-                        service_info = get_info_from_service(service, zconf)
-                        if service_info and service_info.server and service_info.port:
+                        service_info = get_info_from_service(service,
+                                                             self.zconf)
+                        if (service_info and service_info.server and
+                                service_info.port):
                             host = service_info.server.lower()
                             port = service_info.port
                         if host and port:
