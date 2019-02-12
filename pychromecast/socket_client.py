@@ -24,7 +24,7 @@ from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
-from .discovery import get_host_from_service
+from .discovery import get_info_from_service
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
@@ -252,7 +252,12 @@ class SocketClient(threading.Thread):
                     # Resolve the service name. If service is None, we're
                     # connecting directly to a host name or IP-address
                     if service:
-                        host, port = get_host_from_service(service, self.zconf)
+                        host = None
+                        port = None
+                        service_info = get_info_from_service(service, zconf)
+                        if service_info and service_info.server and service_info.port:
+                            host = service_info.server.lower()
+                            port = service_info.port
                         if host and port:
                             self.logger.debug(
                                 "[%s:%s] Resolved service %s to %s:%s",

@@ -145,9 +145,9 @@ def get_info_from_service(service, zconf):
     try:
         service_info = zconf.get_service_info('_googlecast._tcp.local.',
                                               service)
-        if service_info
+        if service_info:
             _LOGGER.debug(
-                "get_host_from_service resolved service %s to service_info %s",
+                "get_info_from_service resolved service %s to service_info %s",
                 service, service_info)
     except IOError:
         pass

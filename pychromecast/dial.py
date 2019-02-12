@@ -7,7 +7,7 @@ from uuid import UUID
 import logging
 import requests
 
-from .discovery import get_host_from_service
+from .discovery import get_info_from_service
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -51,7 +51,9 @@ def get_device_status(host, services=None, zconf=None):
     try:
         if not host:
             for service in services.copy():
-                host, _ = get_host_from_service(service, zconf)
+                service_info = get_info_from_service(service, zconf)
+                if service_info and service_info.server:
+                    host = service_info.server.lower()
                 if host:
                     _LOGGER.debug("Resolved service %s to %s", service, host)
                     break
