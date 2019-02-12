@@ -4,7 +4,10 @@ Implements the DIAL-protocol to communicate with the Chromecast
 from collections import namedtuple
 from uuid import UUID
 
+import logging
 import requests
+
+from .discovery import get_info_from_service
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -28,6 +31,8 @@ CAST_TYPES = {
     'google cast group': CAST_TYPE_GROUP,
 }
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def reboot(host):
     """ Reboots the chromecast. """
@@ -35,7 +40,7 @@ def reboot(host):
                     data='{"params":"now"}', timeout=10)
 
 
-def get_device_status(host):
+def get_device_status(host, services=None, zconf=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -44,6 +49,15 @@ def get_device_status(host):
     """
 
     try:
+        if not host:
+            for service in services.copy():
+                service_info = get_info_from_service(service, zconf)
+                if service_info and service_info.server:
+                    host = service_info.server.lower()
+                if host:
+                    _LOGGER.debug("Resolved service %s to %s", service, host)
+                    break
+
         req = CC_SESSION.get(
             FORMAT_BASE_URL.format(host) + "/setup/eureka_info?options=detail",
             timeout=10)

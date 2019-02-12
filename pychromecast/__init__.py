@@ -23,6 +23,8 @@ __version__ = '.'.join(__version_info__)
 IDLE_APP_ID = 'E8C28D3C'
 IGNORE_CEC = []
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                               blocking=True):
@@ -31,6 +33,7 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
     # the primary source and the remaining will be fetched
     # later on.
     ip_address, port, uuid, model_name, friendly_name = host
+    _LOGGER.debug("_get_chromecast_from_host %s", host)
     cast_type = CAST_TYPES.get(model_name.lower(),
                                CAST_TYPE_CHROMECAST)
     device = DeviceStatus(
@@ -40,6 +43,25 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
     return Chromecast(host=ip_address, port=port, device=device, tries=tries,
                       timeout=timeout, retry_wait=retry_wait,
                       blocking=blocking)
+
+
+def _get_chromecast_from_service(services, tries=None, retry_wait=None,
+                                 timeout=None, blocking=True):
+    """Creates a Chromecast object from a zeroconf service."""
+    # Build device status from the mDNS service name info, this
+    # information is the primary source and the remaining will be
+    # fetched later on.
+    services, zconf, uuid, model_name, friendly_name = services
+    _LOGGER.debug("_get_chromecast_from_service %s", services)
+    cast_type = CAST_TYPES.get(model_name.lower(),
+                               CAST_TYPE_CHROMECAST)
+    device = DeviceStatus(
+        friendly_name=friendly_name, model_name=model_name,
+        manufacturer=None, uuid=uuid, cast_type=cast_type,
+    )
+    return Chromecast(host=None, device=device, tries=tries, timeout=timeout,
+                      retry_wait=retry_wait, blocking=blocking,
+                      services=services, zconf=zconf)
 
 
 # pylint: disable=too-many-locals
@@ -123,17 +145,20 @@ class Chromecast(object):
         timeout = kwargs.pop('timeout', None)
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
+        services = kwargs.pop('services', None)
+        zconf = kwargs.pop('zconf', True)
 
         self.logger = logging.getLogger(__name__)
 
         # Resolve host to IP address
+        self._services = services
         self.host = host
         self.port = port or 8009
 
         self.logger.info("Querying device status")
         self.device = device
         if device:
-            dev_status = get_device_status(self.host)
+            dev_status = get_device_status(self.host, services, zconf)
             if dev_status:
                 # Values from `device` have priority over `dev_status`
                 # as they come from the dial information.
@@ -154,7 +179,7 @@ class Chromecast(object):
             else:
                 self.device = device
         else:
-            self.device = get_device_status(self.host)
+            self.device = get_device_status(self.host, services, zconf)
 
         if not self.device:
             raise ChromecastConnectionError(  # noqa
@@ -166,7 +191,7 @@ class Chromecast(object):
         self.socket_client = socket_client.SocketClient(
             host, port=port, cast_type=self.device.cast_type,
             tries=tries, timeout=timeout, retry_wait=retry_wait,
-            blocking=blocking)
+            blocking=blocking, services=services, zconf=zconf)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
