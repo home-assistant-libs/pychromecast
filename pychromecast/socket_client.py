@@ -24,7 +24,7 @@ from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
-from .discovery import get_info_from_service
+from .discovery import get_info_from_service, get_host_from_service_info
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
@@ -174,7 +174,7 @@ class SocketClient(threading.Thread):
         self._force_recon = False
 
         self.cast_type = cast_type
-        self.fn = None
+        self.fn = None  # pylint:disable=invalid-name
         self.tries = tries
         self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
@@ -220,7 +220,7 @@ class SocketClient(threading.Thread):
                                  NetworkAddress(self.host, self.port)))
             raise
 
-    def initialize_connection(self):  # pylint:disable=too-many-statements
+    def initialize_connection(self):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
@@ -245,9 +245,9 @@ class SocketClient(threading.Thread):
         # Dict keeping track of individual retry delay for each named service
         retries = {}
 
-        while not self.stop.is_set() and (tries is None or tries > 0):
+        while not self.stop.is_set() and (tries is None or tries > 0):  # noqa: E501 pylint:disable=too-many-nested-blocks
             # Prune retries dict
-            retries = { key: retries[key] for key in self.services if (
+            retries = {key: retries[key] for key in self.services if (
                 key is not None and key in retries)}
 
             for service in self.services.copy():
@@ -269,18 +269,11 @@ class SocketClient(threading.Thread):
                         port = None
                         service_info = get_info_from_service(service,
                                                              self.zconf)
-                        if (service_info and service_info.port and
-                                (service_info.server or service_info.address)):
-                            host = None
-                            if service_info.address:
-                                host = socket.inet_ntoa(service_info.address)
-                            else:
-                                host = service_info.server.lower()
-                            port = service_info.port
+                        host, port = get_host_from_service_info(service_info)
                         if host and port:
                             try:
-                                self.fn = \
-                                    service_info.properties[b'fn'].decode('utf-8')
+                                self.fn = service_info.properties[b'fn']\
+                                    .decode('utf-8')
                             except (AttributeError, KeyError, UnicodeError):
                                 pass
                             self.logger.debug(
@@ -335,10 +328,10 @@ class SocketClient(threading.Thread):
                         now = time.time()
                         retry['next_retry'] = now + retry['delay']
                         retry_log_fun(
-                              "[%s:%s] Failed to connect to service %s"
-                              ", retrying in %.1fs",
-                              self.fn or self.host, self.port,
-                              service, retry['delay'])
+                            "[%s:%s] Failed to connect to service %s"
+                            ", retrying in %.1fs",
+                            self.fn or self.host, self.port,
+                            service, retry['delay'])
                         retry['delay'] = min(retry['delay']*2, 300)
                         retries[service] = retry
                     else:
