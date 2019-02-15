@@ -6,6 +6,7 @@ from uuid import UUID
 
 import logging
 import requests
+import socket
 
 from .discovery import get_info_from_service
 
@@ -52,8 +53,13 @@ def get_device_status(host, services=None, zconf=None):
         if not host:
             for service in services.copy():
                 service_info = get_info_from_service(service, zconf)
-                if service_info and service_info.server:
-                    host = service_info.server.lower()
+                if (service_info and
+                        (service_info.server or service_info.address)):
+                    host = None
+                    if service_info.address:
+                        host = socket.inet_ntoa(service_info.address)
+                    else:
+                        host = service_info.server.lower()
                 if host:
                     _LOGGER.debug("Resolved service %s to %s", service, host)
                     break
@@ -94,7 +100,7 @@ def get_device_status(host, services=None, zconf=None):
         return DeviceStatus(friendly_name, model_name, manufacturer,
                             uuid, cast_type)
 
-    except (requests.exceptions.RequestException, ValueError):
+    except (requests.exceptions.RequestException, OSError, ValueError):
         return None
 
 

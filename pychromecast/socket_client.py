@@ -241,8 +241,18 @@ class SocketClient(threading.Thread):
         self.connecting = True
         retry_log_fun = self.logger.error
 
+        # Dict keeping track of individual retry delay for each named service
+        retries = {}
+
         while not self.stop.is_set() and (tries is None or tries > 0):
+            # Prune retries dict
+            retries = { key: retries[key] for key in self.services if (
+                key is not None and key in retries)}
+
             for service in self.services.copy():
+                now = time.time()
+                retry = retries.get(
+                    service, {'delay': self.retry_wait, 'next_retry': now})
                 try:
                     self.socket = new_socket()
                     self.socket.settimeout(self.timeout)
@@ -252,13 +262,19 @@ class SocketClient(threading.Thread):
                     # Resolve the service name. If service is None, we're
                     # connecting directly to a host name or IP-address
                     if service:
+                        if now < retry['next_retry']:
+                            continue
                         host = None
                         port = None
                         service_info = get_info_from_service(service,
                                                              self.zconf)
-                        if (service_info and service_info.server and
-                                service_info.port):
-                            host = service_info.server.lower()
+                        if (service_info and service_info.port and
+                                (service_info.server or service_info.address)):
+                            host = None
+                            if service_info.address:
+                                host = socket.inet_ntoa(service_info.address)
+                            else:
+                                host = service_info.server.lower()
                             port = service_info.port
                         if host and port:
                             self.logger.debug(
@@ -276,11 +292,12 @@ class SocketClient(threading.Thread):
                                     CONNECTION_STATUS_FAILED_RESOLVE,
                                     NetworkAddress(service, None)))
                             # If zeroconf fails to receive the necessary data,
-                            # try next
+                            # try next service
                             continue
 
-                    self.logger.debug("[%s:%s] Connecting to %s",
-                                      self.host, self.port, self.host)
+                    self.logger.debug("[%s:%s] Connecting to %s:%s",
+                                      self.host, self.port,
+                                      self.host, self.port)
                     self.socket.connect((self.host, self.port))
                     self.socket = ssl.wrap_socket(self.socket)
                     self.connecting = False
@@ -307,12 +324,29 @@ class SocketClient(threading.Thread):
                     self._report_connection_status(
                         ConnectionStatus(CONNECTION_STATUS_FAILED,
                                          NetworkAddress(self.host, self.port)))
+                    if service is not None:
+                        # Exponentional backoff for service name mdns lookups
+                        now = time.time()
+                        retry['next_retry'] = now + retry['delay']
+                        retry_log_fun(
+                              "[%s:%s] Failed to connect to service %s"
+                              ", retrying in %.1fs",
+                              self.host, self.port,
+                              service, retry['delay'])
+                        retry['delay'] = min(retry['delay']*2, 300)
+                        retries[service] = retry
+                    else:
+                        retry_log_fun(
+                            "[%s:%s] Failed to connect, retrying in %.1fs",
+                            self.host, self.port, self.retry_wait)
+                    retry_log_fun = self.logger.debug
 
             # Only sleep if we have another retry remaining
             if tries is None or tries > 1:
-                retry_log_fun("[%s:%s] Failed to connect, retrying in %.1fs",
-                              self.host, self.port, self.retry_wait)
-                retry_log_fun = self.logger.debug
+                self.logger.debug(
+                    "[%s:%s] Not connected, sleeping for %.1fs. Services: %s",
+                    self.host, self.port,
+                    self.retry_wait, self.services)
                 time.sleep(self.retry_wait)
 
             if tries:
