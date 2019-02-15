@@ -174,6 +174,7 @@ class SocketClient(threading.Thread):
         self._force_recon = False
 
         self.cast_type = cast_type
+        self.fn = None
         self.tries = tries
         self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
@@ -277,16 +278,21 @@ class SocketClient(threading.Thread):
                                 host = service_info.server.lower()
                             port = service_info.port
                         if host and port:
+                            try:
+                                self.fn = \
+                                    service_info.properties[b'fn'].decode('utf-8')
+                            except (AttributeError, KeyError, UnicodeError):
+                                pass
                             self.logger.debug(
                                 "[%s:%s] Resolved service %s to %s:%s",
-                                self.host, self.port, service, self.host,
-                                self.port)
+                                self.fn or self.host, self.port, service, host,
+                                port)
                             self.host = host
                             self.port = port
                         else:
                             self.logger.debug(
                                 "[%s:%s] failed to resolve service %s",
-                                self.host, self.port, service)
+                                self.fn or self.host, self.port, service)
                             self._report_connection_status(
                                 ConnectionStatus(
                                     CONNECTION_STATUS_FAILED_RESOLVE,
@@ -296,7 +302,7 @@ class SocketClient(threading.Thread):
                             continue
 
                     self.logger.debug("[%s:%s] Connecting to %s:%s",
-                                      self.host, self.port,
+                                      self.fn or self.host, self.port,
                                       self.host, self.port)
                     self.socket.connect((self.host, self.port))
                     self.socket = ssl.wrap_socket(self.socket)
@@ -310,7 +316,7 @@ class SocketClient(threading.Thread):
                     self.heartbeat_controller.reset()
 
                     self.logger.debug("[%s:%s] Connected!",
-                                      self.host, self.port)
+                                      self.fn or self.host, self.port)
                     return
                 except OSError as err:
                     self.connecting = True
@@ -318,7 +324,7 @@ class SocketClient(threading.Thread):
                         self.logger.error(
                             "[%s:%s] Failed to connect: %s. "
                             "aborting due to stop signal.",
-                            self.host, self.port, err)
+                            self.fn or self.host, self.port, err)
                         raise ChromecastConnectionError("Failed to connect")
 
                     self._report_connection_status(
@@ -331,21 +337,21 @@ class SocketClient(threading.Thread):
                         retry_log_fun(
                               "[%s:%s] Failed to connect to service %s"
                               ", retrying in %.1fs",
-                              self.host, self.port,
+                              self.fn or self.host, self.port,
                               service, retry['delay'])
                         retry['delay'] = min(retry['delay']*2, 300)
                         retries[service] = retry
                     else:
                         retry_log_fun(
                             "[%s:%s] Failed to connect, retrying in %.1fs",
-                            self.host, self.port, self.retry_wait)
+                            self.fn or self.host, self.port, self.retry_wait)
                     retry_log_fun = self.logger.debug
 
             # Only sleep if we have another retry remaining
             if tries is None or tries > 1:
                 self.logger.debug(
                     "[%s:%s] Not connected, sleeping for %.1fs. Services: %s",
-                    self.host, self.port,
+                    self.fn or self.host, self.port,
                     self.retry_wait, self.services)
                 time.sleep(self.retry_wait)
 
@@ -354,7 +360,7 @@ class SocketClient(threading.Thread):
 
         self.stop.set()
         self.logger.error("[%s:%s] Failed to connect. No retries.",
-                          self.host, self.port)
+                          self.fn or self.host, self.port)
         raise ChromecastConnectionError("Failed to connect")
 
     def disconnect(self):
@@ -447,12 +453,12 @@ class SocketClient(threading.Thread):
                     self.logger.info(
                         "[%s:%s] Stopped while reading message, "
                         "disconnecting.",
-                        self.host, self.port)
+                        self.fn or self.host, self.port)
                 else:
                     self.logger.error(
                         "[%s:%s] Interruption caught without being stopped: "
                         "%s",
-                        self.host, self.port, exc)
+                        self.fn or self.host, self.port, exc)
                 return 1
             except ssl.SSLError as exc:
                 if exc.errno == ssl.SSL_ERROR_EOF:
@@ -462,7 +468,7 @@ class SocketClient(threading.Thread):
             except socket.error:
                 self._force_recon = True
                 self.logger.error('[%s:%s] Error reading from socket.',
-                                  self.host, self.port)
+                                  self.fn or self.host, self.port)
             else:
                 data = _json_from_message(message)
         if not message:
@@ -508,13 +514,13 @@ class SocketClient(threading.Thread):
             self.logger.warning(
                 "[%s:%s] Error communicating with socket, resetting "
                 "connection",
-                self.host, self.port)
+                self.fn or self.host, self.port)
             reset = True
 
         elif self.heartbeat_controller.is_expired():
             self.logger.warning(
                 "[%s:%s] Heartbeat timeout, resetting connection",
-                self.host, self.port)
+                self.fn or self.host, self.port)
             reset = True
 
         if reset:
@@ -536,7 +542,7 @@ class SocketClient(threading.Thread):
             # debug messages
             if message.namespace != NS_HEARTBEAT:
                 self.logger.debug(
-                    "[%s:%s] Received: %s", self.host, self.port,
+                    "[%s:%s] Received: %s", self.fn or self.host, self.port,
                     _message_to_string(message, data))
 
             # message handlers
@@ -549,18 +555,19 @@ class SocketClient(threading.Thread):
                     if data.get(REQUEST_ID) not in self._request_callbacks:
                         self.logger.debug(
                             "[%s:%s] Message unhandled: %s",
-                            self.host, self.port,
+                            self.fn or self.host, self.port,
                             _message_to_string(message, data))
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
                     ("[%s:%s] Exception caught while sending message to "
-                     "controller %s: %s"), self.host, self.port,
+                     "controller %s: %s"), self.fn or self.host, self.port,
                     type(self._handlers[message.namespace]).__name__,
                     _message_to_string(message, data))
 
         else:
             self.logger.debug(
-                "[%s:%s] Received unknown namespace: %s", self.host, self.port,
+                "[%s:%s] Received unknown namespace: %s",
+                self.fn or self.host, self.port,
                 _message_to_string(message, data))
 
     def _cleanup(self):
@@ -581,7 +588,7 @@ class SocketClient(threading.Thread):
             self.socket.close()
         except Exception:  # pylint: disable=broad-except
             self.logger.exception(
-                "[%s:%s] _cleanup", self.host, self.port)
+                "[%s:%s] _cleanup", self.fn or self.host, self.port)
         self._report_connection_status(
             ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
                              NetworkAddress(self.host, self.port)))
@@ -592,7 +599,7 @@ class SocketClient(threading.Thread):
         for listener in self._connection_listeners:
             try:
                 self.logger.debug("[%s:%s] connection listener: %x (%s)",
-                                  self.host, self.port,
+                                  self.fn or self.host, self.port,
                                   id(listener), type(listener).__name__)
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
@@ -672,7 +679,8 @@ class SocketClient(threading.Thread):
 
         # Log all messages except heartbeat
         if msg.namespace != NS_HEARTBEAT:
-            self.logger.debug("[%s:%s] Sending: %s", self.host, self.port,
+            self.logger.debug("[%s:%s] Sending: %s",
+                              self.fn or self.host, self.port,
                               _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
@@ -690,7 +698,7 @@ class SocketClient(threading.Thread):
                 self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
                 self.logger.info('[%s:%s] Error writing to socket.',
-                                 self.host, self.port)
+                                 self.fn or self.host, self.port)
         else:
             raise NotConnected("Chromecast " + self.host + ":" + self.port +
                                " is connecting...")
