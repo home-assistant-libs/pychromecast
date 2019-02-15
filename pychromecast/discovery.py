@@ -152,3 +152,17 @@ def get_info_from_service(service, zconf):
     except IOError:
         pass
     return service_info
+
+
+def get_host_from_service_info(service_info):
+    """ Get hostname or IP from service_info. """
+    host = None
+    port = None
+    if (service_info and service_info.port and
+            (service_info.server or service_info.address)):
+        if service_info.address:
+            host = socket.inet_ntoa(service_info.address)
+        else:
+            host = service_info.server.lower()
+        port = service_info.port
+    return (host, port)
