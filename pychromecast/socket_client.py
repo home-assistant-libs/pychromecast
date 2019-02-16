@@ -245,6 +245,13 @@ class SocketClient(threading.Thread):
         # Dict keeping track of individual retry delay for each named service
         retries = {}
 
+        def mdns_backoff(service, retry):
+            """Exponentional backoff for service name mdns lookups."""
+            now = time.time()
+            retry['next_retry'] = now + retry['delay']
+            retry['delay'] = min(retry['delay']*2, 300)
+            retries[service] = retry
+
         while not self.stop.is_set() and (tries is None or tries > 0):  # noqa: E501 pylint:disable=too-many-nested-blocks
             # Prune retries dict
             retries = {key: retries[key] for key in self.services if (
@@ -254,6 +261,9 @@ class SocketClient(threading.Thread):
                 now = time.time()
                 retry = retries.get(
                     service, {'delay': self.retry_wait, 'next_retry': now})
+                # If we're connecting to a named service, check if it's time
+                if service and now < retry['next_retry']:
+                    continue
                 try:
                     self.socket = new_socket()
                     self.socket.settimeout(self.timeout)
@@ -263,8 +273,6 @@ class SocketClient(threading.Thread):
                     # Resolve the service name. If service is None, we're
                     # connecting directly to a host name or IP-address
                     if service:
-                        if now < retry['next_retry']:
-                            continue
                         host = None
                         port = None
                         service_info = get_info_from_service(service,
@@ -284,12 +292,13 @@ class SocketClient(threading.Thread):
                             self.port = port
                         else:
                             self.logger.debug(
-                                "[%s:%s] failed to resolve service %s",
+                                "[%s:%s] Failed to resolve service %s",
                                 self.fn or self.host, self.port, service)
                             self._report_connection_status(
                                 ConnectionStatus(
                                     CONNECTION_STATUS_FAILED_RESOLVE,
                                     NetworkAddress(service, None)))
+                            mdns_backoff(service, retry)
                             # If zeroconf fails to receive the necessary data,
                             # try next service
                             continue
@@ -324,16 +333,12 @@ class SocketClient(threading.Thread):
                         ConnectionStatus(CONNECTION_STATUS_FAILED,
                                          NetworkAddress(self.host, self.port)))
                     if service is not None:
-                        # Exponentional backoff for service name mdns lookups
-                        now = time.time()
-                        retry['next_retry'] = now + retry['delay']
                         retry_log_fun(
                             "[%s:%s] Failed to connect to service %s"
                             ", retrying in %.1fs",
                             self.fn or self.host, self.port,
                             service, retry['delay'])
-                        retry['delay'] = min(retry['delay']*2, 300)
-                        retries[service] = retry
+                        mdns_backoff(service, retry)
                     else:
                         retry_log_fun(
                             "[%s:%s] Failed to connect, retrying in %.1fs",
