@@ -34,6 +34,10 @@ class CastListener(object):
         _LOGGER.debug("remove_service %s, %s", typ, name)
         service = self.services.pop(name, None)
 
+        if not service:
+            _LOGGER.debug("remove_service unknown %s, %s", typ, name)
+            return
+
         if self.remove_callback:
             self.remove_callback(name, service)
 
@@ -52,6 +56,7 @@ class CastListener(object):
             tries += 1
 
         if not service:
+            _LOGGER.debug("add_service failed to add %s, %s", typ, name)
             return
 
         def get_value(key):
