@@ -75,8 +75,6 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
                          and returns a function which can be executed to stop
                          discovery.
 
-    ex: get_chromecasts(friendly_name="Living Room")
-
     May return an empty list if no chromecasts were found.
 
     Tries is specified if you want to limit the number of times the
