@@ -151,6 +151,7 @@ class SocketClient(threading.Thread):
                        which is 5 seconds.
     """
 
+    # pylint:disable=too-many-statements
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST,
                  **kwargs):
         tries = kwargs.pop('tries', None)
@@ -417,10 +418,7 @@ class SocketClient(threading.Thread):
     def run(self):
         """ Start polling the socket. """
         self.heartbeat_controller.reset()
-        if self.defer_connect:
-            self._force_recon = True
-        else:
-            self._force_recon = False
+        self._force_recon = self.defer_connect
         logging.debug("Thread started...")
         while not self.stop.is_set():
 

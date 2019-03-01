@@ -26,6 +26,7 @@ IGNORE_CEC = []
 _LOGGER = logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-arguments
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                               blocking=True, defer_connect=False):
     """Creates a Chromecast object from a zeroconf host."""
@@ -45,6 +46,7 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                       blocking=blocking, defer_connect=defer_connect)
 
 
+# pylint: disable=too-many-arguments
 def _get_chromecast_from_service(services, tries=None, retry_wait=None,
                                  timeout=None, blocking=True,
                                  defer_connect=False):
