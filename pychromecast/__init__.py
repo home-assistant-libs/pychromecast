@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
-                              blocking=True):
+                              blocking=True, defer_connect=False):
     """Creates a Chromecast object from a zeroconf host."""
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
@@ -42,11 +42,12 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
     )
     return Chromecast(host=ip_address, port=port, device=device, tries=tries,
                       timeout=timeout, retry_wait=retry_wait,
-                      blocking=blocking)
+                      blocking=blocking, defer_connect=defer_connect)
 
 
 def _get_chromecast_from_service(services, tries=None, retry_wait=None,
-                                 timeout=None, blocking=True):
+                                 timeout=None, blocking=True,
+                                 defer_connect=False):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
@@ -61,7 +62,8 @@ def _get_chromecast_from_service(services, tries=None, retry_wait=None,
     )
     return Chromecast(host=None, device=device, tries=tries, timeout=timeout,
                       retry_wait=retry_wait, blocking=blocking,
-                      services=services, zconf=zconf)
+                      services=services, zconf=zconf,
+                      defer_connect=defer_connect)
 
 
 # pylint: disable=too-many-locals
@@ -145,6 +147,7 @@ class Chromecast(object):
         blocking = kwargs.pop('blocking', True)
         services = kwargs.pop('services', None)
         zconf = kwargs.pop('zconf', True)
+        defer_connect = kwargs.pop('defer_connect', True)
 
         self.logger = logging.getLogger(__name__)
 
@@ -187,9 +190,9 @@ class Chromecast(object):
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host, port=port, cast_type=self.device.cast_type,
-            tries=tries, timeout=timeout, retry_wait=retry_wait,
-            blocking=blocking, services=services, zconf=zconf)
+            host, port=port, cast_type=self.device.cast_type, tries=tries,
+            timeout=timeout, retry_wait=retry_wait, blocking=blocking,
+            services=services, zconf=zconf, defer_connect=defer_connect)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)

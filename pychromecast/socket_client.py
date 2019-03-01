@@ -159,6 +159,7 @@ class SocketClient(threading.Thread):
         self.blocking = kwargs.pop('blocking', True)
         services = kwargs.pop('services', None)
         zconf = kwargs.pop('zconf', None)
+        self.defer_connect = kwargs.pop('defer_connect', False)
 
         if self.blocking:
             self.polltime = POLL_TIME_BLOCKING
@@ -212,13 +213,14 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller.register_status_listener(self)
 
-        try:
-            self.initialize_connection()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
-                                 NetworkAddress(self.host, self.port)))
-            raise
+        if not self.defer_connect:
+            try:
+                self.initialize_connection()
+            except ChromecastConnectionError:
+                self._report_connection_status(
+                    ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                                     NetworkAddress(self.host, self.port)))
+                raise
 
     def initialize_connection(self):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
@@ -415,7 +417,10 @@ class SocketClient(threading.Thread):
     def run(self):
         """ Start polling the socket. """
         self.heartbeat_controller.reset()
-        self._force_recon = False
+        if self.defer_connect:
+            self._force_recon = True
+        else:
+            self._force_recon = False
         logging.debug("Thread started...")
         while not self.stop.is_set():
 
@@ -698,8 +703,8 @@ class SocketClient(threading.Thread):
                 self.logger.info('[%s:%s] Error writing to socket.',
                                  self.fn or self.host, self.port)
         else:
-            raise NotConnected("Chromecast " + self.host + ":" + self.port +
-                               " is connecting...")
+            raise NotConnected("Chromecast " + self.host + ":" +
+                               str(self.port) + " is connecting...")
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               callback_function_param=False):
