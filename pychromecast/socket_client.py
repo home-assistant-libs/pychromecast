@@ -160,7 +160,6 @@ class SocketClient(threading.Thread):
         self.blocking = kwargs.pop('blocking', True)
         services = kwargs.pop('services', None)
         zconf = kwargs.pop('zconf', None)
-        self.defer_connect = kwargs.pop('defer_connect', False)
 
         if self.blocking:
             self.polltime = POLL_TIME_BLOCKING
@@ -213,15 +212,6 @@ class SocketClient(threading.Thread):
         self.register_handler(self.media_controller)
 
         self.receiver_controller.register_status_listener(self)
-
-        if not self.defer_connect:
-            try:
-                self.initialize_connection()
-            except ChromecastConnectionError:
-                self._report_connection_status(
-                    ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
-                                     NetworkAddress(self.host, self.port)))
-                raise
 
     def initialize_connection(self):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
@@ -416,9 +406,17 @@ class SocketClient(threading.Thread):
         return self.stop.is_set()
 
     def run(self):
-        """ Start polling the socket. """
+        """ Connect to the cast and start polling the socket. """
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                NetworkAddress(self.host, self.port)))
+            return
+
         self.heartbeat_controller.reset()
-        self._force_recon = self.defer_connect
+        self._force_recon = False
         logging.debug("Thread started...")
         while not self.stop.is_set():
 

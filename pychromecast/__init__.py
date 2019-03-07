@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # pylint: disable=too-many-arguments
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
-                              blocking=True, defer_connect=False):
+                              blocking=True):
     """Creates a Chromecast object from a zeroconf host."""
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
@@ -43,13 +43,12 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
     )
     return Chromecast(host=ip_address, port=port, device=device, tries=tries,
                       timeout=timeout, retry_wait=retry_wait,
-                      blocking=blocking, defer_connect=defer_connect)
+                      blocking=blocking)
 
 
 # pylint: disable=too-many-arguments
 def _get_chromecast_from_service(services, tries=None, retry_wait=None,
-                                 timeout=None, blocking=True,
-                                 defer_connect=False):
+                                 timeout=None, blocking=True):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
@@ -64,8 +63,7 @@ def _get_chromecast_from_service(services, tries=None, retry_wait=None,
     )
     return Chromecast(host=None, device=device, tries=tries, timeout=timeout,
                       retry_wait=retry_wait, blocking=blocking,
-                      services=services, zconf=zconf,
-                      defer_connect=defer_connect)
+                      services=services, zconf=zconf)
 
 
 # pylint: disable=too-many-locals
@@ -149,7 +147,6 @@ class Chromecast(object):
         blocking = kwargs.pop('blocking', True)
         services = kwargs.pop('services', None)
         zconf = kwargs.pop('zconf', True)
-        defer_connect = kwargs.pop('defer_connect', True)
 
         self.logger = logging.getLogger(__name__)
 
@@ -194,7 +191,7 @@ class Chromecast(object):
         self.socket_client = socket_client.SocketClient(
             host, port=port, cast_type=self.device.cast_type, tries=tries,
             timeout=timeout, retry_wait=retry_wait, blocking=blocking,
-            services=services, zconf=zconf, defer_connect=defer_connect)
+            services=services, zconf=zconf)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
@@ -210,9 +207,6 @@ class Chromecast(object):
             receiver_controller.register_launch_error_listener
         self.register_connection_listener = \
             self.socket_client.register_connection_listener
-
-        if blocking:
-            self.socket_client.start()
 
     @property
     def ignore_cec(self):
@@ -358,6 +352,12 @@ class Chromecast(object):
                         to block forever.
         """
         self.socket_client.join(timeout=timeout)
+
+    def start(self):
+        """
+        Start the chromecast connection's worker thread.
+        """
+        self.socket_client.start()
 
     def __del__(self):
         try:
