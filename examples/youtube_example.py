@@ -17,6 +17,7 @@ VIDEO_ID = ""
 
 chromecasts = pychromecast.get_chromecasts()
 cast = next(cc for cc in chromecasts if cc.device.friendly_name == CAST_NAME)
+cast.start()
 cast.wait()
 yt = YouTubeController()
 cast.register_handler(yt)

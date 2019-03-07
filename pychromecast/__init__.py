@@ -328,6 +328,13 @@ class Chromecast(object):
         """
         self.status_event.wait(timeout=timeout)
 
+    def connect(self):
+        """ Connect to the chromecast.
+
+            Must only be called if the worker thread will not be started.
+        """
+        self.socket_client.connect()
+
     def disconnect(self, timeout=None, blocking=True):
         """
         Disconnects the chromecast and waits for it to terminate.

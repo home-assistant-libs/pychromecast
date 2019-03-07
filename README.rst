@@ -39,6 +39,8 @@ How to use
     ['Dev', 'Living Room', 'Den', 'Bedroom']
 
     >> cast = next(cc for cc in chromecasts if cc.device.friendly_name == "Living Room")
+    >> # Start worker thread
+    >> cast.start()
     >> # Wait for cast device to be ready
     >> cast.wait()
     >> print(cast.device)

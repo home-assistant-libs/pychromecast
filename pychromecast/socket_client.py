@@ -354,6 +354,19 @@ class SocketClient(threading.Thread):
                           self.fn or self.host, self.port)
         raise ChromecastConnectionError("Failed to connect")
 
+    def connect(self):
+        """ Connect socket connection to Chromecast device.
+
+            Must only be called if the worker thread will not be started.
+        """
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                NetworkAddress(self.host, self.port)))
+            return
+
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
         self.stop.set()
