@@ -319,6 +319,8 @@ class Chromecast(object):
         Waits until the cast device is ready for communication. The device
         is ready as soon a status message has been received.
 
+        If the worker thread is not already running, it will be started.
+
         If the status has already been received then the method returns
         immediately.
 
@@ -326,6 +328,8 @@ class Chromecast(object):
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
+        if not self.socket_client.isAlive():
+            self.socket_client.start()
         self.status_event.wait(timeout=timeout)
 
     def connect(self):
