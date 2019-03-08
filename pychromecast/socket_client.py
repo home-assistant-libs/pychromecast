@@ -134,7 +134,7 @@ LaunchFailure = namedtuple('LaunchStatus',
                            ['reason', 'app_id', 'request_id'])
 
 
-# pylint: disable=too-many-instance-attributes, too-many-public-methods
+# pylint: disable=too-many-instance-attributes
 class SocketClient(threading.Thread):
     """
     Class to interact with a Chromecast through a socket.

@@ -119,7 +119,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
         return internal_stop
 
 
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes, too-many-public-methods
 class Chromecast(object):
     """
     Class to interface with a ChromeCast.
