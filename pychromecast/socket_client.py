@@ -134,7 +134,7 @@ LaunchFailure = namedtuple('LaunchStatus',
                            ['reason', 'app_id', 'request_id'])
 
 
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes, too-many-public-methods
 class SocketClient(threading.Thread):
     """
     Class to interact with a Chromecast through a socket.
@@ -151,7 +151,6 @@ class SocketClient(threading.Thread):
                        which is 5 seconds.
     """
 
-    # pylint:disable=too-many-statements
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST,
                  **kwargs):
         tries = kwargs.pop('tries', None)
@@ -364,7 +363,7 @@ class SocketClient(threading.Thread):
         except ChromecastConnectionError:
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
-                NetworkAddress(self.host, self.port)))
+                                 NetworkAddress(self.host, self.port)))
             return
 
     def disconnect(self):
@@ -425,7 +424,7 @@ class SocketClient(threading.Thread):
         except ChromecastConnectionError:
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
-                NetworkAddress(self.host, self.port)))
+                                 NetworkAddress(self.host, self.port)))
             return
 
         self.heartbeat_controller.reset()

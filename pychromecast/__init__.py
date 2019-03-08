@@ -26,7 +26,6 @@ IGNORE_CEC = []
 _LOGGER = logging.getLogger(__name__)
 
 
-# pylint: disable=too-many-arguments
 def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                               blocking=True):
     """Creates a Chromecast object from a zeroconf host."""
@@ -46,7 +45,6 @@ def _get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None,
                       blocking=blocking)
 
 
-# pylint: disable=too-many-arguments
 def _get_chromecast_from_service(services, tries=None, retry_wait=None,
                                  timeout=None, blocking=True):
     """Creates a Chromecast object from a zeroconf service."""
@@ -189,9 +187,9 @@ class Chromecast(object):
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host, port=port, cast_type=self.device.cast_type, tries=tries,
-            timeout=timeout, retry_wait=retry_wait, blocking=blocking,
-            services=services, zconf=zconf)
+            host, port=port, cast_type=self.device.cast_type,
+            tries=tries, timeout=timeout, retry_wait=retry_wait,
+            blocking=blocking, services=services, zconf=zconf)
 
         receiver_controller = self.socket_client.receiver_controller
         receiver_controller.register_status_listener(self)
