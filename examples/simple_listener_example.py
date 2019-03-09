@@ -30,6 +30,7 @@ class StatusMediaListener:
 chromecasts = pychromecast.get_chromecasts()
 chromecast = next(cc for cc in chromecasts
                   if cc.device.friendly_name == "Living Room Speaker")
+chromecast.start()
 
 listenerCast = StatusListener(chromecast.name, chromecast)
 chromecast.register_status_listener(listenerCast)

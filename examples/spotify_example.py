@@ -13,6 +13,7 @@ import spotipy
 
 chromecasts = pychromecast.get_chromecasts()
 cast = chromecasts[0]
+cast.start()
 
 CAST_NAME = "My Chromecast"
 device_id = None

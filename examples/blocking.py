@@ -19,6 +19,7 @@ if len(casts) == 0:
     print("No Devices Found")
     exit()
 cast = casts[0]
+cast.start()
 
 print()
 print(cast.device)

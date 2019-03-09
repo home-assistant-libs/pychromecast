@@ -20,6 +20,7 @@ def your_main_loop():
     t = 1
     cast = None
     def callback(chromecast):
+        chromecast.connect()
         nonlocal cast
         cast = chromecast
         stop_discovery()

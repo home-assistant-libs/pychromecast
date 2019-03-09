@@ -119,7 +119,7 @@ def get_chromecasts(tries=None, retry_wait=None, timeout=None,
         return internal_stop
 
 
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes, too-many-public-methods
 class Chromecast(object):
     """
     Class to interface with a ChromeCast.
@@ -205,9 +205,6 @@ class Chromecast(object):
             receiver_controller.register_launch_error_listener
         self.register_connection_listener = \
             self.socket_client.register_connection_listener
-
-        if blocking:
-            self.socket_client.start()
 
     @property
     def ignore_cec(self):
@@ -320,6 +317,8 @@ class Chromecast(object):
         Waits until the cast device is ready for communication. The device
         is ready as soon a status message has been received.
 
+        If the worker thread is not already running, it will be started.
+
         If the status has already been received then the method returns
         immediately.
 
@@ -327,7 +326,16 @@ class Chromecast(object):
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
+        if not self.socket_client.isAlive():
+            self.socket_client.start()
         self.status_event.wait(timeout=timeout)
+
+    def connect(self):
+        """ Connect to the chromecast.
+
+            Must only be called if the worker thread will not be started.
+        """
+        self.socket_client.connect()
 
     def disconnect(self, timeout=None, blocking=True):
         """
@@ -353,6 +361,12 @@ class Chromecast(object):
                         to block forever.
         """
         self.socket_client.join(timeout=timeout)
+
+    def start(self):
+        """
+        Start the chromecast connection's worker thread.
+        """
+        self.socket_client.start()
 
     def __del__(self):
         try:

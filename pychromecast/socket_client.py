@@ -212,14 +212,6 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller.register_status_listener(self)
 
-        try:
-            self.initialize_connection()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
-                                 NetworkAddress(self.host, self.port)))
-            raise
-
     def initialize_connection(self):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
@@ -361,6 +353,19 @@ class SocketClient(threading.Thread):
                           self.fn or self.host, self.port)
         raise ChromecastConnectionError("Failed to connect")
 
+    def connect(self):
+        """ Connect socket connection to Chromecast device.
+
+            Must only be called if the worker thread will not be started.
+        """
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                                 NetworkAddress(self.host, self.port)))
+            return
+
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
         self.stop.set()
@@ -413,7 +418,15 @@ class SocketClient(threading.Thread):
         return self.stop.is_set()
 
     def run(self):
-        """ Start polling the socket. """
+        """ Connect to the cast and start polling the socket. """
+        try:
+            self.initialize_connection()
+        except ChromecastConnectionError:
+            self._report_connection_status(
+                ConnectionStatus(CONNECTION_STATUS_DISCONNECTED,
+                                 NetworkAddress(self.host, self.port)))
+            return
+
         self.heartbeat_controller.reset()
         self._force_recon = False
         logging.debug("Thread started...")
@@ -698,8 +711,8 @@ class SocketClient(threading.Thread):
                 self.logger.info('[%s:%s] Error writing to socket.',
                                  self.fn or self.host, self.port)
         else:
-            raise NotConnected("Chromecast " + self.host + ":" + self.port +
-                               " is connecting...")
+            raise NotConnected("Chromecast " + self.host + ":" +
+                               str(self.port) + " is connecting...")
 
     def send_platform_message(self, namespace, message, inc_session_id=False,
                               callback_function_param=False):

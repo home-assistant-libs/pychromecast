@@ -39,7 +39,7 @@ How to use
     ['Dev', 'Living Room', 'Den', 'Bedroom']
 
     >> cast = next(cc for cc in chromecasts if cc.device.friendly_name == "Living Room")
-    >> # Wait for cast device to be ready
+    >> # Start worker thread and wait for cast device to be ready
     >> cast.wait()
     >> print(cast.device)
     DeviceStatus(friendly_name='Living Room', model_name='Chromecast', manufacturer='Google Inc.', uuid=UUID('df6944da-f016-4cb8-97d0-3da2ccaa380b'), cast_type='cast')
