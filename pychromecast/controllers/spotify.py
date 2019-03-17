@@ -6,6 +6,7 @@ import time
 
 from . import BaseController
 from ..config import APP_SPOTIFY
+from ..error import LaunchError
 
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_STATUS = "setCredentials"
