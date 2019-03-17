@@ -35,8 +35,13 @@ class SpotifyController(BaseController):
             self.is_launched = True
         return True
 
-    def launch_app(self):
-        """ Launch main application """
+    def launch_app(self, timeout=10):
+        """
+        Launch Spotify application.
+
+        Will raise a LaunchError exception if there is no response from the
+        Spotify app within timeout seconds.
+        """
 
         def callback():
             """Callback function"""
@@ -47,5 +52,10 @@ class SpotifyController(BaseController):
         self.launch(callback_function=callback)
 
         # Need to wait for Spotify to be launched on Chromecast completely
-        while not self.is_launched:
+        while not self.is_launched and timeout:
             time.sleep(1)
+            timeout -= 1
+
+        if not self.is_launched:
+            raise LaunchError(
+                "Timeout when waiting for status response from Spotify app"))
