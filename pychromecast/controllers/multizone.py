@@ -1,12 +1,9 @@
 """
 Controller to monitor audio group members.
 """
-import json
 import logging
-import requests
 
 from . import BaseController
-from .. import discovery
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +27,7 @@ class MultizoneController(BaseController):
                                                   target_platform=True)
 
     def _add_member(self, uuid, name):
-        if not uuid in self._members:
+        if uuid not in self._members:
             self._members[uuid] = name
             _LOGGER.debug("(%s) Added member %s(%s), members: %s",
                           self._uuid, uuid, name, self._members)
@@ -40,7 +37,7 @@ class MultizoneController(BaseController):
     def _remove_member(self, uuid):
         name = self._members.pop(uuid, '<Unknown>')
         _LOGGER.debug("(%s) Removed member %s(%s), members: %s",
-                     self._uuid, uuid, name, self._members)
+                      self._uuid, uuid, name, self._members)
         if self._callback:
             self._callback.multizone_member_removed(uuid)
 
@@ -69,11 +66,13 @@ class MultizoneController(BaseController):
 
         if data[MESSAGE_TYPE] == TYPE_MULTIZONE_STATUS:
             members = data['status']['devices']
-            members = {member['deviceId']:member['name'] for member in members}
-            removed_members = list(set(self._members.keys())-set(members.keys()))
+            members = \
+                {member['deviceId']: member['name'] for member in members}
+            removed_members = \
+                list(set(self._members.keys())-set(members.keys()))
             added_members = list(set(members.keys())-set(self._members.keys()))
             _LOGGER.debug("(%s) Added members %s, Removed members: %s",
-                     self._uuid, added_members, removed_members)
+                          self._uuid, added_members, removed_members)
 
             for uuid in removed_members:
                 self._remove_member(uuid)
