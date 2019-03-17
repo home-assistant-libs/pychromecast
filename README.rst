@@ -134,13 +134,6 @@ to the IGNORE\_CEC list in PyChromecast like in the example below.
     pychromecast.IGNORE_CEC.append('*')  # Ignore CEC on all devices
     pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
 
-Maintainers
------------
-
--  Jan Borsodi (`@am0s`_)
--  Ryan Kraus (`@rmkraus`_)
--  Paulus Schoutsen (`@balloob`_, original author)
-
 Thanks
 ------
 
