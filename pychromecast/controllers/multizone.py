@@ -2,11 +2,11 @@
 Controller to monitor audio group members.
 """
 import logging
-from uuid import UUID  # pylint: disable=unused-import
+from uuid import UUID  # noqa: F401,E501 pylint: disable=unused-import
 import threading
 
 from . import BaseController
-from .media import MediaController, MediaStatus  # pylint: disable=unused-import
+from .media import MediaController, MediaStatus  # noqa: F401,E501 pylint: disable=unused-import
 from ..socket_client import (
     CONNECTION_STATUS_CONNECTED, CONNECTION_STATUS_DISCONNECTED,
     CONNECTION_STATUS_LOST)
@@ -118,7 +118,7 @@ class MultizoneManager:
         group = self._groups.pop(group_uuid, None)
         # Inform all group members that they are no longer members
         if group is not None:
-            group['listener']._mz.reset_members()  # pylint: disable=protected-access
+            group['listener']._mz.reset_members()  # noqa: E501 pylint: disable=protected-access
         with self._lock:
             for member in self._casts.values():
                 member['groups'].discard(group_uuid)
@@ -213,7 +213,7 @@ class MultizoneController(BaseController):
         """ Send GET_CASTING_GROUPS message. """
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
 
-    def receive_message(self, message, data):  # pylint: disable=too-many-return-statements
+    def receive_message(self, message, data):  # noqa: E501 pylint: disable=too-many-return-statements
         """ Called when a multizone message is received. """
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
             uuid = data['device']['deviceId']
