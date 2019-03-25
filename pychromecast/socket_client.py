@@ -535,6 +535,8 @@ class SocketClient(threading.Thread):
             reset = True
 
         if reset:
+            for channel in self._open_channels:
+                self.disconnect_channel(channel)
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_LOST,
                                  NetworkAddress(self.host, self.port)))
@@ -762,10 +764,16 @@ class SocketClient(threading.Thread):
     def disconnect_channel(self, destination_id):
         """ Disconnect a channel with destination_id. """
         if destination_id in self._open_channels:
-            self.send_message(
-                destination_id, NS_CONNECTION,
-                {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
-                no_add_request_id=True, force=True)
+            try:
+                self.send_message(
+                    destination_id, NS_CONNECTION,
+                    {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
+                    no_add_request_id=True, force=True)
+            except NotConnected:
+                pass
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception("[%s:%s] Exception",
+                                      self.fn or self.host, self.port)
 
             self._open_channels.remove(destination_id)
 
