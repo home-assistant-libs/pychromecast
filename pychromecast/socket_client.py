@@ -614,7 +614,9 @@ class SocketClient(threading.Thread):
                                   id(listener), type(listener).__name__)
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "[%s:%s] Exception thrown when calling connection "
+                    "listener", self.fn or self.host, self.port)
 
     def _read_bytes_from_socket(self, msglen):
         """ Read bytes from the socket. """
@@ -1037,7 +1039,8 @@ class ReceiverController(BaseController):
             try:
                 listener.new_cast_status(self.status)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "Exception thrown when calling cast status listener")
 
     @staticmethod
     def _parse_launch_error(data):
@@ -1070,7 +1073,8 @@ class ReceiverController(BaseController):
             try:
                 listener.new_launch_error(launch_failure)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "Exception thrown when calling launch error listener")
 
     def tear_down(self):
         """ Called when controller is destroyed. """
