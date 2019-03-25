@@ -50,6 +50,7 @@ MediaImage = namedtuple('MediaImage', 'url height width')
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class MediaStatus(object):
     """ Class to hold the media status. """
 
