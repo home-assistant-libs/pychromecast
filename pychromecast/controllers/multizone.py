@@ -43,20 +43,22 @@ class Listener:
         casts = self._casts
         group_members = self._mz.members
         for member_uuid in group_members:
-            if member_uuid in casts:
-                for listener in casts[member_uuid]['listeners']:
-                    listener.multizone_new_cast_status(
-                        self._group_uuid, cast_status)
+            if member_uuid not in casts:
+                    continue
+            for listener in casts[member_uuid]['listeners']:
+                listener.multizone_new_cast_status(
+                    self._group_uuid, cast_status)
 
     def new_media_status(self, media_status):
         """Handle reception of a new MediaStatus."""
         casts = self._casts
         group_members = self._mz.members
         for member_uuid in group_members:
-            if member_uuid in casts:
-                for listener in casts[member_uuid]['listeners']:
-                    listener.multizone_new_media_status(
-                        self._group_uuid, media_status)
+            if member_uuid not in casts:
+                continue
+            for listener in casts[member_uuid]['listeners']:
+                listener.multizone_new_media_status(
+                    self._group_uuid, media_status)
 
     def new_connection_status(self, conn_status):
         """Handle reception of a new ConnectionStatus."""
