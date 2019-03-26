@@ -20,8 +20,10 @@ class SpotifyController(BaseController):
     # pylint: disable=useless-super-delegation
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
-    def __init__(self, access_token, expires=3600):
+    def __init__(self, access_token, expires):
         super(SpotifyController, self).__init__(APP_NAMESPACE, APP_SPOTIFY)
+        if access_token is None or expires is None:
+            raise ValueError("access_token and expires cannot be empty")
 
         self.logger = logging.getLogger(__name__)
         self.session_started = False
