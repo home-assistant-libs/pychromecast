@@ -2,7 +2,6 @@
 Controller to monitor audio group members.
 """
 import logging
-import threading
 
 from . import BaseController
 from .media import MediaController, MediaStatus
@@ -44,7 +43,7 @@ class Listener:
         group_members = self._mz.members
         for member_uuid in group_members:
             if member_uuid not in casts:
-                    continue
+                continue
             for listener in casts[member_uuid]['listeners']:
                 listener.multizone_new_cast_status(
                     self._group_uuid, cast_status)
