@@ -4,7 +4,7 @@ Controller to monitor audio group members.
 import logging
 
 from . import BaseController
-from .media import MediaController, MediaStatus
+from .media import MediaController
 from ..socket_client import (
     CONNECTION_STATUS_CONNECTED, CONNECTION_STATUS_DISCONNECTED,
     CONNECTION_STATUS_LOST)
