@@ -24,10 +24,9 @@ TYPE_SESSION_UPDATED = "PLAYBACK_SESSION_UPDATED"
 
 class Listener:
     """ Callback handler. """
-    def __init__(self, group_cast, groups, casts):
+    def __init__(self, group_cast, casts):
         """Initialize the listener."""
         self._casts = casts
-        self._groups = groups
         group_cast.register_status_listener(self)
         group_cast.media_controller.register_status_listener(self)
         group_cast.register_connection_listener(self)
@@ -43,7 +42,7 @@ class Listener:
         for member_uuid in group_members:
             if member_uuid not in casts:
                 continue
-            for listener in casts[member_uuid]['listeners']:
+            for listener in list(casts[member_uuid]['listeners']):
                 listener.multizone_new_cast_status(
                     self._group_uuid, cast_status)
 
@@ -54,7 +53,7 @@ class Listener:
         for member_uuid in group_members:
             if member_uuid not in casts:
                 continue
-            for listener in casts[member_uuid]['listeners']:
+            for listener in list(casts[member_uuid]['listeners']):
                 listener.multizone_new_media_status(
                     self._group_uuid, media_status)
 
@@ -73,7 +72,7 @@ class Listener:
             casts[member_uuid] = {'listeners': [],
                                   'groups': set()}
         casts[member_uuid]['groups'].add(self._group_uuid)
-        for listener in casts[member_uuid]['listeners']:
+        for listener in list(casts[member_uuid]['listeners']):
             listener.added_to_multizone(self._group_uuid)
 
     def multizone_member_removed(self, member_uuid):
@@ -82,7 +81,7 @@ class Listener:
         if member_uuid not in casts:
             casts[member_uuid] = {'listeners': [], 'groups': set()}
         casts[member_uuid]['groups'].discard(self._group_uuid)
-        for listener in casts[member_uuid]['listeners']:
+        for listener in list(casts[member_uuid]['listeners']):
             listener.removed_from_multizone(self._group_uuid)
 
     def multizone_status_received(self):
@@ -102,7 +101,7 @@ class MultizoneManager:
         """ Start managing a group """
         self._groups[str(group_cast.uuid)] = {
             'chromecast': group_cast,
-            'listener': Listener(group_cast, self._groups, self._casts),
+            'listener': Listener(group_cast, self._casts),
             'members': set()}
 
     def remove_multizone(self, group_uuid):
