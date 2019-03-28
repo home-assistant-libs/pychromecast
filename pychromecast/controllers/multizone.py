@@ -141,10 +141,9 @@ class MultizoneManager:
         """
         return list(self._casts[str(member_uuid)]['groups'])
 
-    def get_multizone_mediastatus(self, group_uuid):
-        """ Get mediastatus of a group """
-        return self._groups[str(group_uuid)]['chromecast']\
-            .media_controller.status
+    def get_multizone_mediacontroller(self, group_uuid):
+        """ Get mediacontroller of a group """
+        return self._groups[str(group_uuid)]['chromecast'].media_controller
 
 
 class MultizoneController(BaseController):
