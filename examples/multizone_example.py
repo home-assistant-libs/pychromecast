@@ -25,7 +25,7 @@ class connlistener:
     def new_connection_status(self, connection_status):
         """Handle reception of a new ConnectionStatus."""
         if connection_status.status == 'CONNECTED':
-            self._mz.get_members()
+            self._mz.update_members()
 
 class mzlistener:
     def multizone_member_added(self, uuid):
@@ -34,9 +34,13 @@ class mzlistener:
     def multizone_member_removed(self, uuid):
         print("Removed member: {}".format(uuid))
 
+    def multizone_status_received(self):
+        print("Members: {}".format(mz.members))
+
 chromecasts = pychromecast.get_chromecasts(timeout=2)
 cast = next(cc for cc in chromecasts if cc.device.friendly_name == CAST_NAME)
-mz = MultizoneController(cast.uuid, mzlistener())
+mz = MultizoneController(cast.uuid)
+mz.register_listener(mzlistener())
 cast.register_handler(mz)
 cast.register_connection_listener(connlistener(mz))
 cast.wait()

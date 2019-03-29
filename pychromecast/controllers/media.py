@@ -3,6 +3,7 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 from datetime import datetime
+import logging
 
 from collections import namedtuple
 import threading
@@ -46,6 +47,8 @@ CMD_SUPPORT_SKIP_BACKWARD = 32
 
 
 MediaImage = namedtuple('MediaImage', 'url height width')
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MediaStatus(object):
@@ -304,7 +307,7 @@ class MediaController(BaseController):
         return False
 
     def register_status_listener(self, listener):
-        """ Register a listener for new media statusses. A new status will
+        """ Register a listener for new media statuses. A new status will
             call listener.new_media_status(status) """
         self._status_listeners.append(listener)
 
@@ -434,7 +437,8 @@ class MediaController(BaseController):
             try:
                 listener.new_media_status(self.status)
             except Exception:  # pylint: disable=broad-except
-                pass
+                _LOGGER.exception("Exception thrown when calling media status "
+                                  "callback")
 
     # pylint: disable=too-many-arguments
     def play_media(self, url, content_type, title=None, thumb=None,

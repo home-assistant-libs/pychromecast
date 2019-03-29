@@ -535,6 +535,8 @@ class SocketClient(threading.Thread):
             reset = True
 
         if reset:
+            for channel in self._open_channels:
+                self.disconnect_channel(channel)
             self._report_connection_status(
                 ConnectionStatus(CONNECTION_STATUS_LOST,
                                  NetworkAddress(self.host, self.port)))
@@ -614,7 +616,9 @@ class SocketClient(threading.Thread):
                                   id(listener), type(listener).__name__)
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "[%s:%s] Exception thrown when calling connection "
+                    "listener", self.fn or self.host, self.port)
 
     def _read_bytes_from_socket(self, msglen):
         """ Read bytes from the socket. """
@@ -760,10 +764,16 @@ class SocketClient(threading.Thread):
     def disconnect_channel(self, destination_id):
         """ Disconnect a channel with destination_id. """
         if destination_id in self._open_channels:
-            self.send_message(
-                destination_id, NS_CONNECTION,
-                {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
-                no_add_request_id=True, force=True)
+            try:
+                self.send_message(
+                    destination_id, NS_CONNECTION,
+                    {MESSAGE_TYPE: TYPE_CLOSE, 'origin': {}},
+                    no_add_request_id=True, force=True)
+            except NotConnected:
+                pass
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception("[%s:%s] Exception",
+                                      self.fn or self.host, self.port)
 
             self._open_channels.remove(destination_id)
 
@@ -1037,7 +1047,8 @@ class ReceiverController(BaseController):
             try:
                 listener.new_cast_status(self.status)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "Exception thrown when calling cast status listener")
 
     @staticmethod
     def _parse_launch_error(data):
@@ -1070,7 +1081,8 @@ class ReceiverController(BaseController):
             try:
                 listener.new_launch_error(launch_failure)
             except Exception:  # pylint: disable=broad-except
-                pass
+                self.logger.exception(
+                    "Exception thrown when calling launch error listener")
 
     def tear_down(self):
         """ Called when controller is destroyed. """

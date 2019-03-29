@@ -11,6 +11,9 @@ import logging
 import pychromecast
 import pychromecast.controllers.youtube as youtube
 
+# Change to the name of your Chromecast
+CAST_NAME = "Disco room"
+
 if '--show-debug' in sys.argv:
     logging.basicConfig(level=logging.DEBUG)
 
@@ -18,7 +21,7 @@ casts = pychromecast.get_chromecasts()
 if len(casts) == 0:
     print("No Devices Found")
     exit()
-cast = casts[0]
+cast = next(cc for cc in casts if cc.device.friendly_name == CAST_NAME)
 cast.start()
 
 print()
