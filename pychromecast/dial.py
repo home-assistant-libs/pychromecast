@@ -28,6 +28,7 @@ CAST_TYPES = {
     'eureka dongle': CAST_TYPE_CHROMECAST,
     'chromecast audio': CAST_TYPE_AUDIO,
     'google home': CAST_TYPE_AUDIO,
+    'google home mini': CAST_TYPE_AUDIO,
     'google cast group': CAST_TYPE_GROUP,
 }
 
