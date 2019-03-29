@@ -161,14 +161,14 @@ class MultizoneController(BaseController):
             self._members[uuid] = name
             _LOGGER.debug("(%s) Added member %s(%s), members: %s",
                           self._uuid, uuid, name, self._members)
-            for listener in self._status_listeners:
+            for listener in list(self._status_listeners):
                 listener.multizone_member_added(uuid)
 
     def _remove_member(self, uuid):
         name = self._members.pop(uuid, '<Unknown>')
         _LOGGER.debug("(%s) Removed member %s(%s), members: %s",
                       self._uuid, uuid, name, self._members)
-        for listener in self._status_listeners:
+        for listener in list(self._status_listeners):
             listener.multizone_member_removed(uuid)
 
     def register_listener(self, listener):
@@ -231,7 +231,7 @@ class MultizoneController(BaseController):
             for uuid in added_members:
                 self._add_member(uuid, members[uuid])
 
-            for listener in self._status_listeners:
+            for listener in list(self._status_listeners):
                 listener.multizone_status_received()
 
             return True
