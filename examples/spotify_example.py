@@ -33,10 +33,11 @@ if cast:
 
     data = st.start_session("SPOTIFY_USERNAME", "SPOTIFY_PASSWORD")
     access_token = data[0]
+    expires = data[1] - int(time.time())
 
     client = spotipy.Spotify(auth=access_token)
 
-    sp = SpotifyController(access_token)
+    sp = SpotifyController(access_token, expires)
     cast.register_handler(sp)
     sp.launch_app()
 
