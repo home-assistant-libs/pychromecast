@@ -23,14 +23,16 @@ MEDIA_PLAYER_STATE_UNKNOWN = "UNKNOWN"
 
 MESSAGE_TYPE = 'type'
 
-TYPE_GET_STATUS = "GET_STATUS"
-TYPE_MEDIA_STATUS = "MEDIA_STATUS"
-TYPE_PLAY = "PLAY"
-TYPE_PAUSE = "PAUSE"
-TYPE_STOP = "STOP"
-TYPE_LOAD = "LOAD"
-TYPE_SEEK = "SEEK"
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
+TYPE_GET_STATUS = "GET_STATUS"
+TYPE_LOAD = "LOAD"
+TYPE_MEDIA_STATUS = "MEDIA_STATUS"
+TYPE_PAUSE = "PAUSE"
+TYPE_PLAY = "PLAY"
+TYPE_QUEUE_NEXT = "QUEUE_NEXT"
+TYPE_QUEUE_PREV = "QUEUE_PREV"
+TYPE_SEEK = "SEEK"
+TYPE_STOP = "STOP"
 
 METADATA_TYPE_GENERIC = 0
 METADATA_TYPE_TVSHOW = 1
@@ -38,10 +40,29 @@ METADATA_TYPE_MOVIE = 2
 METADATA_TYPE_MUSICTRACK = 3
 METADATA_TYPE_PHOTO = 4
 
+# From www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js
 CMD_SUPPORT_PAUSE = 1
 CMD_SUPPORT_SEEK = 2
 CMD_SUPPORT_STREAM_VOLUME = 4
 CMD_SUPPORT_STREAM_MUTE = 8
+# ALL_BASIC_MEDIA = PAUSE | SEEK | VOLUME | MUTE | EDIT_TRACKS | PLAYBACK_RATE
+CMD_SUPPORT_ALL_BASIC_MEDIA = 12303
+CMD_SUPPORT_QUEUE_NEXT = 64
+CMD_SUPPORT_QUEUE_PREV = 128
+CMD_SUPPORT_QUEUE_SHUFFLE = 256
+CMD_SUPPORT_QUEUE_REPEAT_ALL = 1024
+CMD_SUPPORT_QUEUE_REPEAT_ONE = 2048
+CMD_SUPPORT_QUEUE_REPEAT = 3072
+CMD_SUPPORT_SKIP_AD = 512
+CMD_SUPPORT_EDIT_TRACKS = 4096
+CMD_SUPPORT_PLAYBACK_RATE = 8192
+CMD_SUPPORT_LIKE = 16384
+CMD_SUPPORT_DISLIKE = 32768
+CMD_SUPPORT_FOLLOW = 65536
+CMD_SUPPORT_UNFOLLOW = 131072
+CMD_SUPPORT_STREAM_TRANSFER = 262144
+
+# Legacy?
 CMD_SUPPORT_SKIP_FORWARD = 16
 CMD_SUPPORT_SKIP_BACKWARD = 32
 
@@ -218,6 +239,16 @@ class MediaStatus(object):
         """ True if SKIP_BACKWARD is supported. """
         return bool(self.supported_media_commands & CMD_SUPPORT_SKIP_BACKWARD)
 
+    @property
+    def supports_queue_next(self):
+        """ True if QUEUE_NEXT is supported. """
+        return bool(self.supported_media_commands & CMD_SUPPORT_QUEUE_NEXT)
+
+    @property
+    def supports_queue_prev(self):
+        """ True if QUEUE_PREV is supported. """
+        return bool(self.supported_media_commands & CMD_SUPPORT_QUEUE_PREV)
+
     def update(self, data):
         """ New data will only contain the changed attributes. """
         if not data.get('status', []):
@@ -388,6 +419,14 @@ class MediaController(BaseController):
         self._send_command({MESSAGE_TYPE: TYPE_SEEK,
                             "currentTime": position,
                             "resumeState": "PLAYBACK_START"})
+
+    def queue_next(self):
+        """ Send the QUEUE_NEXT command. """
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_NEXT})
+
+    def queue_prev(self):
+        """ Send the QUEUE_PREV command. """
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_PREV})
 
     def enable_subtitle(self, track_id):
         """ Enable specific text track. """
