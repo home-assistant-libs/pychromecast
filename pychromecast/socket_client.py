@@ -1092,7 +1092,6 @@ class ReceiverController(BaseController):
         self.launch_failure = None
         self.app_to_launch = None
         self.app_launch_event.clear()
-        self._report_status()
 
         self._status_listeners[:] = []
 
