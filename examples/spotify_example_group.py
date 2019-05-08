@@ -28,7 +28,6 @@ try:
     _device.register_handler(sp)
     if _device.name == CAST_NAME:
       sp.launch_app()
-      spotify_device_name = _device.name
 
 except:
   print('failed to launch app on:', _device.name)
