@@ -26,8 +26,8 @@ try:
   for _device in chromecasts:
     _device.wait()
     if _device.name == CAST_NAME:
-    _device.register_handler(sp)
-    sp.launch_app()
+      _device.register_handler(sp)
+      sp.launch_app()
 
 except:
   print('failed to launch app on:', _device.name)
