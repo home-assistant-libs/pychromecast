@@ -20,14 +20,14 @@ access_token = data[0]
 expires = data[1] - int(time.time())
 client = spotipy.Spotify(auth=access_token)
 
+sp = SpotifyController(access_token, expires)
+
 try:
   for _device in chromecasts:
-    sp = None
     _device.wait()
-    sp = SpotifyController(access_token, expires)
-    _device.register_handler(sp)
     if _device.name == CAST_NAME:
-      sp.launch_app()
+    _device.register_handler(sp)
+    sp.launch_app()
 
 except:
   print('failed to launch app on:', _device.name)
