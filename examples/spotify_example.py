@@ -13,7 +13,6 @@ import time
 import sys
 
 import pychromecast
-from pychromecast.controllers.multizone import MultizoneController
 from pychromecast.controllers.spotify import SpotifyController
 import spotify_token as st
 import spotipy
@@ -74,21 +73,6 @@ class MzListener:
     def multizone_status_received(self):
         self.got_members=True
 
-mz = None
-mz_listener = None
-
-if cast.cast_type=='group':
-    # The spotify API will return the name of the group controller device, not 
-    # the group we want to cast to. Setup a MultiZone controller to map devices
-    # returned by the Spotify API to members of the group we want to cast to.
-    mz = MultizoneController(cast.uuid)
-    mz_listener = MzListener()
-    mz.register_listener(mz_listener)
-    cast.register_handler(mz)
-
-    # Register a connection listener, when connected, we can poll group members
-    cast.register_connection_listener(ConnListener(mz))
-    
 # Wait for connection to the chromecast
 cast.wait()
 
@@ -113,40 +97,19 @@ sp.launch_app()
 # Query spotify for active devices
 devices_available = client.devices()
 
-# If we're not casting to a group
-if mz == None:
-    # Try to match active spotify devices with the cast we want to cast to
-    # Ideally we would match device['id'] with the cast's UUID because there
-    # may be multiple casts with the same name. Currently it's not known how to
-    # map between the two so match name instead.
-    for device in devices_available['devices']:
-        if device['name'] == args.cast:
-            device_id = device['id']
-            break
+while not sp.is_launched:
+    time.sleep(0.1)
 
-    if not device_id:
-        print('No device with name "{}" known by Spotify'.format(args.cast))
-        print('Known devices: {}'.format(devices_available['devices']))
-        sys.exit(1)
-else:
-    # Wait for group members to update
-    while not mz_listener.got_members:
-        time.sleep(0.1)
+# Match active spotify devices with the spotify controller's device id
+for device in devices_available['devices']:
+    if device['id'] == sp.device:
+        device_id = device['id']
+        break
 
-    # Look for a chromecast which:
-    # - Is known to spotify (matched by bame)
-    # - Is a member of the audio group we want to play to
-    for device in devices_available['devices']:
-        for _cast in chromecasts:
-            if str(_cast.uuid) in mz.members and device['name'] == _cast.name:
-                device_id = device['id']
-                break
-
-    if not device_id:
-      print('Could not find matching member of audio group')
-      print('Known devices: {}'.format(devices_available['devices']))
-      print('Members of group "{}": {}'.format(args.cast, mz.members))
-      sys.exit(1)
+if not device_id:
+    print('No device with id "{}" known by Spotify'.format(sp.device))
+    print('Known devices: {}'.format(devices_available['devices']))
+    sys.exit(1)
 
 # Start playback
 client.start_playback(device_id=device_id, uris=[args.track])

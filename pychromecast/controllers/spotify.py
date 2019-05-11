@@ -9,8 +9,11 @@ from ..config import APP_SPOTIFY
 from ..error import LaunchError
 
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
-TYPE_STATUS = "setCredentials"
-TYPE_RESPONSE_STATUS = 'setCredentialsResponse'
+TYPE_GET_INFO = "getInfo"
+TYPE_GET_INFO_RESPONSE = "getInfoResponse"
+TYPE_SET_CREDENTIALS = "setCredentials"
+TYPE_SET_CREDENTIALS_ERROR = 'setCredentialsError'
+TYPE_SET_CREDENTIALS_RESPONSE = 'setCredentialsResponse'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -30,12 +33,18 @@ class SpotifyController(BaseController):
         self.access_token = access_token
         self.expires = expires
         self.is_launched = False
+        self.device = True
     # pylint: enable=useless-super-delegation
 
     # pylint: disable=unused-argument,no-self-use
     def receive_message(self, message, data):
-        """ Currently not doing anything with received messages. """
-        if data['type'] == TYPE_RESPONSE_STATUS:
+        """ Handle the auth flow and active player selection """
+        if data['type'] == TYPE_SET_CREDENTIALS_RESPONSE:
+            self.send_message({'type': TYPE_GET_INFO, 'payload': {}})
+        if data['type'] == TYPE_SET_CREDENTIALS_ERROR:
+            self.device = None
+        if data['type'] == TYPE_GET_INFO_RESPONSE:
+            self.device = data['payload']['deviceID']
             self.is_launched = True
         return True
 
@@ -49,7 +58,7 @@ class SpotifyController(BaseController):
 
         def callback():
             """Callback function"""
-            self.send_message({"type": TYPE_STATUS,
+            self.send_message({"type": TYPE_SET_CREDENTIALS,
                                "credentials": self.access_token,
                                "expiresIn": self.expires})
 
