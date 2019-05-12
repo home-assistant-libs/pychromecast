@@ -3,7 +3,6 @@ Controller to interface with Spotify.
 """
 import logging
 import threading
-import time
 
 from . import BaseController
 from ..config import APP_SPOTIFY
