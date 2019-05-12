@@ -33,7 +33,8 @@ class SpotifyController(BaseController):
         self.access_token = access_token
         self.expires = expires
         self.is_launched = False
-        self.device = True
+        self.device = None
+        self.credential_error = False
     # pylint: enable=useless-super-delegation
 
     # pylint: disable=unused-argument,no-self-use
@@ -43,6 +44,7 @@ class SpotifyController(BaseController):
             self.send_message({'type': TYPE_GET_INFO, 'payload': {}})
         if data['type'] == TYPE_SET_CREDENTIALS_ERROR:
             self.device = None
+            self.credential_error = True
         if data['type'] == TYPE_GET_INFO_RESPONSE:
             self.device = data['payload']['deviceID']
             self.is_launched = True
@@ -62,10 +64,12 @@ class SpotifyController(BaseController):
                                "credentials": self.access_token,
                                "expiresIn": self.expires})
 
+        self.device = None
+        self.credential_error = False
         self.launch(callback_function=callback)
 
         # Need to wait for Spotify to be launched on Chromecast completely
-        while not self.is_launched and timeout:
+        while not self.is_launched and not self.credential_error and timeout:
             time.sleep(1)
             timeout -= 1
 

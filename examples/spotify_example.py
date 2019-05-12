@@ -28,8 +28,9 @@ parser.add_argument('--cast',
                     default=CAST_NAME)
 parser.add_argument('--user', help='Spotify username', required=True)
 parser.add_argument('--password', help='Spotify password', required=True)
-parser.add_argument('--track', help='Spotify uri (default: "%(default)s")',
-                    default="spotify:track:3Zwu2K0Qa5sT6teCCHPShP")
+parser.add_argument('--uris', help='Spotify uri (default: "%(default)s")',
+                    default=["spotify:track:3Zwu2K0Qa5sT6teCCHPShP"],
+                    nargs='+')
 args = parser.parse_args()
 
 if args.show_debug:
@@ -76,7 +77,7 @@ class MzListener:
 # Wait for connection to the chromecast
 cast.wait()
 
-device_id = None
+spotify_device_id = None
 
 # Create a spotify token
 data = st.start_session(args.user, args.password)
@@ -94,22 +95,29 @@ sp = SpotifyController(access_token, expires)
 cast.register_handler(sp)
 sp.launch_app()
 
+if not sp.is_launched and not sp.credential_error:
+    print('Failed to launch spotify controller due to timeout')
+    sys.exit(1)
+if not sp.is_launched and sp.credential_error:
+    print('Failed to launch spotify controller due to credential error')
+    sys.exit(1)
+
 # Query spotify for active devices
 devices_available = client.devices()
-
-while not sp.is_launched:
-    time.sleep(0.1)
 
 # Match active spotify devices with the spotify controller's device id
 for device in devices_available['devices']:
     if device['id'] == sp.device:
-        device_id = device['id']
+        spotify_device_id = device['id']
         break
 
-if not device_id:
+if not spotify_device_id:
     print('No device with id "{}" known by Spotify'.format(sp.device))
     print('Known devices: {}'.format(devices_available['devices']))
     sys.exit(1)
 
 # Start playback
-client.start_playback(device_id=device_id, uris=[args.track])
+if args.uri[0].find('track') > 0:
+    client.start_playback(device_id=spotify_device_id, uris=args.uri)
+else:
+    client.start_playback(device_id=spotify_device_id, context_uri=args.uri[0])
