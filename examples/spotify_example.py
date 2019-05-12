@@ -28,7 +28,7 @@ parser.add_argument('--cast',
                     default=CAST_NAME)
 parser.add_argument('--user', help='Spotify username', required=True)
 parser.add_argument('--password', help='Spotify password', required=True)
-parser.add_argument('--uris', help='Spotify uri (default: "%(default)s")',
+parser.add_argument('--uri', help='Spotify uri(s) (default: "%(default)s")',
                     default=["spotify:track:3Zwu2K0Qa5sT6teCCHPShP"],
                     nargs='+')
 args = parser.parse_args()

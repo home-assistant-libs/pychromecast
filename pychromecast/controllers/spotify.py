@@ -2,6 +2,7 @@
 Controller to interface with Spotify.
 """
 import logging
+import threading
 import time
 
 from . import BaseController
@@ -35,6 +36,7 @@ class SpotifyController(BaseController):
         self.is_launched = False
         self.device = None
         self.credential_error = False
+        self.waiting = threading.Event()
     # pylint: enable=useless-super-delegation
 
     # pylint: disable=unused-argument,no-self-use
@@ -45,9 +47,11 @@ class SpotifyController(BaseController):
         if data['type'] == TYPE_SET_CREDENTIALS_ERROR:
             self.device = None
             self.credential_error = True
+            self.waiting.set()
         if data['type'] == TYPE_GET_INFO_RESPONSE:
             self.device = data['payload']['deviceID']
             self.is_launched = True
+            self.waiting.set()
         return True
 
     def launch_app(self, timeout=10):
@@ -66,12 +70,11 @@ class SpotifyController(BaseController):
 
         self.device = None
         self.credential_error = False
+        self.waiting.clear()
         self.launch(callback_function=callback)
 
         # Need to wait for Spotify to be launched on Chromecast completely
-        while not self.is_launched and not self.credential_error and timeout:
-            time.sleep(1)
-            timeout -= 1
+        self.waiting.wait(timeout)
 
         if not self.is_launched:
             raise LaunchError(
