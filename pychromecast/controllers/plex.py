@@ -34,8 +34,7 @@ class PlexController(BaseController):
     def seek(self, time):
         """ Send seek command.
 
-        Args:
-            time (int): Time in seconds to seek to
+        :param time (int): Time in seconds to seek to
         """
         self.send_message({MESSAGE_TYPE: TYPE_SEEK,
                            SEEK_KEY: time})
