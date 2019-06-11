@@ -1005,7 +1005,7 @@ class ReceiverController(BaseController):
 
         try:
             app_data = data['applications'][0]
-        except KeyError:
+        except (KeyError, IndexError):
             app_data = {}
 
         is_audio = cast_type in (CAST_TYPE_AUDIO, CAST_TYPE_GROUP)
