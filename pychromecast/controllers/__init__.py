@@ -73,7 +73,7 @@ class BaseController(object):
         if not self.target_platform and \
            self.namespace not in self._socket_client.app_namespaces:
             if self.supporting_app_id is not None:
-                self.launch()
+                self.launch(callback_function=callback_function)
 
             else:
                 raise UnsupportedNamespace(
