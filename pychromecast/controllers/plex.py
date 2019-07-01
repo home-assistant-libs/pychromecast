@@ -388,3 +388,80 @@ class PlexController(BaseController):
         self._socket_client.disconnect()
         if blocking:
             self.join(timeout=timeout)
+
+
+class PlexApiController(PlexController):
+    def __init__(self, pms):
+        """A controller that can use plexapi.."""
+        super(PlexApiController, self).__init__()
+        self.pms = pms
+
+    def _get_current_media(self):
+        """Get current media_item, media and part for pms."""
+        if self.pms:
+            key = int(self.status.content_id.split('/')[-1])
+            media_item = self.pms.fetchItem(key).reload()
+            media_idx = self.status.media_custom_data.get('mediaIndex', 0)
+            part_idx = self.status.media_custom_data.get('partIndex', 0)
+            media = media_item.media[media_idx]
+            part = media.parts[part_idx]
+
+            return media_item, media, part
+
+    def _change_track(self, track=None, type='subtitle', reset=True):
+        """Sets a new default method so mde select the correct thing.
+
+        Args:
+            track (None, optional): what track we should choose.
+            type (str, optional): what type of track
+            reset (bool, optional): Reset the playback after the track has
+                                    been changed.
+
+        Raises:
+            ValueError: Description
+        """
+
+        item, media, part = self._get_current_media()
+        if type == 'subtitle':
+            method = part.subtitleStreams()
+            default = part.setDefaultSubtitleStream
+        elif type == 'audio':
+            method = part.audioStreams()
+            default = part.setDefaultAudioStream
+        else:
+            raise ValueError('set type parmenter as subtitle or audio')
+        for track_ in method:
+            if (track_.index == track or
+                track_.language == track or
+                track_.languageCode == track):
+                self.logger.debug('Change %s to %s', type, track)
+                default(track_)
+                break
+
+        # De we need to reload the item. fuck it lets do it.
+        item.reload()
+        if reset:
+            self._reset_playback()
+
+    def enable_audiotrack(self, track):
+        """Enable a audiotrack.
+
+        Args:
+            track (str): could be index, language or languageCode.
+        """
+        self._change_track(self, track=track, type='audio')
+
+    def disable_subtitle(self):
+        """Disable a subtitle."""
+        item, media, part = self._get_current_media()
+        part.resetDefaultSubtitleStream()
+        self._reset_playback()
+
+    def enable_subtitle(self, subtitle=None):
+        """Enable a subtitle track.
+
+        Args:
+            track (str): could be index, language or languageCode.
+        """
+        self._change_track(track=subtitle)
+
