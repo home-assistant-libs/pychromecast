@@ -30,30 +30,31 @@ TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
 
 
 def media_to_chromecast_command(
-    media=None,
-    type="LOAD",
-    requestId=1,
-    offset=0,
-    directPlay=True,
-    directStream=True,
-    subtitleSize=100,
-    audioBoost=100,
-    transcoderVideo=True,
-    transcoderVideoRemuxOnly=False,
-    transcoderAudio=True,
-    isVerifiedHostname=True,
-    contentType=("video/mp4"),
-    myPlexSubscription=True,
-    contentId=None,
-    streamType=STREAM_TYPE_BUFFERED,
-    port=32400,
-    host=None,
-    username=None,
-    autoplay=True,
-    currentTime=0,
-    playQueueID=None,
-    **kwargs
-):
+        media=None,
+        type="LOAD",
+        requestId=1,
+        offset=0,
+        directPlay=True,
+        directStream=True,
+        subtitleSize=100,
+        audioBoost=100,
+        transcoderVideo=True,
+        transcoderVideoRemuxOnly=False,
+        transcoderAudio=True,
+        isVerifiedHostname=True,
+        contentType=("video/mp4"),
+        myPlexSubscription=True,
+        contentId=None,
+        streamType=STREAM_TYPE_BUFFERED,
+        port=32400,
+        protocol="http",
+        address=None,
+        username=None,
+        autoplay=True,
+        currentTime=0,
+        playQueueID=None,
+        **kwargs
+):  # noqa: 501 pylint: disable=invalid-name, too-many-arguments, too-many-locals, protected-access, redefined-builtin
     """Create the message that chromecast requires. Use pass of plexapi media object or
        set all the neeeded kwargs manually. See the code for what to set.
 
@@ -75,7 +76,7 @@ def media_to_chromecast_command(
         contentId (str): They key chromecast use to start playback.
         streamType (str): Default BUFFERED, LIVE
         port (int): pms port
-        host (str): pms host, without scheme
+        address (str): pms host, without scheme
         username (None): user name of the person that start the playback.
         autoplay (bool): Auto play after the video is done.
         currentTime (int): Set playback from this time. default 0
@@ -83,14 +84,14 @@ def media_to_chromecast_command(
 
     Returns:
         dict: Returs a dict formatted correctly to start playback on a chromecast.
-    """
+    """  # noqa
 
     if media is not None:
         # Let set som params for the user if they use plexapi.
-        # This they dont use plexapi they need to set this using the kwargs!
         server_url = urlparse(media._server._baseurl)
         contentType = (
-            ("video/mp4") if media.TYPE in ("movie", "episode") else ("audio/mp3")
+            ("video/mp4") if media.TYPE in
+            ("movie", "episode") else ("audio/mp3")
         )
         protocol = server_url.scheme
         address = server_url.hostname
@@ -108,7 +109,7 @@ def media_to_chromecast_command(
     if offset != 0:
         currentTime = offset
 
-    d = {
+    msg = {
         "type": type,
         "requestId": requestId,
         "media": {
@@ -126,16 +127,16 @@ def media_to_chromecast_command(
                     "transcoderVideo": transcoderVideo,
                     "transcoderVideoRemuxOnly": transcoderVideoRemuxOnly,
                     "transcoderAudio": transcoderAudio,
-                    "version": "1.4.3.3433",  # media._server.version
+                    "version": "1.4.3.3433",
                     "myPlexSubscription": myPlexSubscription,
                     "isVerifiedHostname": isVerifiedHostname,
                     "protocol": protocol,
                     "address": address,
                     "port": port,
-                    "accessToken": token,  # Create a server.transit-token() method.
+                    "accessToken": token,
                     "user": {"username": username},
                 },
-                "containerKey": "/playQueues/{}?own=1&window=200".format(playQueueID),
+                "containerKey": "/playQueues/%s?own=1&window=200" % playQueueID,  # noqa: E501
             },
             "autoplay": autoplay,
             "currentTime": currentTime,
@@ -144,15 +145,16 @@ def media_to_chromecast_command(
     }
 
     # Allow passing kwarg to the dict
-    d.update(kwargs)
+    msg.update(kwargs)
 
-    return d
+    return msg
 
 
 class PlexController(BaseController):
+    # pylint: disable=too-many-public-methods
     """ Controller to interact with Plex namespace. """
 
-    def __init__(self, **kwargs):
+    def __init__(self):
         super(PlexController, self).__init__("urn:x-cast:plex", "9AC194DC")
         self.app_id = "9AC194DC"
         self.namespace = "urn:x-cast:plex"
@@ -161,13 +163,13 @@ class PlexController(BaseController):
         self._last_play_msg = {}
 
     def _send_cmd(
-        self,
-        msg,
-        namespace=None,
-        inc_session_id=False,
-        callback_function=None,
-        inc=True,
-    ):
+            self,
+            msg,
+            namespace=None,
+            inc_session_id=False,
+            callback_function=None,
+            inc=True,
+    ):  # pylint: disable=too-many-arguments
         """Wrapper the commands.
 
         Args:
@@ -177,7 +179,7 @@ class PlexController(BaseController):
             callback_function (None, optional): If given the callback is exceuted
                                                 after the command is executed.
             inc (bool, optional): Increase the requestsId.
-        """
+        """  # noqa
         self.logger.debug(
             "Sending msg %r %s %s %s %s",
             msg,
@@ -203,7 +205,9 @@ class PlexController(BaseController):
                 self.namespace = old
         else:
             self.send_message(
-                msg, inc_session_id=inc_session_id, callback_function=callback_function
+                msg,
+                inc_session_id=inc_session_id,
+                callback_function=callback_function
             )
 
     def _inc_request(self):
@@ -240,7 +244,8 @@ class PlexController(BaseController):
     def update_status(self, callback_function_param=False):
         """Send message to update the status."""
         self.send_message(
-            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
+            {MESSAGE_TYPE: TYPE_GET_STATUS},
+            callback_function=callback_function_param
         )
 
     def stop(self):
@@ -268,10 +273,12 @@ class PlexController(BaseController):
 
         Args:
             position (int): offset in seconds.
-            resume_state (str, default): possible options are PLAYBACK_START wtf is the rest?
+            resume_state (str, default): PLAYBACK_START
         """
         self._send_cmd(
-            {MESSAGE_TYPE: TYPE_SEEK, SEEK_KEY: position, "resumeState": resume_state}
+            {MESSAGE_TYPE: TYPE_SEEK,
+             SEEK_KEY: position,
+             "resumeState": resume_state}
         )
 
     def rewind(self):
@@ -284,7 +291,7 @@ class PlexController(BaseController):
         Args:
             percent (int): The wanted volume.
         """
-        self._socket_client.receiver_controller.set_volume(float(percent / 100))
+        self._socket_client.receiver_controller.set_volume(float(percent / 100))  # noqa: 501
 
     def volume_up(self, delta=0.1):
         """ Increment volume by 0.1 (or delta) unless it is already maxed.
@@ -313,22 +320,25 @@ class PlexController(BaseController):
             status (None, optional): override for on/off
         """
         if status is not None:
-            st = status
+            status = status
         else:
-            st = not status.volume_muted
+            status = not status.volume_muted
 
-        self._socket_client.receiver_controller.set_volume_muted(st)
+        self._socket_client.receiver_controller.set_volume_muted(status)
 
     def show_media(self, media=None, **kwargs):
         """Show the media on the screen"""
         msg = media_to_chromecast_command(
-            media, type=TYPE_DETAILS, requestId=self._inc_request(), **kwargs
+            media,
+            type=TYPE_DETAILS,
+            requestId=self._inc_request(),
+            **kwargs
         )
 
-        def cb():
+        def callback():  # pylint: disable=missing-docstring
             self._send_cmd(msg, inc_session_id=True, inc=False)
 
-        self.launch(cb)
+        self.launch(callback)
 
     def quit_app(self):
         """Quit the plex app"""
@@ -341,15 +351,16 @@ class PlexController(BaseController):
         Returns:
             pychromecast.controllers.media.MediaStatus: Slightly modified status with patched
                                                         method for episode_title.
-        """
+        """  # noqa
 
         @property
         def episode_title(self):
+            """Return episode title."""
             return self.media_metadata.get("subtitle")
 
-        mc = self._socket_client.media_controller.status
-        mc.episode_title = episode_title
-        return mc
+        status = self._socket_client.media_controller.status
+        status.episode_title = episode_title
+        return status
 
     def _reset_playback(self, offset=None):
         """Reset playback.
@@ -359,7 +370,7 @@ class PlexController(BaseController):
                                      the platback will start from current time.
                                      Setting it will override this behaviour.
                                      This is given in seconds.
-        """
+        """  # noqa
         if self._last_play_msg:
             offset_now = self.status.adjusted_current_time
             msg = deepcopy(self._last_play_msg)
@@ -379,8 +390,8 @@ class PlexController(BaseController):
             )
         else:
             self.logger.debug(
-                "Cant reset teh stream as _last_play_msg is not set by _send_start_play"
-            )
+                "Cant reset teh stream as _last_play_msg "
+                "is not set by _send_start_play")
 
     def _send_start_play(self, media=None, **kwargs):
         """Helper to send a playback command.
@@ -392,7 +403,8 @@ class PlexController(BaseController):
         msg = media_to_chromecast_command(
             media, requestiId=self._inc_request(), **kwargs
         )
-        self.logger.debug("Create command: \n%r\n", json.dumps(msg, indent=4))
+        self.logger.debug("Create command: \n%r\n",
+                          json.dumps(msg, indent=4))
         self._last_play_msg = msg
         self._send_cmd(
             msg,
@@ -401,119 +413,126 @@ class PlexController(BaseController):
             inc=False,
         )
 
-    def block_until_playing(self, item, timeout=None):
+    def block_until_playing(self, media=None, timeout=None, **kwargs):
         """Block until this playing, typically usefull in a script
 
            another way to the the same is the check if the
            controllers is_active or use self.status.player_state
 
-        """
+           Args:
+            media (None, optional): Can also be :class:`~plexapi.base.Playable
+                                   if its not, you need to fill out all the kwargs.
+            timeout (None, int): default None
+            **kwargs: See media_to_chromecast_command docs string.
+
+        """  # noqa
         # Incase media isnt playing
         self.play_media_event.clear()
-        self.play_media(item)
+        self.play_media(media, **kwargs)
         self.play_media_event.wait(timeout)
         self.play_media_event.clear()
 
-    def play_media(self, item=None, **kwargs):
+    def play_media(self, media=None, **kwargs):
         """Start playback on the chromecast
 
         Args:
-            item (None, optional): It can also be :class:`~plexapi.base.Playable
+            media (None, optional): Can also be :class:`~plexapi.base.Playable
                                    if its not, you need to fill out all the kwargs.
             **kwargs: See media_to_chromecast_command docs string.
-        """
+        """  # noqa
         self.play_media_event.clear()
 
-        def app_launched_callback():
+        def app_launched_callback():  # pylint: disable=missing-docstring
             try:
-                self._send_start_play(item, **kwargs)
+                self._send_start_play(media, **kwargs)
             finally:
                 self.play_media_event.set()
 
         self.launch(app_launched_callback)
 
     def join(self, timeout=None):
+        """Join the thread."""
         self._socket_client.join(timeout=timeout)
 
     def disconnect(self, timeout=None, blocking=True):
+        """Disconnect the controller."""
         self._socket_client.disconnect()
         if blocking:
             self.join(timeout=timeout)
 
 
+# pylint: disable=too-many-public-methods
 class PlexApiController(PlexController):
+    """A controller that can use plexapi.."""
+
     def __init__(self, pms):
-        """A controller that can use plexapi.."""
         super(PlexApiController, self).__init__()
         self.pms = pms
 
     def _get_current_media(self):
         """Get current media_item, media and part for pms."""
-        if self.pms:
-            key = int(self.status.content_id.split("/")[-1])
-            media_item = self.pms.fetchItem(key).reload()
-            media_idx = self.status.media_custom_data.get("mediaIndex", 0)
-            part_idx = self.status.media_custom_data.get("partIndex", 0)
-            media = media_item.media[media_idx]
-            part = media.parts[part_idx]
+        key = int(self.status.content_id.split("/")[-1])
+        media_item = self.pms.fetchItem(key).reload()
+        media_idx = self.status.media_custom_data.get("mediaIndex", 0)
+        part_idx = self.status.media_custom_data.get("partIndex", 0)
+        media = media_item.media[media_idx]
+        part = media.parts[part_idx]
 
-            return media_item, media, part
+        return media_item, media, part
 
-    def _change_track(self, track=None, type="subtitle", reset=True):
-        """Sets a new default method so mde select the correct thing.
+    def _change_track(self, track, type_="subtitle", reset_playback=True):
+        """Sets a new default audio/subtitle track so mde select the correct track.
 
         Args:
-            track (None, optional): what track we should choose.
-            type (str, optional): what type of track
-            reset (bool, optional): Reset the playback after the track has
-                                    been changed.
+            track (None): what track we should choose.
+            type_ (str): what type of track
+            reset_playback (bool, optional): Reset the playback after the track has
+                                             been changed.
 
         Raises:
-            ValueError: Description
-        """
+            ValueError: If type isn't subtitle or audio.
+        """ # noqa
 
-        item, media, part = self._get_current_media()
-        if type == "subtitle":
+        item, _, part = self._get_current_media()
+        if type_ == "subtitle":
             method = part.subtitleStreams()
             default = part.setDefaultSubtitleStream
-        elif type == "audio":
+        elif type_ == "audio":
             method = part.audioStreams()
             default = part.setDefaultAudioStream
         else:
             raise ValueError("set type parmenter as subtitle or audio")
+
         for track_ in method:
-            if (
-                track_.index == track
-                or track_.language == track
-                or track_.languageCode == track
-            ):
-                self.logger.debug("Change %s to %s", type, track)
+            if (track_.index == track or
+                    track_.language == track or
+                    track_.languageCode == track): # noqa
+                self.logger.debug("Change %s to %s", type_, track)
                 default(track_)
                 break
 
-        # De we need to reload the item. fuck it lets do it.
         item.reload()
-        if reset:
+        if reset_playback:
             self._reset_playback()
 
-    def enable_audiotrack(self, track):
+    def enable_audiotrack(self, audio):
         """Enable a audiotrack.
 
         Args:
-            track (str): could be index, language or languageCode.
+            audio (str): could be index, language or languageCode.
         """
-        self._change_track(self, track=track, type="audio")
+        self._change_track(self, audio, "audio")
 
     def disable_subtitle(self):
         """Disable a subtitle."""
-        item, media, part = self._get_current_media()
+        _, __, part = self._get_current_media()  # noqa: 501 pylint disable=unused-variable
         part.resetDefaultSubtitleStream()
         self._reset_playback()
 
-    def enable_subtitle(self, subtitle=None):
+    def enable_subtitle(self, subtitle):
         """Enable a subtitle track.
 
         Args:
-            track (str): could be index, language or languageCode.
+            subtitle (str): could be index, language or languageCode.
         """
-        self._change_track(track=subtitle)
+        self._change_track(subtitle)
