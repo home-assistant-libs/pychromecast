@@ -150,6 +150,12 @@ def media_to_chromecast_command(
     return msg
 
 
+@property
+def episode_title(self):
+    """Return episode title."""
+    return self.media_metadata.get("subtitle")
+
+
 class PlexController(BaseController):
     # pylint: disable=too-many-public-methods
     """ Controller to interact with Plex namespace. """
@@ -352,12 +358,6 @@ class PlexController(BaseController):
             pychromecast.controllers.media.MediaStatus: Slightly modified status with patched
                                                         method for episode_title.
         """  # noqa
-
-        @property
-        def episode_title(self):
-            """Return episode title."""
-            return self.media_metadata.get("subtitle")
-
         status = self._socket_client.media_controller.status
         status.episode_title = episode_title
         return status
@@ -390,7 +390,7 @@ class PlexController(BaseController):
             )
         else:
             self.logger.debug(
-                "Cant reset teh stream as _last_play_msg "
+                "Cant reset the stream as _last_play_msg "
                 "is not set by _send_start_play")
 
     def _send_start_play(self, media=None, **kwargs):
