@@ -58,7 +58,8 @@ def _get_status(host, services, zconf, path):
 
     headers = {'content-type': 'application/json'}
 
-    req = requests.get(FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
+    req = requests.get(
+        FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
 
     req.raise_for_status()
 
