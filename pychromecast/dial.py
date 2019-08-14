@@ -13,9 +13,6 @@ XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL = "http://{}:8008"
 
-CC_SESSION = requests.Session()
-CC_SESSION.headers['content-type'] = 'application/json'
-
 # Regular chromecast, supports video/audio
 CAST_TYPE_CHROMECAST = 'cast'
 # Cast Audio device, supports only audio
@@ -37,8 +34,10 @@ _LOGGER = logging.getLogger(__name__)
 
 def reboot(host):
     """ Reboots the chromecast. """
-    CC_SESSION.post(FORMAT_BASE_URL.format(host) + "/setup/reboot",
-                    data='{"params":"now"}', timeout=10)
+    headers = {'content-type': 'application/json'}
+
+    requests.post(FORMAT_BASE_URL.format(host) + "/setup/reboot",
+                  data='{"params":"now"}', headers=headers, timeout=10)
 
 
 def _get_status(host, services, zconf, path):
@@ -57,7 +56,9 @@ def _get_status(host, services, zconf, path):
                 _LOGGER.debug("Resolved service %s to %s", service, host)
                 break
 
-    req = CC_SESSION.get(FORMAT_BASE_URL.format(host) + path, timeout=10)
+    headers = {'content-type': 'application/json'}
+
+    req = requests.get(FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
 
     req.raise_for_status()
 
