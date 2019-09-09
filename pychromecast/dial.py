@@ -14,19 +14,19 @@ XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 FORMAT_BASE_URL = "http://{}:8008"
 
 # Regular chromecast, supports video/audio
-CAST_TYPE_CHROMECAST = 'cast'
+CAST_TYPE_CHROMECAST = "cast"
 # Cast Audio device, supports only audio
-CAST_TYPE_AUDIO = 'audio'
+CAST_TYPE_AUDIO = "audio"
 # Cast Audio group device, supports only audio
-CAST_TYPE_GROUP = 'group'
+CAST_TYPE_GROUP = "group"
 
 CAST_TYPES = {
-    'chromecast': CAST_TYPE_CHROMECAST,
-    'eureka dongle': CAST_TYPE_CHROMECAST,
-    'chromecast audio': CAST_TYPE_AUDIO,
-    'google home': CAST_TYPE_AUDIO,
-    'google home mini': CAST_TYPE_AUDIO,
-    'google cast group': CAST_TYPE_GROUP,
+    "chromecast": CAST_TYPE_CHROMECAST,
+    "eureka dongle": CAST_TYPE_CHROMECAST,
+    "chromecast audio": CAST_TYPE_AUDIO,
+    "google home": CAST_TYPE_AUDIO,
+    "google home mini": CAST_TYPE_AUDIO,
+    "google cast group": CAST_TYPE_GROUP,
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,10 +34,14 @@ _LOGGER = logging.getLogger(__name__)
 
 def reboot(host):
     """ Reboots the chromecast. """
-    headers = {'content-type': 'application/json'}
+    headers = {"content-type": "application/json"}
 
-    requests.post(FORMAT_BASE_URL.format(host) + "/setup/reboot",
-                  data='{"params":"now"}', headers=headers, timeout=10)
+    requests.post(
+        FORMAT_BASE_URL.format(host) + "/setup/reboot",
+        data='{"params":"now"}',
+        headers=headers,
+        timeout=10,
+    )
 
 
 def _get_status(host, services, zconf, path):
@@ -56,10 +60,9 @@ def _get_status(host, services, zconf, path):
                 _LOGGER.debug("Resolved service %s to %s", service, host)
                 break
 
-    headers = {'content-type': 'application/json'}
+    headers = {"content-type": "application/json"}
 
-    req = requests.get(
-        FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
+    req = requests.get(FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
 
     req.raise_for_status()
 
@@ -70,7 +73,7 @@ def _get_status(host, services, zconf, path):
     # if no encoding is provided, since the autodetection does not always
     # provide correct results.
     if req.encoding is None:
-        req.encoding = 'utf-8'
+        req.encoding = "utf-8"
 
     return req.json()
 
@@ -84,27 +87,24 @@ def get_device_status(host, services=None, zconf=None):
     """
 
     try:
-        status = _get_status(
-            host, services, zconf, "/setup/eureka_info?options=detail")
+        status = _get_status(host, services, zconf, "/setup/eureka_info?options=detail")
 
-        friendly_name = status.get('name', "Unknown Chromecast")
+        friendly_name = status.get("name", "Unknown Chromecast")
         model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
-        if 'detail' in status:
-            model_name = status['detail'].get('model_name', model_name)
-            manufacturer = status['detail'].get('manufacturer', manufacturer)
+        if "detail" in status:
+            model_name = status["detail"].get("model_name", model_name)
+            manufacturer = status["detail"].get("manufacturer", manufacturer)
 
-        udn = status.get('ssdp_udn', None)
+        udn = status.get("ssdp_udn", None)
 
-        cast_type = CAST_TYPES.get(model_name.lower(),
-                                   CAST_TYPE_CHROMECAST)
+        cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
 
         uuid = None
         if udn:
-            uuid = UUID(udn.replace('-', ''))
+            uuid = UUID(udn.replace("-", ""))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer,
-                            uuid, cast_type)
+        return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
     except (requests.exceptions.RequestException, OSError, ValueError):
         return None
@@ -120,26 +120,27 @@ def get_multizone_status(host, services=None, zconf=None):
 
     try:
         status = status = _get_status(
-            host, services, zconf, "/setup/eureka_info?params=multizone")
+            host, services, zconf, "/setup/eureka_info?params=multizone"
+        )
 
         dynamic_groups = []
-        if 'multizone' in status and 'dynamic_groups' in status['multizone']:
-            for group in status['multizone']['dynamic_groups']:
-                name = group.get('name', "Unknown group name")
-                udn = group.get('uuid', None)
+        if "multizone" in status and "dynamic_groups" in status["multizone"]:
+            for group in status["multizone"]["dynamic_groups"]:
+                name = group.get("name", "Unknown group name")
+                udn = group.get("uuid", None)
                 uuid = None
                 if udn:
-                    uuid = UUID(udn.replace('-', ''))
+                    uuid = UUID(udn.replace("-", ""))
                 dynamic_groups.append(MultizoneInfo(name, uuid))
 
         groups = []
-        if 'multizone' in status and 'groups' in status['multizone']:
-            for group in status['multizone']['groups']:
-                name = group.get('name', "Unknown group name")
-                udn = group.get('uuid', None)
+        if "multizone" in status and "groups" in status["multizone"]:
+            for group in status["multizone"]["groups"]:
+                name = group.get("name", "Unknown group name")
+                udn = group.get("uuid", None)
                 uuid = None
                 if udn:
-                    uuid = UUID(udn.replace('-', ''))
+                    uuid = UUID(udn.replace("-", ""))
                 groups.append(MultizoneInfo(name, uuid))
 
         return MultizoneStatus(dynamic_groups, groups)
@@ -149,13 +150,9 @@ def get_multizone_status(host, services=None, zconf=None):
 
 
 DeviceStatus = namedtuple(
-    "DeviceStatus",
-    ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"])
+    "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
+)
 
-MultizoneInfo = namedtuple(
-    "MultizoneInfo",
-    ["friendly_name", "uuid"])
+MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid"])
 
-MultizoneStatus = namedtuple(
-    "MultizoneStatus",
-    ["dynamic_groups", "groups"])
+MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])

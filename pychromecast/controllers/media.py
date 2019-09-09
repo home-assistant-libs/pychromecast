@@ -21,7 +21,7 @@ MEDIA_PLAYER_STATE_PAUSED = "PAUSED"
 MEDIA_PLAYER_STATE_IDLE = "IDLE"
 MEDIA_PLAYER_STATE_UNKNOWN = "UNKNOWN"
 
-MESSAGE_TYPE = 'type'
+MESSAGE_TYPE = "type"
 
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
 TYPE_GET_STATUS = "GET_STATUS"
@@ -67,12 +67,12 @@ CMD_SUPPORT_SKIP_FORWARD = 16
 CMD_SUPPORT_SKIP_BACKWARD = 32
 
 
-MediaImage = namedtuple('MediaImage', 'url height width')
+MediaImage = namedtuple("MediaImage", "url height width")
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class MediaStatus(object):
+class MediaStatus:
     """ Class to hold the media status. """
 
     # pylint: disable=too-many-instance-attributes,too-many-public-methods
@@ -100,21 +100,25 @@ class MediaStatus(object):
         """ Returns calculated current seek time of media in seconds """
         if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
             # Add time since last update
-            return (self.current_time +
-                    (datetime.utcnow() - self.last_updated).total_seconds())
+            return (
+                self.current_time
+                + (datetime.utcnow() - self.last_updated).total_seconds()
+            )
         # Not playing, return last reported seek time
         return self.current_time
 
     @property
     def metadata_type(self):
         """ Type of meta data. """
-        return self.media_metadata.get('metadataType')
+        return self.media_metadata.get("metadataType")
 
     @property
     def player_is_playing(self):
         """ Return True if player is PLAYING. """
-        return (self.player_state == MEDIA_PLAYER_STATE_PLAYING or
-                self.player_state == MEDIA_PLAYER_STATE_BUFFERING)
+        return (
+            self.player_state == MEDIA_PLAYER_STATE_PLAYING
+            or self.player_state == MEDIA_PLAYER_STATE_BUFFERING
+        )
 
     @property
     def player_is_paused(self):
@@ -164,49 +168,49 @@ class MediaStatus(object):
     @property
     def title(self):
         """ Return title of media. """
-        return self.media_metadata.get('title')
+        return self.media_metadata.get("title")
 
     @property
     def series_title(self):
         """ Return series title if available. """
-        return self.media_metadata.get('seriesTitle')
+        return self.media_metadata.get("seriesTitle")
 
     @property
     def season(self):
         """ Return season if available. """
-        return self.media_metadata.get('season')
+        return self.media_metadata.get("season")
 
     @property
     def episode(self):
         """ Return episode if available. """
-        return self.media_metadata.get('episode')
+        return self.media_metadata.get("episode")
 
     @property
     def artist(self):
         """ Return artist if available. """
-        return self.media_metadata.get('artist')
+        return self.media_metadata.get("artist")
 
     @property
     def album_name(self):
         """ Return album name if available. """
-        return self.media_metadata.get('albumName')
+        return self.media_metadata.get("albumName")
 
     @property
     def album_artist(self):
         """ Return album artist if available. """
-        return self.media_metadata.get('albumArtist')
+        return self.media_metadata.get("albumArtist")
 
     @property
     def track(self):
         """ Return track number if available. """
-        return self.media_metadata.get('track')
+        return self.media_metadata.get("track")
 
     @property
     def images(self):
         """ Return a list of MediaImage objects for this media. """
         return [
-            MediaImage(item.get('url'), item.get('height'), item.get('width'))
-            for item in self.media_metadata.get('images', [])
+            MediaImage(item.get("url"), item.get("height"), item.get("width"))
+            for item in self.media_metadata.get("images", [])
         ]
 
     @property
@@ -251,58 +255,57 @@ class MediaStatus(object):
 
     def update(self, data):
         """ New data will only contain the changed attributes. """
-        if not data.get('status', []):
+        if not data.get("status", []):
             return
 
-        status_data = data['status'][0]
-        media_data = status_data.get('media') or {}
-        volume_data = status_data.get('volume', {})
+        status_data = data["status"][0]
+        media_data = status_data.get("media") or {}
+        volume_data = status_data.get("volume", {})
 
-        self.current_time = status_data.get('currentTime', self.current_time)
-        self.content_id = media_data.get('contentId', self.content_id)
-        self.content_type = media_data.get('contentType', self.content_type)
-        self.duration = media_data.get('duration', self.duration)
-        self.stream_type = media_data.get('streamType', self.stream_type)
-        self.idle_reason = status_data.get('idleReason', self.idle_reason)
-        self.media_session_id = status_data.get(
-            'mediaSessionId', self.media_session_id)
-        self.playback_rate = status_data.get(
-            'playbackRate', self.playback_rate)
-        self.player_state = status_data.get('playerState', self.player_state)
+        self.current_time = status_data.get("currentTime", self.current_time)
+        self.content_id = media_data.get("contentId", self.content_id)
+        self.content_type = media_data.get("contentType", self.content_type)
+        self.duration = media_data.get("duration", self.duration)
+        self.stream_type = media_data.get("streamType", self.stream_type)
+        self.idle_reason = status_data.get("idleReason", self.idle_reason)
+        self.media_session_id = status_data.get("mediaSessionId", self.media_session_id)
+        self.playback_rate = status_data.get("playbackRate", self.playback_rate)
+        self.player_state = status_data.get("playerState", self.player_state)
         self.supported_media_commands = status_data.get(
-            'supportedMediaCommands', self.supported_media_commands)
-        self.volume_level = volume_data.get('level', self.volume_level)
-        self.volume_muted = volume_data.get('muted', self.volume_muted)
-        self.media_custom_data = media_data.get(
-            'customData', self.media_custom_data)
-        self.media_metadata = media_data.get('metadata', self.media_metadata)
-        self.subtitle_tracks = media_data.get('tracks', self.subtitle_tracks)
+            "supportedMediaCommands", self.supported_media_commands
+        )
+        self.volume_level = volume_data.get("level", self.volume_level)
+        self.volume_muted = volume_data.get("muted", self.volume_muted)
+        self.media_custom_data = media_data.get("customData", self.media_custom_data)
+        self.media_metadata = media_data.get("metadata", self.media_metadata)
+        self.subtitle_tracks = media_data.get("tracks", self.subtitle_tracks)
         self.current_subtitle_tracks = status_data.get(
-            'activeTrackIds', self.current_subtitle_tracks)
+            "activeTrackIds", self.current_subtitle_tracks
+        )
         self.last_updated = datetime.utcnow()
 
     def __repr__(self):
         info = {
-            'metadata_type': self.metadata_type,
-            'title': self.title,
-            'series_title': self.series_title,
-            'season': self.season,
-            'episode': self.episode,
-            'artist': self.artist,
-            'album_name': self.album_name,
-            'album_artist': self.album_artist,
-            'track': self.track,
-            'subtitle_tracks': self.subtitle_tracks,
-            'images': self.images,
-            'supports_pause': self.supports_pause,
-            'supports_seek': self.supports_seek,
-            'supports_stream_volume': self.supports_stream_volume,
-            'supports_stream_mute': self.supports_stream_mute,
-            'supports_skip_forward': self.supports_skip_forward,
-            'supports_skip_backward': self.supports_skip_backward,
+            "metadata_type": self.metadata_type,
+            "title": self.title,
+            "series_title": self.series_title,
+            "season": self.season,
+            "episode": self.episode,
+            "artist": self.artist,
+            "album_name": self.album_name,
+            "album_artist": self.album_artist,
+            "track": self.track,
+            "subtitle_tracks": self.subtitle_tracks,
+            "images": self.images,
+            "supports_pause": self.supports_pause,
+            "supports_seek": self.supports_seek,
+            "supports_stream_volume": self.supports_stream_volume,
+            "supports_stream_mute": self.supports_stream_mute,
+            "supports_skip_forward": self.supports_skip_forward,
+            "supports_skip_backward": self.supports_skip_backward,
         }
         info.update(self.__dict__)
-        return '<MediaStatus {}>'.format(info)
+        return "<MediaStatus {}>".format(info)
 
 
 # pylint: disable=too-many-public-methods
@@ -310,8 +313,7 @@ class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
     def __init__(self):
-        super(MediaController, self).__init__(
-            "urn:x-cast:com.google.cast.media")
+        super(MediaController, self).__init__("urn:x-cast:com.google.cast.media")
 
         self.media_session_id = 0
         self.status = MediaStatus()
@@ -344,18 +346,19 @@ class MediaController(BaseController):
 
     def update_status(self, callback_function_param=False):
         """ Send message to update the status. """
-        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS},
-                          callback_function=callback_function_param)
+        self.send_message(
+            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
+        )
 
     def _send_command(self, command):
         """ Send a command to the Chromecast on media channel. """
         if self.status is None or self.status.media_session_id is None:
             self.logger.warning(
-                "%s command requested but no session is active.",
-                command[MESSAGE_TYPE])
+                "%s command requested but no session is active.", command[MESSAGE_TYPE]
+            )
             return
 
-        command['mediaSessionId'] = self.status.media_session_id
+        command["mediaSessionId"] = self.status.media_session_id
 
         self.send_message(command, inc_session_id=True)
 
@@ -412,13 +415,17 @@ class MediaController(BaseController):
 
     def skip(self):
         """ Skips rest of the media. Values less then -5 behaved flaky. """
-        self.seek(int(self.status.duration)-5)
+        self.seek(int(self.status.duration) - 5)
 
     def seek(self, position):
         """ Seek the media to a specific location. """
-        self._send_command({MESSAGE_TYPE: TYPE_SEEK,
-                            "currentTime": position,
-                            "resumeState": "PLAYBACK_START"})
+        self._send_command(
+            {
+                MESSAGE_TYPE: TYPE_SEEK,
+                "currentTime": position,
+                "resumeState": "PLAYBACK_START",
+            }
+        )
 
     def queue_next(self):
         """ Send the QUEUE_NEXT command. """
@@ -430,17 +437,13 @@ class MediaController(BaseController):
 
     def enable_subtitle(self, track_id):
         """ Enable specific text track. """
-        self._send_command({
-            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
-            "activeTrackIds": [track_id]
-        })
+        self._send_command(
+            {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]}
+        )
 
     def disable_subtitle(self):
         """ Disable subtitle. """
-        self._send_command({
-            MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO,
-            "activeTrackIds": []
-        })
+        self._send_command({MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []})
 
     def block_until_active(self, timeout=None):
         """
@@ -476,15 +479,26 @@ class MediaController(BaseController):
             try:
                 listener.new_media_status(self.status)
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Exception thrown when calling media status "
-                                  "callback")
+                _LOGGER.exception(
+                    "Exception thrown when calling media status " "callback"
+                )
 
     # pylint: disable=too-many-arguments
-    def play_media(self, url, content_type, title=None, thumb=None,
-                   current_time=0, autoplay=True,
-                   stream_type=STREAM_TYPE_BUFFERED,
-                   metadata=None, subtitles=None, subtitles_lang='en-US',
-                   subtitles_mime='text/vtt', subtitle_id=1):
+    def play_media(
+        self,
+        url,
+        content_type,
+        title=None,
+        thumb=None,
+        current_time=0,
+        autoplay=True,
+        stream_type=STREAM_TYPE_BUFFERED,
+        metadata=None,
+        subtitles=None,
+        subtitles_lang="en-US",
+        subtitles_mime="text/vtt",
+        subtitle_id=1,
+    ):
         """
         Plays media on the Chromecast. Start default media receiver if not
         already started.
@@ -514,61 +528,81 @@ class MediaController(BaseController):
         def app_launched_callback():
             """Plays media after chromecast has switched to requested app."""
             self._send_start_play_media(
-                url, content_type, title, thumb, current_time, autoplay,
-                stream_type, metadata, subtitles, subtitles_lang,
-                subtitles_mime, subtitle_id)
+                url,
+                content_type,
+                title,
+                thumb,
+                current_time,
+                autoplay,
+                stream_type,
+                metadata,
+                subtitles,
+                subtitles_lang,
+                subtitles_mime,
+                subtitle_id,
+            )
 
         receiver_ctrl = self._socket_client.receiver_controller
-        receiver_ctrl.launch_app(self.app_id,
-                                 callback_function=app_launched_callback)
+        receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
 
-    def _send_start_play_media(self, url, content_type, title=None, thumb=None,
-                               current_time=0, autoplay=True,
-                               stream_type=STREAM_TYPE_BUFFERED,
-                               metadata=None, subtitles=None,
-                               subtitles_lang='en-US',
-                               subtitles_mime='text/vtt', subtitle_id=1):
+    def _send_start_play_media(
+        self,
+        url,
+        content_type,
+        title=None,
+        thumb=None,
+        current_time=0,
+        autoplay=True,
+        stream_type=STREAM_TYPE_BUFFERED,
+        metadata=None,
+        subtitles=None,
+        subtitles_lang="en-US",
+        subtitles_mime="text/vtt",
+        subtitle_id=1,
+    ):
         # pylint: disable=too-many-locals
         msg = {
-            'media': {
-                'contentId': url,
-                'streamType': stream_type,
-                'contentType': content_type,
-                'metadata': metadata or {}
+            "media": {
+                "contentId": url,
+                "streamType": stream_type,
+                "contentType": content_type,
+                "metadata": metadata or {},
             },
             MESSAGE_TYPE: TYPE_LOAD,
-            'currentTime': current_time,
-            'autoplay': autoplay,
-            'customData': {}
+            "currentTime": current_time,
+            "autoplay": autoplay,
+            "customData": {},
         }
 
         if title:
-            msg['media']['metadata']['title'] = title
+            msg["media"]["metadata"]["title"] = title
 
         if thumb:
-            msg['media']['metadata']['thumb'] = thumb
+            msg["media"]["metadata"]["thumb"] = thumb
 
-            if 'images' not in msg['media']['metadata']:
-                msg['media']['metadata']['images'] = []
+            if "images" not in msg["media"]["metadata"]:
+                msg["media"]["metadata"]["images"] = []
 
-            msg['media']['metadata']['images'].append({'url': thumb})
+            msg["media"]["metadata"]["images"].append({"url": thumb})
         if subtitles:
-            sub_msg = [{
-                'trackId': subtitle_id,
-                'trackContentId': subtitles,
-                'language': subtitles_lang,
-                'subtype': 'SUBTITLES',
-                'type': 'TEXT',
-                'trackContentType': subtitles_mime,
-                'name': "{} - {} Subtitle".format(subtitles_lang, subtitle_id)
-                }]
-            msg['media']['tracks'] = sub_msg
-            msg['media']['textTrackStyle'] = {
-                'backgroundColor': '#FFFFFF00',
-                'edgeType': 'OUTLINE',
-                'edgeColor': '#000000FF'
+            sub_msg = [
+                {
+                    "trackId": subtitle_id,
+                    "trackContentId": subtitles,
+                    "language": subtitles_lang,
+                    "subtype": "SUBTITLES",
+                    "type": "TEXT",
+                    "trackContentType": subtitles_mime,
+                    "name": "{} - {} Subtitle".format(subtitles_lang, subtitle_id),
+                }
+            ]
+            msg["media"]["tracks"] = sub_msg
+            msg["media"]["textTrackStyle"] = {
+                "backgroundColor": "#FFFFFF00",
+                "edgeType": "OUTLINE",
+                "edgeColor": "#000000FF",
             }
-            msg['activeTrackIds'] = [subtitle_id]
+            msg["activeTrackIds"] = [subtitle_id]
         self.send_message(msg, inc_session_id=True)
 
     def tear_down(self):

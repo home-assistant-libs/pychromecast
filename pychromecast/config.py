@@ -19,11 +19,11 @@ def get_possible_app_ids():
 
     try:
         req = requests.get(
-            "https://clients3.google.com/cast/chromecast/device/baseconfig")
+            "https://clients3.google.com/cast/chromecast/device/baseconfig"
+        )
         data = json.loads(req.text[4:])
 
-        return [app['app_id'] for app in data['applications']] + \
-            data["enabled_app_ids"]
+        return [app["app_id"] for app in data["applications"]] + data["enabled_app_ids"]
 
     except ValueError:
         # If json fails to parse
@@ -34,8 +34,10 @@ def get_app_config(app_id):
     """ Get specific configuration for 'app_id'. """
     try:
         req = requests.get(
-            ("https://clients3.google.com/"
-             "cast/chromecast/device/app?a={}").format(app_id))
+            ("https://clients3.google.com/" "cast/chromecast/device/app?a={}").format(
+                app_id
+            )
+        )
 
         return json.loads(req.text[4:]) if req.status_code == 200 else {}
 

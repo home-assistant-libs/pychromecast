@@ -6,11 +6,10 @@ import logging
 from ..error import UnsupportedNamespace, ControllerNotRegistered
 
 
-class BaseController(object):
+class BaseController:
     """ ABC for namespace controllers. """
 
-    def __init__(self, namespace, supporting_app_id=None,
-                 target_platform=False):
+    def __init__(self, namespace, supporting_app_id=None, target_platform=False):
         """
         Initialize the controller.
 
@@ -33,15 +32,18 @@ class BaseController(object):
     def is_active(self):
         """ True if the controller is connected to a socket client and the
             Chromecast is running an app that supports this controller. """
-        return (self._socket_client is not None and
-                self.namespace in self._socket_client.app_namespaces)
+        return (
+            self._socket_client is not None
+            and self.namespace in self._socket_client.app_namespaces
+        )
 
     def launch(self, callback_function=None):
         """ If set, launches app related to the controller. """
         self._check_registered()
 
         self._socket_client.receiver_controller.launch_app(
-            self.supporting_app_id, callback_function=callback_function)
+            self.supporting_app_id, callback_function=callback_function
+        )
 
     def registered(self, socket_client):
         """ Called when a controller is registered. """
@@ -55,33 +57,41 @@ class BaseController(object):
     def channel_connected(self):
         """ Called when a channel has been openend that supports the
             namespace of this controller. """
-        pass
 
     def channel_disconnected(self):
         """ Called when a channel is disconnected. """
-        pass
 
-    def send_message(self, data, inc_session_id=False,
-                     callback_function=None):
+    def send_message(self, data, inc_session_id=False, callback_function=None):
         """
-        Send a message on this namespace to the Chromecast.
+        Send a message on this namespace to the Chromecast. Ensures app is loaded.
 
         Will raise a NotConnected exception if not connected.
         """
         self._check_registered()
 
-        if not self.target_platform and \
-           self.namespace not in self._socket_client.app_namespaces:
+        if (
+            not self.target_platform
+            and self.namespace not in self._socket_client.app_namespaces
+        ):
             if self.supporting_app_id is not None:
-                self.launch()
+                self.launch(
+                    callback_function=lambda: self.send_message_nocheck(
+                        data, inc_session_id, callback_function
+                    )
+                )
+                return
 
-            else:
-                raise UnsupportedNamespace(
-                    ("Namespace {} is not supported by running"
-                     "application.").format(self.namespace))
+            raise UnsupportedNamespace(
+                ("Namespace {} is not supported by running" "application.").format(
+                    self.namespace
+                )
+            )
 
-        return self._message_func(
-            self.namespace, data, inc_session_id, callback_function)
+        self.send_message_nocheck(data, inc_session_id, callback_function)
+
+    def send_message_nocheck(self, data, inc_session_id=False, callback_function=None):
+        """Send a message."""
+        self._message_func(self.namespace, data, inc_session_id, callback_function)
 
     # pylint: disable=unused-argument,no-self-use
     def receive_message(self, message, data):
@@ -99,6 +109,9 @@ class BaseController(object):
     def _check_registered(self):
         """ Helper method to see if we are registered with a Cast object. """
         if self._socket_client is None:
-            raise ControllerNotRegistered((
-                "Trying to use the controller without it being registered "
-                "with a Cast object."))
+            raise ControllerNotRegistered(
+                (
+                    "Trying to use the controller without it being registered "
+                    "with a Cast object."
+                )
+            )

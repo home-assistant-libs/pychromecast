@@ -5,8 +5,10 @@ import logging
 
 from . import BaseController
 from ..socket_client import (
-    CONNECTION_STATUS_CONNECTED, CONNECTION_STATUS_DISCONNECTED,
-    CONNECTION_STATUS_LOST)
+    CONNECTION_STATUS_CONNECTED,
+    CONNECTION_STATUS_DISCONNECTED,
+    CONNECTION_STATUS_LOST,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ TYPE_SESSION_UPDATED = "PLAYBACK_SESSION_UPDATED"
 
 class Listener:
     """ Callback handler. """
+
     def __init__(self, group_cast, casts):
         """Initialize the listener."""
         self._casts = casts
@@ -42,9 +45,8 @@ class Listener:
         for member_uuid in group_members:
             if member_uuid not in casts:
                 continue
-            for listener in list(casts[member_uuid]['listeners']):
-                listener.multizone_new_cast_status(
-                    self._group_uuid, cast_status)
+            for listener in list(casts[member_uuid]["listeners"]):
+                listener.multizone_new_cast_status(self._group_uuid, cast_status)
 
     def new_media_status(self, media_status):
         """Handle reception of a new MediaStatus."""
@@ -53,44 +55,44 @@ class Listener:
         for member_uuid in group_members:
             if member_uuid not in casts:
                 continue
-            for listener in list(casts[member_uuid]['listeners']):
-                listener.multizone_new_media_status(
-                    self._group_uuid, media_status)
+            for listener in list(casts[member_uuid]["listeners"]):
+                listener.multizone_new_media_status(self._group_uuid, media_status)
 
     def new_connection_status(self, conn_status):
         """Handle reception of a new ConnectionStatus."""
         if conn_status.status == CONNECTION_STATUS_CONNECTED:
             self._mz.update_members()
-        if (conn_status.status == CONNECTION_STATUS_DISCONNECTED or
-                conn_status.status == CONNECTION_STATUS_LOST):
+        if (
+            conn_status.status == CONNECTION_STATUS_DISCONNECTED
+            or conn_status.status == CONNECTION_STATUS_LOST
+        ):
             self._mz.reset_members()
 
     def multizone_member_added(self, member_uuid):
         """Handle added audio group member."""
         casts = self._casts
         if member_uuid not in casts:
-            casts[member_uuid] = {'listeners': [],
-                                  'groups': set()}
-        casts[member_uuid]['groups'].add(self._group_uuid)
-        for listener in list(casts[member_uuid]['listeners']):
+            casts[member_uuid] = {"listeners": [], "groups": set()}
+        casts[member_uuid]["groups"].add(self._group_uuid)
+        for listener in list(casts[member_uuid]["listeners"]):
             listener.added_to_multizone(self._group_uuid)
 
     def multizone_member_removed(self, member_uuid):
         """Handle removed audio group member."""
         casts = self._casts
         if member_uuid not in casts:
-            casts[member_uuid] = {'listeners': [], 'groups': set()}
-        casts[member_uuid]['groups'].discard(self._group_uuid)
-        for listener in list(casts[member_uuid]['listeners']):
+            casts[member_uuid] = {"listeners": [], "groups": set()}
+        casts[member_uuid]["groups"].discard(self._group_uuid)
+        for listener in list(casts[member_uuid]["listeners"]):
             listener.removed_from_multizone(self._group_uuid)
 
     def multizone_status_received(self):
         """Handle reception of audio group status."""
-        pass
 
 
 class MultizoneManager:
     """ Manage audio groups. """
+
     def __init__(self):
         # Protect self._casts because it will be accessed from callbacks from
         # the casts' socket_client thread
@@ -100,9 +102,10 @@ class MultizoneManager:
     def add_multizone(self, group_cast):
         """ Start managing a group """
         self._groups[str(group_cast.uuid)] = {
-            'chromecast': group_cast,
-            'listener': Listener(group_cast, self._casts),
-            'members': set()}
+            "chromecast": group_cast,
+            "listener": Listener(group_cast, self._casts),
+            "members": set(),
+        }
 
     def remove_multizone(self, group_uuid):
         """ Stop managing a group """
@@ -110,9 +113,9 @@ class MultizoneManager:
         group = self._groups.pop(group_uuid, None)
         # Inform all group members that they are no longer members
         if group is not None:
-            group['listener']._mz.reset_members()  # noqa: E501 pylint: disable=protected-access
+            group["listener"]._mz.reset_members()  # pylint: disable=protected-access
         for member in self._casts.values():
-            member['groups'].discard(group_uuid)
+            member["groups"].discard(group_uuid)
 
     def register_listener(self, member_uuid, listener):
         """ Register a listener for audio group changes of cast uuid.
@@ -128,22 +131,21 @@ class MultizoneManager:
         """
         member_uuid = str(member_uuid)
         if member_uuid not in self._casts:
-            self._casts[member_uuid] = {'listeners': [],
-                                        'groups': set()}
-        self._casts[member_uuid]['listeners'].append(listener)
+            self._casts[member_uuid] = {"listeners": [], "groups": set()}
+        self._casts[member_uuid]["listeners"].append(listener)
 
     def deregister_listener(self, member_uuid, listener):
         """ Deregister listener for audio group changes of cast uuid."""
-        self._casts[str(member_uuid)]['listeners'].remove(listener)
+        self._casts[str(member_uuid)]["listeners"].remove(listener)
 
     def get_multizone_memberships(self, member_uuid):
         """ Return a list of audio groups in which cast member_uuid is a member
         """
-        return list(self._casts[str(member_uuid)]['groups'])
+        return list(self._casts[str(member_uuid)]["groups"])
 
     def get_multizone_mediacontroller(self, group_uuid):
         """ Get mediacontroller of a group """
-        return self._groups[str(group_uuid)]['chromecast'].media_controller
+        return self._groups[str(group_uuid)]["chromecast"].media_controller
 
 
 class MultizoneController(BaseController):
@@ -153,21 +155,32 @@ class MultizoneController(BaseController):
         self._members = {}
         self._status_listeners = []
         self._uuid = str(uuid)
-        super(MultizoneController, self).__init__(MULTIZONE_NAMESPACE,
-                                                  target_platform=True)
+        super(MultizoneController, self).__init__(
+            MULTIZONE_NAMESPACE, target_platform=True
+        )
 
     def _add_member(self, uuid, name):
         if uuid not in self._members:
             self._members[uuid] = name
-            _LOGGER.debug("(%s) Added member %s(%s), members: %s",
-                          self._uuid, uuid, name, self._members)
+            _LOGGER.debug(
+                "(%s) Added member %s(%s), members: %s",
+                self._uuid,
+                uuid,
+                name,
+                self._members,
+            )
             for listener in list(self._status_listeners):
                 listener.multizone_member_added(uuid)
 
     def _remove_member(self, uuid):
-        name = self._members.pop(uuid, '<Unknown>')
-        _LOGGER.debug("(%s) Removed member %s(%s), members: %s",
-                      self._uuid, uuid, name, self._members)
+        name = self._members.pop(uuid, "<Unknown>")
+        _LOGGER.debug(
+            "(%s) Removed member %s(%s), members: %s",
+            self._uuid,
+            uuid,
+            name,
+            self._members,
+        )
         for listener in list(self._status_listeners):
             listener.multizone_member_removed(uuid)
 
@@ -197,34 +210,38 @@ class MultizoneController(BaseController):
         """ Send GET_CASTING_GROUPS message. """
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
 
-    def receive_message(self, message, data):  # noqa: E501 pylint: disable=too-many-return-statements
+    def receive_message(
+        self, message, data
+    ):  # noqa: E501 pylint: disable=too-many-return-statements
         """ Called when a multizone message is received. """
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
-            uuid = data['device']['deviceId']
-            name = data['device']['name']
+            uuid = data["device"]["deviceId"]
+            name = data["device"]["name"]
             self._add_member(uuid, name)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_REMOVED:
-            uuid = data['deviceId']
+            uuid = data["deviceId"]
             self._remove_member(uuid)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_UPDATED:
-            uuid = data['device']['deviceId']
-            name = data['device']['name']
+            uuid = data["device"]["deviceId"]
+            name = data["device"]["name"]
             self._add_member(uuid, name)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_MULTIZONE_STATUS:
-            members = data['status']['devices']
-            members = \
-                {member['deviceId']: member['name'] for member in members}
-            removed_members = \
-                list(set(self._members.keys())-set(members.keys()))
-            added_members = list(set(members.keys())-set(self._members.keys()))
-            _LOGGER.debug("(%s) Added members %s, Removed members: %s",
-                          self._uuid, added_members, removed_members)
+            members = data["status"]["devices"]
+            members = {member["deviceId"]: member["name"] for member in members}
+            removed_members = list(set(self._members.keys()) - set(members.keys()))
+            added_members = list(set(members.keys()) - set(self._members.keys()))
+            _LOGGER.debug(
+                "(%s) Added members %s, Removed members: %s",
+                self._uuid,
+                added_members,
+                removed_members,
+            )
 
             for uuid in removed_members:
                 self._remove_member(uuid)

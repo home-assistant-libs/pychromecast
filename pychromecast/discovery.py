@@ -10,7 +10,7 @@ DISCOVER_TIMEOUT = 5
 _LOGGER = logging.getLogger(__name__)
 
 
-class CastListener(object):
+class CastListener:
     """Zeroconf Cast Services collection."""
 
     def __init__(self, add_callback=None, remove_callback=None):
@@ -61,24 +61,23 @@ class CastListener(object):
 
         def get_value(key):
             """Retrieve value and decode to UTF-8."""
-            value = service.properties.get(key.encode('utf-8'))
+            value = service.properties.get(key.encode("utf-8"))
 
             if value is None or isinstance(value, str):
                 return value
-            return value.decode('utf-8')
+            return value.decode("utf-8")
 
         ips = zconf.cache.entries_with_name(service.server.lower())
         host = repr(ips[0]) if ips else service.server
 
-        model_name = get_value('md')
-        uuid = get_value('id')
-        friendly_name = get_value('fn')
+        model_name = get_value("md")
+        uuid = get_value("id")
+        friendly_name = get_value("fn")
 
         if uuid:
             uuid = UUID(uuid)
 
-        self.services[name] = (host, service.port, uuid, model_name,
-                               friendly_name)
+        self.services[name] = (host, service.port, uuid, model_name, friendly_name)
 
         if self.add_callback:
             self.add_callback(name)
@@ -101,14 +100,16 @@ def start_discovery(add_callback=None, remove_callback=None):
     listener = CastListener(add_callback, remove_callback)
     service_browser = False
     try:
-        service_browser = zeroconf.ServiceBrowser(zeroconf.Zeroconf(),
-                                                  "_googlecast._tcp.local.",
-                                                  listener)
-    except (zeroconf.BadTypeInNameException,
-            NotImplementedError,
-            OSError,
-            socket.error,
-            zeroconf.NonUniqueNameException):
+        service_browser = zeroconf.ServiceBrowser(
+            zeroconf.Zeroconf(), "_googlecast._tcp.local.", listener
+        )
+    except (
+        zeroconf.BadTypeInNameException,
+        NotImplementedError,
+        OSError,
+        socket.error,
+        zeroconf.NonUniqueNameException,
+    ):
         pass
 
     return listener, service_browser
@@ -122,6 +123,7 @@ def stop_discovery(browser):
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
     from threading import Event
+
     browser = False
     try:
         # pylint: disable=unused-argument
@@ -137,8 +139,6 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
         discover_complete.wait(timeout)
 
         return listener.devices
-    except Exception:  # pylint: disable=broad-except
-        raise
     finally:
         if browser is not False:
             stop_discovery(browser)
@@ -148,12 +148,13 @@ def get_info_from_service(service, zconf):
     """ Resolve service_info from service. """
     service_info = None
     try:
-        service_info = zconf.get_service_info('_googlecast._tcp.local.',
-                                              service)
+        service_info = zconf.get_service_info("_googlecast._tcp.local.", service)
         if service_info:
             _LOGGER.debug(
                 "get_info_from_service resolved service %s to service_info %s",
-                service, service_info)
+                service,
+                service_info,
+            )
     except IOError:
         pass
     return service_info
@@ -163,8 +164,11 @@ def get_host_from_service_info(service_info):
     """ Get hostname or IP from service_info. """
     host = None
     port = None
-    if (service_info and service_info.port and
-            (service_info.server or service_info.address)):
+    if (
+        service_info
+        and service_info.port
+        and (service_info.server or service_info.address)
+    ):
         if service_info.address:
             host = socket.inet_ntoa(service_info.address)
         else:
