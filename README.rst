@@ -4,7 +4,7 @@ pychromecast |Build Status|
 .. |Build Status| image:: https://travis-ci.org/balloob/pychromecast.svg?branch=master
    :target: https://travis-ci.org/balloob/pychromecast
 
-Library for Python 3.4+ to communicate with the Google Chromecast. It
+Library for Python 3.6+ to communicate with the Google Chromecast. It
 currently supports:
 
 -  Auto discovering connected Chromecasts on the network
