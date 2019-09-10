@@ -1,9 +1,8 @@
 sudo: false
 language: python
 python:
-  - "3.4"
-  - "3.5"
   - "3.6"
+  - "3.7"
 install:
   - pip install -r requirements.txt
   - pip install flake8==3.7.8 pylint==2.3.1 black==19.3b0
