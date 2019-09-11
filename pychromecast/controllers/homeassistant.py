@@ -41,6 +41,15 @@ class HomeAssistantController(BaseController):
             and self.status["hassUrl"] == self.hass_url
         )
 
+    def channel_connected(self):
+        """ Called when a channel has been openend that supports the
+            namespace of this controller. """
+        self.get_status()
+
+    def channel_disconnected(self):
+        """ Called when a channel is disconnected. """
+        self.status = None
+
     def receive_message(self, message, data):
         """Called when a message is received."""
         if data.get("type") == "receiver_status":
