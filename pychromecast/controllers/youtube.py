@@ -19,8 +19,8 @@ MESSAGE_TYPE = "type"
 class YouTubeController(BaseController):
     """ Controller to interact with Youtube."""
 
-    def __init__(self):
-        super(YouTubeController, self).__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
+    def __init__(self, namespace=YOUTUBE_NAMESPACE, app=APP_YOUTUBE):
+        super(YouTubeController, self).__init__(namespace, app)
         self.status_update_event = threading.Event()
         self._screen_id = None
         self._session = None
