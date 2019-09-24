@@ -144,6 +144,7 @@ CastStatus = namedtuple(
         "session_id",
         "transport_id",
         "status_text",
+        "icon_url",
     ],
 )
 
@@ -1151,6 +1152,7 @@ class ReceiverController(BaseController):
             app_data.get(SESSION_ID),
             app_data.get("transportId"),
             app_data.get("statusText", ""),
+            app_data.get("iconUrl"),
         )
         return status
 
