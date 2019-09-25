@@ -8,11 +8,11 @@ from pychromecast.controllers.youtube import YouTubeController
 
 
 # Change to the name of your Chromecast
-CAST_NAME = "Living Room TV"
+CAST_NAME = "SHIELD"
 
 # Change to the video id of the YouTube video
 # video id is the last part of the url http://youtube.com/watch?v=video_id
-VIDEO_ID = ""
+VIDEO_ID = "duQow41bTx0"
 
 
 chromecasts = pychromecast.get_chromecasts()

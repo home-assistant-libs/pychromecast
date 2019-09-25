@@ -14,13 +14,13 @@ YOUTUBE_NAMESPACE = "urn:x-cast:com.google.youtube.mdx"
 class YouTubeTVController(YouTubeController):
     """ Controller to interact with Youtube TV."""
 
-    def __init__(self, cookies=None):
+    def __init__(self, request_handler):
         super(YouTubeTVController, self).__init__(
             YOUTUBE_NAMESPACE, APP_YOUTUBE_TV)
         self.status_update_event = threading.Event()
         self._screen_id = None
         self._session = None
-        self._cookies = cookies
+        self._request_handler = request_handler
 
     def start_session_if_none(self):
         """
@@ -30,5 +30,5 @@ class YouTubeTVController(YouTubeController):
             self.update_screen_id()
             self._session = YouTubeTVSession(
                 screen_id=self._screen_id,
-                cookies=self._cookies
+                request_handler=self._request_handler
             )
