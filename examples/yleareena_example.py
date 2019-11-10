@@ -48,6 +48,7 @@ def get_entry_id(program_id):
 
     return entry_id
 
+
 chromecasts = pychromecast.get_chromecasts()
 cast = next(cc for cc in chromecasts if cc.device.friendly_name == args.cast)
 cast.wait()
