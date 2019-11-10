@@ -3,9 +3,7 @@ Controller to interface with the Yle Areena app namespace.
 """
 
 from ..config import APP_YLEAREENA
-from .media import (
-    MediaController, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
-)
+from .media import MediaController, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
 
 
 class YleAreenaController(MediaController):
@@ -64,9 +62,7 @@ class YleAreenaController(MediaController):
             "media": {
                 "streamType": stream_type,
                 "customData": {
-                    "mediaInfo": {
-                        "entryId": entry_id,
-                    },
+                    "mediaInfo": {"entryId": entry_id,},
                     "audioLanguage": audio_language,
                     "textLanguage": text_language,
                 },
@@ -79,8 +75,8 @@ class YleAreenaController(MediaController):
                 "foregroundColor": "#FFFFFFFF",
                 "backgroundColor": "#000000FF",
                 "fontScale": 1,
-                "fontFamily": "sans-serif"
-            }
+                "fontFamily": "sans-serif",
+            },
         }
 
         self.send_message(msg, inc_session_id=True)
