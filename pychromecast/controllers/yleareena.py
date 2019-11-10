@@ -62,7 +62,7 @@ class YleAreenaController(MediaController):
             "media": {
                 "streamType": stream_type,
                 "customData": {
-                    "mediaInfo": {"entryId": entry_id,},
+                    "mediaInfo": {"entryId": entry_id},
                     "audioLanguage": audio_language,
                     "textLanguage": text_language,
                 },
