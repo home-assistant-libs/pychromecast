@@ -18,7 +18,7 @@ class YleAreenaController(MediaController):
         self.app_id = APP_YLEAREENA
 
     # pylint: disable=too-many-arguments
-    def play_media(
+    def play_areena_media(
         self,
         entry_id="",
         audio_language="",
@@ -50,7 +50,7 @@ class YleAreenaController(MediaController):
         receiver_ctrl = self._socket_client.receiver_controller
         receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
 
-    def _send_start_play_media(
+    def _send_start_play_areena_media(
         self,
         entry_id,
         audio_language="",
