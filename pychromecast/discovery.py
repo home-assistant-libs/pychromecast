@@ -43,7 +43,6 @@ class CastListener:
 
     def add_service(self, zconf, typ, name):
         """ Add a service to the collection. """
-        import socket
         service = None
         tries = 0
         _LOGGER.debug("add_service %s, %s", typ, name)
