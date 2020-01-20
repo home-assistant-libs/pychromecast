@@ -43,6 +43,7 @@ class CastListener:
 
     def add_service(self, zconf, typ, name):
         """ Add a service to the collection. """
+        import socket
         service = None
         tries = 0
         _LOGGER.debug("add_service %s, %s", typ, name)
@@ -67,8 +68,8 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
-        ips = zconf.cache.entries_with_name(service.server.lower())
-        host = repr(ips[0]) if ips else service.server
+        addresses = ["%s" % socket.inet_ntoa(addr) for addr in service.addresses]
+        host = addresses[0] if len(addresses) > 0 else service.server
 
         model_name = get_value("md")
         uuid = get_value("id")
