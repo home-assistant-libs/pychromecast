@@ -67,8 +67,8 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
-        addresses = ["%s" % socket.inet_ntoa(addr) for addr in service.addresses]
-        host = addresses[0] if len(addresses) > 0 else service.server
+        addresses = service.parsed_addresses()
+        host = addresses[0] if addresses else service.server
 
         model_name = get_value("md")
         uuid = get_value("id")
