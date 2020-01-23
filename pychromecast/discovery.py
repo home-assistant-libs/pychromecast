@@ -67,8 +67,8 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
-        ips = zconf.cache.entries_with_name(service.server.lower())
-        host = repr(ips[0]) if ips else service.server
+        addresses = service.parsed_addresses()
+        host = addresses[0] if addresses else service.server
 
         model_name = get_value("md")
         uuid = get_value("id")
