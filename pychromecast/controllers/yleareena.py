@@ -36,7 +36,7 @@ class YleAreenaController(MediaController):
         def app_launched_callback():
             """Plays media after chromecast has switched to requested app."""
 
-            self._send_start_play_media(
+            self._send_start_play_areena_media(
                 entry_id,
                 audio_language,
                 text_language,
