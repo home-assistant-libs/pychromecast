@@ -18,7 +18,7 @@ class YleAreenaController(MediaController):
     # pylint: disable=too-many-arguments
     def play_areena_media(
         self,
-        entry_id="",
+        entry_id,
         audio_language="",
         text_language="off",
         current_time=0,
