@@ -89,10 +89,10 @@ class HomeAssistantController(BaseController):
             {"type": "get_status"}, callback_function=callback_function
         )
 
-    def show_lovelace_view(self, view_path, callback_function=None):
+    def show_lovelace_view(self, view_path, url_path=None, callback_function=None):
         """Show a Lovelace UI."""
         self.send_connected_message(
-            {"type": "show_lovelace_view", "viewPath": view_path},
+            {"type": "show_lovelace_view", "viewPath": view_path, "urlPath": url_path},
             callback_function=callback_function,
         )
 
