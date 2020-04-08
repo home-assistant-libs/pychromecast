@@ -94,7 +94,3 @@ def get_device_status(host, services=None, zconf=None):
 DeviceStatus = namedtuple(
     "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
 )
-
-MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid"])
-
-MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])
