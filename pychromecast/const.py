@@ -19,11 +19,7 @@ CAST_TYPES = {
     "google cast group": CAST_TYPE_GROUP,
 }
 
+# Known models not manufactured by Google
 CAST_MANUFACTURERS = {
-    "chromecast": MF_GOOGLE,
-    "eureka dongle": MF_GOOGLE,
-    "chromecast audio": MF_GOOGLE,
-    "google home": MF_GOOGLE,
-    "google home mini": MF_GOOGLE,
 }
 

@@ -38,7 +38,7 @@ def _get_chromecast_from_host(
     ip_address, port, uuid, model_name, friendly_name = host
     _LOGGER.debug("_get_chromecast_from_host %s", host)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
-    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Unknown manufacturer")
+    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
     device = DeviceStatus(
         friendly_name=friendly_name,
         model_name=model_name,
@@ -67,7 +67,7 @@ def _get_chromecast_from_service(
     services, zconf, uuid, model_name, friendly_name = services
     _LOGGER.debug("_get_chromecast_from_service %s", services)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
-    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Unknown manufacturer")
+    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
     device = DeviceStatus(
         friendly_name=friendly_name,
         model_name=model_name,
