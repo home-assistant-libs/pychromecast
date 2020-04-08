@@ -7,6 +7,7 @@ from uuid import UUID
 import logging
 import requests
 
+from .const import CAST_TYPE_CHROMECAST
 from .discovery import get_info_from_service, get_host_from_service_info
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
@@ -80,6 +81,8 @@ def get_device_status(host, services=None, zconf=None):
         manufacturer = "Unknown manufacturer"
 
         udn = status.get("ssdp_udn", None)
+
+        cast_type = CAST_TYPE_CHROMECAST
 
         uuid = None
         if udn:
