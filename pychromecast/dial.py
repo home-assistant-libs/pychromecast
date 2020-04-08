@@ -13,22 +13,6 @@ XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL = "http://{}:8008"
 
-# Regular chromecast, supports video/audio
-CAST_TYPE_CHROMECAST = "cast"
-# Cast Audio device, supports only audio
-CAST_TYPE_AUDIO = "audio"
-# Cast Audio group device, supports only audio
-CAST_TYPE_GROUP = "group"
-
-CAST_TYPES = {
-    "chromecast": CAST_TYPE_CHROMECAST,
-    "eureka dongle": CAST_TYPE_CHROMECAST,
-    "chromecast audio": CAST_TYPE_AUDIO,
-    "google home": CAST_TYPE_AUDIO,
-    "google home mini": CAST_TYPE_AUDIO,
-    "google cast group": CAST_TYPE_GROUP,
-}
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -90,15 +74,12 @@ def get_device_status(host, services=None, zconf=None):
         status = _get_status(host, services, zconf, "/setup/eureka_info?options=detail")
 
         friendly_name = status.get("name", "Unknown Chromecast")
+        # model_name and manufacturer is no longer included in the response,
+        # mark as unknown
         model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
-        if "detail" in status:
-            model_name = status["detail"].get("model_name", model_name)
-            manufacturer = status["detail"].get("manufacturer", manufacturer)
 
         udn = status.get("ssdp_udn", None)
-
-        cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
 
         uuid = None
         if udn:
@@ -110,49 +91,6 @@ def get_device_status(host, services=None, zconf=None):
         return None
 
 
-def get_multizone_status(host, services=None, zconf=None):
-    """
-    :param host: Hostname or ip to fetch status from
-    :type host: str
-    :return: The multizone status as a named tuple.
-    :rtype: pychromecast.dial.MultizoneStatus or None
-    """
-
-    try:
-        status = status = _get_status(
-            host, services, zconf, "/setup/eureka_info?params=multizone"
-        )
-
-        dynamic_groups = []
-        if "multizone" in status and "dynamic_groups" in status["multizone"]:
-            for group in status["multizone"]["dynamic_groups"]:
-                name = group.get("name", "Unknown group name")
-                udn = group.get("uuid", None)
-                uuid = None
-                if udn:
-                    uuid = UUID(udn.replace("-", ""))
-                dynamic_groups.append(MultizoneInfo(name, uuid))
-
-        groups = []
-        if "multizone" in status and "groups" in status["multizone"]:
-            for group in status["multizone"]["groups"]:
-                name = group.get("name", "Unknown group name")
-                udn = group.get("uuid", None)
-                uuid = None
-                if udn:
-                    uuid = UUID(udn.replace("-", ""))
-                groups.append(MultizoneInfo(name, uuid))
-
-        return MultizoneStatus(dynamic_groups, groups)
-
-    except (requests.exceptions.RequestException, OSError, ValueError):
-        return None
-
-
 DeviceStatus = namedtuple(
     "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
 )
-
-MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid"])
-
-MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])

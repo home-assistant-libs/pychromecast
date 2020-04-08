@@ -23,7 +23,7 @@ from struct import pack, unpack
 from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
-from .dial import CAST_TYPE_CHROMECAST, CAST_TYPE_AUDIO, CAST_TYPE_GROUP
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .discovery import get_info_from_service, get_host_from_service_info
 from .error import (
     ChromecastConnectionError,

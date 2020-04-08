@@ -14,9 +14,8 @@ from .dial import (
     get_device_status,
     reboot,
     DeviceStatus,
-    CAST_TYPES,
-    CAST_TYPE_CHROMECAST,
 )
+from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
 __all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
@@ -39,10 +38,11 @@ def _get_chromecast_from_host(
     ip_address, port, uuid, model_name, friendly_name = host
     _LOGGER.debug("_get_chromecast_from_host %s", host)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
+    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
     device = DeviceStatus(
         friendly_name=friendly_name,
         model_name=model_name,
-        manufacturer=None,
+        manufacturer=manufacturer,
         uuid=uuid,
         cast_type=cast_type,
     )
@@ -67,10 +67,11 @@ def _get_chromecast_from_service(
     services, zconf, uuid, model_name, friendly_name = services
     _LOGGER.debug("_get_chromecast_from_service %s", services)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
+    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
     device = DeviceStatus(
         friendly_name=friendly_name,
         model_name=model_name,
-        manufacturer=None,
+        manufacturer=manufacturer,
         uuid=uuid,
         cast_type=cast_type,
     )
