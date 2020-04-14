@@ -38,7 +38,7 @@ if args.show_debug:
     # Uncomment to enable http.client debug log
     #http_client.HTTPConnection.debuglevel = 1
 
-chromecasts = pychromecast.get_chromecasts()
+chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 cast = None
 for _cast in chromecasts:
     if _cast.name == args.cast:

@@ -20,6 +20,4 @@ CAST_TYPES = {
 }
 
 # Known models not manufactured by Google
-CAST_MANUFACTURERS = {
-}
-
+CAST_MANUFACTURERS = {}

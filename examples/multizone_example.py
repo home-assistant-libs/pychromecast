@@ -3,6 +3,7 @@ Example on how to use the Multizone (Audio Group) Controller
 
 """
 
+import argparse
 import logging
 import sys
 import time
@@ -14,8 +15,16 @@ from pychromecast.socket_client import CONNECTION_STATUS_CONNECTED
 # Change to the name of your Chromecast
 CAST_NAME = "Whole house"
 
-debug = '--show-debug' in sys.argv
-if debug:
+parser = argparse.ArgumentParser(
+    description="Example on how to use the Spotify Controller.")
+parser.add_argument('--show-debug', help='Enable debug log',
+                    action='store_true')
+parser.add_argument('--cast',
+                    help='Name of speaker group (default: "%(default)s")',
+                    default=CAST_NAME)
+args = parser.parse_args()
+
+if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
 class connlistener:
@@ -37,8 +46,12 @@ class mzlistener:
     def multizone_status_received(self):
         print("Members: {}".format(mz.members))
 
-chromecasts = pychromecast.get_chromecasts(timeout=2)
-cast = next(cc for cc in chromecasts if cc.device.friendly_name == CAST_NAME)
+chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+if not chromecasts:
+    print('No chromecast with name "{}" discovered'.format(args.cast))
+    sys.exit(1)
+
+cast = chromecasts[0]
 mz = MultizoneController(cast.uuid)
 mz.register_listener(mzlistener())
 cast.register_handler(mz)

@@ -3,13 +3,19 @@ PyChromecast: remote control your Chromecast
 """
 import logging
 import fnmatch
+from threading import Event
 
 # pylint: disable=wildcard-import
 import threading
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
-from .discovery import discover_chromecasts, start_discovery, stop_discovery
+from .discovery import (
+    DISCOVER_TIMEOUT,
+    discover_chromecasts,
+    start_discovery,
+    stop_discovery,
+)
 from .dial import (
     get_device_status,
     reboot,
@@ -28,7 +34,7 @@ IGNORE_CEC = []
 _LOGGER = logging.getLogger(__name__)
 
 
-def _get_chromecast_from_host(
+def get_chromecast_from_host(
     host, tries=None, retry_wait=None, timeout=None, blocking=True
 ):
     """Creates a Chromecast object from a zeroconf host."""
@@ -57,7 +63,10 @@ def _get_chromecast_from_host(
     )
 
 
-def _get_chromecast_from_service(
+_get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-name
+
+
+def get_chromecast_from_service(
     services, tries=None, retry_wait=None, timeout=None, blocking=True
 ):
     """Creates a Chromecast object from a zeroconf service."""
@@ -85,6 +94,53 @@ def _get_chromecast_from_service(
         services=services,
         zconf=zconf,
     )
+
+
+_get_chromecast_from_service = (
+    get_chromecast_from_service  # pylint: disable=invalid-name
+)
+
+
+def get_listed_chromecasts(
+    friendly_names=None,
+    uuids=None,
+    tries=None,
+    retry_wait=None,
+    timeout=None,
+    discovery_timeout=DISCOVER_TIMEOUT,
+):
+    """
+    Searches the network for chromecast devices matching a list of friendly names or a list of UUIDs.
+
+    discovery_timeout is the time to wait for the listed devices.
+    tries, retry_wait, timeout are passed to get_chromecasts
+    """
+
+    cc_list = set()
+
+    def callback(chromecast):
+        _LOGGER.debug("Found chromecast %s", chromecast)
+        if uuids and chromecast.uuid in uuids:
+            cc_list.add(chromecast)
+            uuids.remove(chromecast.uuid)
+        elif friendly_names and chromecast.name in friendly_names:
+            cc_list.add(chromecast)
+            friendly_names.remove(chromecast.name)
+        if not friendly_names and not uuids:
+            discover_complete.set()
+
+    discover_complete = Event()
+    internal_stop = get_chromecasts(
+        tries=tries,
+        retry_wait=retry_wait,
+        timeout=timeout,
+        callback=callback,
+        blocking=False,
+    )
+    # Wait for the timeout or found all wanted devices
+    discover_complete.wait(discovery_timeout)
+    internal_stop()
+    return list(cc_list)
 
 
 # pylint: disable=too-many-locals
