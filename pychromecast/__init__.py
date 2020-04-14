@@ -16,11 +16,7 @@ from .discovery import (
     start_discovery,
     stop_discovery,
 )
-from .dial import (
-    get_device_status,
-    reboot,
-    DeviceStatus,
-)
+from .dial import get_device_status, reboot, DeviceStatus
 from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
