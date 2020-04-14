@@ -96,8 +96,8 @@ def get_chromecast_from_service(
     )
 
 
-_get_chromecast_from_service = (
-    get_chromecast_from_service  # pylint: disable=invalid-name
+_get_chromecast_from_service = (  # pylint: disable=invalid-name
+    get_chromecast_from_service
 )
 
 
