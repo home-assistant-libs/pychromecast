@@ -30,7 +30,6 @@ from .error import (
     UnsupportedNamespace,
     NotConnected,
     PyChromecastStopped,
-    LaunchError,
 )
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
@@ -1072,9 +1071,7 @@ class ReceiverController(BaseController):
             self.app_launch_event_function = callback_function
             self.launch_failure = None
 
-            self.send_message(
-                {MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id}
-            )
+            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id})
         else:
             self.logger.info("Not launching app %s - already running", app_id)
             if callback_function:

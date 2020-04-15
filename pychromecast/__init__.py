@@ -30,9 +30,7 @@ IGNORE_CEC = []
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_chromecast_from_host(
-    host, tries=None, retry_wait=None, timeout=None
-):
+def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     """Creates a Chromecast object from a zeroconf host."""
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
@@ -62,9 +60,7 @@ def get_chromecast_from_host(
 _get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-name
 
 
-def get_chromecast_from_service(
-    services, tries=None, retry_wait=None, timeout=None
-):
+def get_chromecast_from_service(services, tries=None, retry_wait=None, timeout=None):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
@@ -150,11 +146,7 @@ def get_listed_chromecasts(
 
 # pylint: disable=too-many-locals
 def get_chromecasts(
-    tries=None,
-    retry_wait=None,
-    timeout=None,
-    blocking=True,
-    callback=None,
+    tries=None, retry_wait=None, timeout=None, blocking=True, callback=None
 ):
     """
     Searches the network for chromecast devices and creates a Chromecast instance
@@ -186,10 +178,7 @@ def get_chromecasts(
             try:
                 cc_list.append(
                     get_chromecast_from_host(
-                        host,
-                        tries=tries,
-                        retry_wait=retry_wait,
-                        timeout=timeout,
+                        host, tries=tries, retry_wait=retry_wait, timeout=timeout
                     )
                 )
             except ChromecastConnectionError:  # noqa
