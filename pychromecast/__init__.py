@@ -30,9 +30,7 @@ IGNORE_CEC = []
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_chromecast_from_host(
-    host, tries=None, retry_wait=None, timeout=None, blocking=True
-):
+def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     """Creates a Chromecast object from a zeroconf host."""
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
@@ -55,7 +53,6 @@ def get_chromecast_from_host(
         tries=tries,
         timeout=timeout,
         retry_wait=retry_wait,
-        blocking=blocking,
     )
 
 
@@ -63,9 +60,7 @@ def get_chromecast_from_host(
 _get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-name
 
 
-def get_chromecast_from_service(
-    services, tries=None, retry_wait=None, timeout=None, blocking=True
-):
+def get_chromecast_from_service(services, tries=None, retry_wait=None, timeout=None):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
@@ -87,7 +82,6 @@ def get_chromecast_from_service(
         tries=tries,
         timeout=timeout,
         retry_wait=retry_wait,
-        blocking=blocking,
         services=services,
         zconf=zconf,
     )
@@ -104,7 +98,6 @@ def get_listed_chromecasts(
     uuids=None,
     tries=None,
     retry_wait=None,
-    blocking=True,
     timeout=None,
     discovery_timeout=DISCOVER_TIMEOUT,
 ):
@@ -119,8 +112,6 @@ def get_listed_chromecasts(
     :param uuids: A list of wanted uuids
     :param tries: passed to get_chromecasts
     :param retry_wait: passed to get_chromecasts
-    :param blocking: If set to true, self.start_app() will wait for the app to
-                     launch before returning.
     :param timeout: passed to get_chromecasts
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
@@ -146,7 +137,6 @@ def get_listed_chromecasts(
         timeout=timeout,
         callback=callback,
         blocking=False,
-        blocking_app_launch=blocking,
     )
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
@@ -156,12 +146,7 @@ def get_listed_chromecasts(
 
 # pylint: disable=too-many-locals
 def get_chromecasts(
-    tries=None,
-    retry_wait=None,
-    timeout=None,
-    blocking=True,
-    callback=None,
-    blocking_app_launch=None,
+    tries=None, retry_wait=None, timeout=None, blocking=True, callback=None
 ):
     """
     Searches the network for chromecast devices and creates a Chromecast instance
@@ -184,13 +169,7 @@ def get_chromecasts(
                      and returns a function which can be executed to stop discovery.
     :param callback: Callback which is triggerd for each discovered chromecast when
                      blocking = False.
-    :param blocking_app_launch: If set to true, start_app() will wait for the app
-                                to launch before returning. The default is to set
-                                blocking_app_launch = blocking.
     """
-    if blocking_app_launch is None:
-        blocking_app_launch = blocking
-
     if blocking:
         # Thread blocking chromecast discovery
         hosts = discover_chromecasts()
@@ -199,11 +178,7 @@ def get_chromecasts(
             try:
                 cc_list.append(
                     get_chromecast_from_host(
-                        host,
-                        tries=tries,
-                        retry_wait=retry_wait,
-                        timeout=timeout,
-                        blocking=blocking_app_launch,
+                        host, tries=tries, retry_wait=retry_wait, timeout=timeout
                     )
                 )
             except ChromecastConnectionError:  # noqa
@@ -223,7 +198,6 @@ def get_chromecasts(
                     tries=tries,
                     retry_wait=retry_wait,
                     timeout=timeout,
-                    blocking=blocking_app_launch,
                 )
             )
         except ChromecastConnectionError:  # noqa
@@ -260,7 +234,6 @@ class Chromecast:
         tries = kwargs.pop("tries", None)
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
-        blocking = kwargs.pop("blocking", True)
         services = kwargs.pop("services", None)
         zconf = kwargs.pop("zconf", True)
 
@@ -307,7 +280,6 @@ class Chromecast:
             tries=tries,
             timeout=timeout,
             retry_wait=retry_wait,
-            blocking=blocking,
             services=services,
             zconf=zconf,
         )

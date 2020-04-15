@@ -30,7 +30,6 @@ from .error import (
     UnsupportedNamespace,
     NotConnected,
     PyChromecastStopped,
-    LaunchError,
 )
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
@@ -172,14 +171,8 @@ class SocketClient(threading.Thread):
         tries = kwargs.pop("tries", None)
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
-        self.blocking = kwargs.pop("blocking", True)
         services = kwargs.pop("services", None)
         zconf = kwargs.pop("zconf", None)
-
-        if self.blocking:
-            self.polltime = POLL_TIME_BLOCKING
-        else:
-            self.polltime = POLL_TIME_NON_BLOCKING
 
         super(SocketClient, self).__init__()
 
@@ -217,7 +210,7 @@ class SocketClient(threading.Thread):
         self._handlers = {}
         self._connection_listeners = []
 
-        self.receiver_controller = ReceiverController(cast_type, self.blocking)
+        self.receiver_controller = ReceiverController(cast_type)
         self.media_controller = MediaController()
         self.heartbeat_controller = HeartbeatController()
 
@@ -494,13 +487,13 @@ class SocketClient(threading.Thread):
         logging.debug("Thread started...")
         while not self.stop.is_set():
 
-            if self.run_once() == 1:
+            if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
                 break
 
         # Clean up
         self._cleanup()
 
-    def run_once(self):
+    def run_once(self, timeout=POLL_TIME_NON_BLOCKING):
         """
         Use run_once() in your own main loop after you
         receive something on the socket (get_socket()).
@@ -514,7 +507,7 @@ class SocketClient(threading.Thread):
             return 1
 
         # poll the socket
-        can_read, _, _ = select.select([self.socket], [], [], self.polltime)
+        can_read, _, _ = select.select([self.socket], [], [], timeout)
 
         # read messages from chromecast
         message = data = None
@@ -1003,14 +996,13 @@ class ReceiverController(BaseController):
     :param cast_type: Type of Chromecast device.
     """
 
-    def __init__(self, cast_type=CAST_TYPE_CHROMECAST, blocking=True):
+    def __init__(self, cast_type=CAST_TYPE_CHROMECAST):
         super(ReceiverController, self).__init__(NS_RECEIVER, target_platform=True)
 
         self.status = None
         self.launch_failure = None
         self.app_to_launch = None
         self.cast_type = cast_type
-        self.blocking = blocking
         self.app_launch_event = threading.Event()
         self.app_launch_event_function = None
 
@@ -1079,24 +1071,11 @@ class ReceiverController(BaseController):
             self.app_launch_event_function = callback_function
             self.launch_failure = None
 
-            self.send_message(
-                {MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
-                callback_function=lambda response: self._block_till_launched(app_id),
-            )
+            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id})
         else:
             self.logger.info("Not launching app %s - already running", app_id)
             if callback_function:
                 callback_function()
-
-    def _block_till_launched(self, app_id):
-        if self.blocking:
-            self.app_launch_event.wait()
-            if self.launch_failure:
-                raise LaunchError(
-                    "Failed to launch app: {}, Reason: {}".format(
-                        app_id, self.launch_failure.reason
-                    )
-                )
 
     def stop_app(self, callback_function_param=False):
         """ Stops the current running app on the Chromecast. """
