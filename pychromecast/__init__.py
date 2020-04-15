@@ -316,7 +316,11 @@ class Chromecast:
         return (
             self.status is None
             or self.app_id in (None, IDLE_APP_ID)
-            or (not self.status.is_active_input and not self.ignore_cec)
+            or (
+                self.cast_type == CAST_TYPE_CHROMECAST
+                and not self.status.is_active_input
+                and not self.ignore_cec
+            )
         )
 
     @property

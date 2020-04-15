@@ -1053,7 +1053,7 @@ class ReceiverController(BaseController):
             Will only launch if it is not currently running unless
             force_launch=True. """
 
-        if not force_launch and self.app_id is None:
+        if not force_launch and self.status is None:
             self.update_status(
                 lambda response: self._send_launch_message(
                     app_id, force_launch, callback_function
