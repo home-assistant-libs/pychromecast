@@ -39,7 +39,9 @@ if not chromecasts:
     sys.exit(1)
 
 cast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
+
 yt = YouTubeController()
 cast.register_handler(yt)
 yt.play_video(VIDEO_ID)

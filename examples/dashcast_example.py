@@ -1,26 +1,37 @@
 """
 Example that shows how the DashCast controller can be used.
-
-Functions called in this example are blocking which means that
-the function doesn't return as long as no result was received.
 """
-import time
-import sys
+
+import argparse
 import logging
+import sys
+import time
 
 import pychromecast
 import pychromecast.controllers.dashcast as dashcast
 
-debug = '--show-debug' in sys.argv
-if debug:
+# Change to the friendly name of your Chromecast
+CAST_NAME = "Living Room"
+
+parser = argparse.ArgumentParser(
+    description="Example on how to use the Media Controller to play an URL.")
+parser.add_argument('--show-debug', help='Enable debug log',
+                    action='store_true')
+parser.add_argument('--cast',
+                    help='Name of cast device (default: "%(default)s")',
+                    default=CAST_NAME)
+args = parser.parse_args()
+
+if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-casts = pychromecast.get_chromecasts()
-if len(casts) == 0:
-    print("No Devices Found")
-    exit()
+chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+if not chromecasts:
+    print('No chromecast with name "{}" discovered'.format(args.cast))
+    sys.exit(1)
 
-cast = casts[0]
+cast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
 
 d = dashcast.DashCastController()
@@ -38,7 +49,10 @@ print()
 if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
-    time.sleep(5)
+    t = 5
+    while cast.status.app_id is not None and t >0:
+        time.sleep(0.1)
+        t = t - 0.1
 
 time.sleep(1)
 
@@ -50,8 +64,7 @@ d.load_url('https://home-assistant.io/? ' + warning_message,
            callback_function=lambda result:
            d.load_url('https://home-assistant.io/'))
 
-
-# If debugging sleep after running so we can see any error messages.
-if debug:
+# If debugging, sleep after running so we can see any error messages.
+if args.show_debug:
     time.sleep(10)
 

@@ -36,18 +36,21 @@ if not chromecasts:
     sys.exit(1)
 
 cast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
 print('Found chromecast with name "{}", attempting to play "{}"'.format(args.cast, args.url))
 cast.media_controller.play_media(args.url, "audio/mp3")
 
+# Wait for player_state PLAYING
 player_state = None
-
-while True:
+t = 30
+while player_state != 'PLAYING' and t >0:
     try:
         if player_state != cast.media_controller.status.player_state:
             player_state = cast.media_controller.status.player_state
             print("Player state:", player_state)
 
-        time.sleep(1)
+        time.sleep(0.1)
+        t = t - 0.1
     except KeyboardInterrupt:
         break
