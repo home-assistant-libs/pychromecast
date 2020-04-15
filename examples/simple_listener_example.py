@@ -51,6 +51,7 @@ if not chromecasts:
     sys.exit(1)
 
 chromecast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 chromecast.wait()
 
 listenerCast = StatusListener(chromecast.name, chromecast)

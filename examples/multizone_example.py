@@ -52,11 +52,15 @@ if not chromecasts:
     sys.exit(1)
 
 cast = chromecasts[0]
+# Add listeners
 mz = MultizoneController(cast.uuid)
 mz.register_listener(mzlistener())
 cast.register_handler(mz)
 cast.register_connection_listener(connlistener(mz))
+
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
+
 while True:
     time.sleep(1)
 

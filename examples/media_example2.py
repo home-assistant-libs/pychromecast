@@ -1,9 +1,8 @@
 """
-Example that shows how the socket client can be used.
+Example on how to use the Media Controller.
 
-Functions called in this example are blocking which means that
-the function doesn't return as long as no result was received.
 """
+
 import argparse
 import logging
 import sys
@@ -11,15 +10,17 @@ import time
 
 import pychromecast
 
-# Change to the name of your Chromecast
-CAST_NAME = "Disco room"
+# Change to the friendly name of your Chromecast
+CAST_NAME = "Living Room"
 
 # Change to an audio or video url
 MEDIA_URL = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to use the socket client without callbacks.")
 parser.add_argument('--show-debug', help='Enable debug log',
+                    action='store_true')
+parser.add_argument('--show-status-only', help='Show status, then exit',
                     action='store_true')
 parser.add_argument('--cast',
                     help='Name of cast device (default: "%(default)s")',
@@ -29,19 +30,18 @@ parser.add_argument('--url', help='Media url (default: "%(default)s")',
 args = parser.parse_args()
 
 if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
+    fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
 
 chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
-cast = None
-for _cast in chromecasts:
-    if _cast.name == args.cast:
-        cast = _cast
-        break
-
-if not cast:
+if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
 
+cast = chromecasts[0]
+
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
 
 print()
@@ -53,13 +53,16 @@ print()
 print(cast.media_controller.status)
 print()
 
-if '--show-status-only' in sys.argv:
+if args.show_status_only:
     sys.exit()
 
 if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
-    time.sleep(5)
+    t = 5
+    while cast.status.app_id is not None and t >0:
+        time.sleep(0.1)
+        t = t - 0.1
 
 print('Playing media "{}"'.format(args.url))
 cast.play_media(args.url, "video/mp4")

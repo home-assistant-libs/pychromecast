@@ -155,6 +155,7 @@ class SocketClient(threading.Thread):
     """
     Class to interact with a Chromecast through a socket.
 
+    :param host: The host to connect to.
     :param port: The port to use when connecting to the device, set to None to
                  use the default of 8009. Special devices such as Cast Groups
                  may return a different port number so we need to use that.
@@ -162,9 +163,20 @@ class SocketClient(threading.Thread):
                       dial.CAST_TYPE_* for types.
     :param tries: Number of retries to perform if the connection fails.
                   None for inifinite retries.
+    :param timeout: A floating point number specifying the socket timeout in
+                    seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
+    :param services: A list of mDNS services to try to connect to. If present,
+                     parameters host and port are ignored and host and port are
+                     instead resolved through mDNS. The list of services may be
+                     modified, for example if speaker group leadership is handed
+                     over. SocketClient will catch modifications to the list when
+                     attempting reconnect.
+    :param zconf: A zeroconf instance, needed if a list of services is passed.
+                  The zeroconf instance may be obtained from the browser returned by
+                  pychromecast.start_discovery().
     """
 
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST, **kwargs):
