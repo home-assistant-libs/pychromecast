@@ -3,9 +3,15 @@ Example showing how to create a simple Chromecast event listener for
 device and media status events
 """
 
+import argparse
+import logging
+import sys
 import time
+
 import pychromecast
 
+# Change to the friendly name of your Chromecast
+CAST_NAME = "Living Room Speaker"
 
 class StatusListener:
     def __init__(self, name, cast):
@@ -27,10 +33,25 @@ class StatusMediaListener:
         print(status)
 
 
-chromecasts = pychromecast.get_chromecasts()
-chromecast = next(cc for cc in chromecasts
-                  if cc.device.friendly_name == "Living Room Speaker")
-chromecast.start()
+parser = argparse.ArgumentParser(
+    description="Example on how to create a simple Chromecast event listener.")
+parser.add_argument('--show-debug', help='Enable debug log',
+                    action='store_true')
+parser.add_argument('--cast',
+                    help='Name of cast device (default: "%(default)s")',
+                    default=CAST_NAME)
+args = parser.parse_args()
+
+if args.show_debug:
+    logging.basicConfig(level=logging.DEBUG)
+
+chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+if not chromecasts:
+    print('No chromecast with name "{}" discovered'.format(args.cast))
+    sys.exit(1)
+
+chromecast = chromecasts[0]
+chromecast.wait()
 
 listenerCast = StatusListener(chromecast.name, chromecast)
 chromecast.register_status_listener(listenerCast)

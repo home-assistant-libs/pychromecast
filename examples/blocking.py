@@ -4,25 +4,45 @@ Example that shows how the socket client can be used.
 Functions called in this example are blocking which means that
 the function doesn't return as long as no result was received.
 """
-import time
-import sys
+import argparse
 import logging
+import sys
+import time
 
 import pychromecast
-import pychromecast.controllers.youtube as youtube
 
 # Change to the name of your Chromecast
 CAST_NAME = "Disco room"
 
-if '--show-debug' in sys.argv:
+# Change to an audio or video url
+MEDIA_URL = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+
+parser = argparse.ArgumentParser(
+    description="Example on how to use the Spotify Controller.")
+parser.add_argument('--show-debug', help='Enable debug log',
+                    action='store_true')
+parser.add_argument('--cast',
+                    help='Name of cast device (default: "%(default)s")',
+                    default=CAST_NAME)
+parser.add_argument('--url', help='Media url (default: "%(default)s")',
+                    default=MEDIA_URL)
+args = parser.parse_args()
+
+if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-casts = pychromecast.get_chromecasts()
-if len(casts) == 0:
-    print("No Devices Found")
-    exit()
-cast = next(cc for cc in casts if cc.device.friendly_name == CAST_NAME)
-cast.start()
+chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+cast = None
+for _cast in chromecasts:
+    if _cast.name == args.cast:
+        cast = _cast
+        break
+
+if not cast:
+    print('No chromecast with name "{}" discovered'.format(args.cast))
+    sys.exit(1)
+
+cast.wait()
 
 print()
 print(cast.device)
@@ -41,10 +61,8 @@ if not cast.is_idle:
     cast.quit_app()
     time.sleep(5)
 
-print("Playing media")
-cast.play_media(
-    ("http://commondatastorage.googleapis.com/gtv-videos-bucket/"
-     "sample/BigBuckBunny.mp4"), "video/mp4")
+print('Playing media "{}"'.format(args.url))
+cast.play_media(args.url, "video/mp4")
 
 t = 0
 

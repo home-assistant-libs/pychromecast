@@ -21,7 +21,7 @@ if len(casts) == 0:
     exit()
 
 cast = casts[0]
-cast.start()
+cast.wait()
 
 d = dashcast.DashCastController()
 cast.register_handler(d)
