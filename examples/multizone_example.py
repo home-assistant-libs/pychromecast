@@ -16,7 +16,7 @@ from pychromecast.socket_client import CONNECTION_STATUS_CONNECTED
 CAST_NAME = "Whole house"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to use the Multizone Controller to track groupp members.")
 parser.add_argument('--show-debug', help='Enable debug log',
                     action='store_true')
 parser.add_argument('--cast',

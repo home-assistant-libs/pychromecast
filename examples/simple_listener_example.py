@@ -34,7 +34,7 @@ class StatusMediaListener:
 
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to create a simple Chromecast event listener.")
 parser.add_argument('--show-debug', help='Enable debug log',
                     action='store_true')
 parser.add_argument('--cast',

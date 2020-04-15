@@ -20,7 +20,7 @@ VIDEO_ID = "dQw4w9WgXcQ"
 
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to use the Youtube Controller.")
 parser.add_argument('--show-debug', help='Enable debug log',
                     action='store_true')
 parser.add_argument('--cast',

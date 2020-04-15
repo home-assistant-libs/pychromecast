@@ -17,7 +17,7 @@ CAST_NAME = "Living Room"
 MEDIA_URL = "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/llnws/bbc_radio_fourfm.mpd"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to use the Media Controller to play an URL.")
 parser.add_argument('--show-debug', help='Enable debug log',
                     action='store_true')
 parser.add_argument('--cast',

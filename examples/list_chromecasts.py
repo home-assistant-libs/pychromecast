@@ -9,7 +9,7 @@ import time
 import pychromecast
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Spotify Controller.")
+    description="Example on how to list chromecasts.")
 parser.add_argument('--show-debug', help='Enable debug log',
                     action='store_true')
 args = parser.parse_args()
