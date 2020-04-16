@@ -206,6 +206,7 @@ class SocketClient(threading.Thread):
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
+        # socketpair used to interrupt the worker thread
         self.socketpair = socket.socketpair()
 
         self.app_namespaces = []
@@ -436,6 +437,7 @@ class SocketClient(threading.Thread):
         """ Disconnect socket connection to Chromecast device """
         self.stop.set()
         try:
+            # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
         except socket.error:
             # The socketpair may already be closed during shutdown, ignore it
@@ -524,7 +526,7 @@ class SocketClient(threading.Thread):
         except ChromecastConnectionError:
             return 1
 
-        # poll the socket
+        # poll the socket, as well as the socketpair to allow us to be interrupted
         rs = [self.socket, self.socketpair[0]]
         can_read, _, _ = select.select(rs, [], [], timeout)
 
