@@ -206,6 +206,7 @@ class SocketClient(threading.Thread):
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
+        self.socketpair = socket.socketpair()
 
         self.app_namespaces = []
         self.destination_id = None
@@ -434,6 +435,11 @@ class SocketClient(threading.Thread):
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
         self.stop.set()
+        try:
+            self.socketpair[1].send(b"x")
+        except socket.error:
+            # The socketpair may already be closed during shutdown, ignore it
+            pass
 
     def register_handler(self, handler):
         """ Register a new namespace handler. """
@@ -519,7 +525,8 @@ class SocketClient(threading.Thread):
             return 1
 
         # poll the socket
-        can_read, _, _ = select.select([self.socket], [], [], timeout)
+        rs = [self.socket, self.socketpair[0]]
+        can_read, _, _ = select.select(rs, [], [], timeout)
 
         # read messages from chromecast
         message = data = None
@@ -555,13 +562,18 @@ class SocketClient(threading.Thread):
                 )
             else:
                 data = _json_from_message(message)
-        if not message:
-            return 0
+
+        if self.socketpair[0] in can_read:
+            # Clear the socket's buffer
+            self.socketpair[0].recv(128)
 
         # If we are stopped after receiving a message we skip the message
         # and tear down the connection
         if self.stop.is_set():
             return 1
+
+        if not message:
+            return 0
 
         # See if any handlers will accept this message
         self._route_message(message, data)
@@ -696,6 +708,10 @@ class SocketClient(threading.Thread):
                 CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
             )
         )
+
+        self.socketpair[0].close()
+        self.socketpair[1].close()
+
         self.connecting = True
 
     def _report_connection_status(self, status):
