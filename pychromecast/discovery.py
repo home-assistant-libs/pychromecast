@@ -1,6 +1,7 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import logging
 import socket
+from threading import Event
 from uuid import UUID
 
 import zeroconf
@@ -122,8 +123,6 @@ def stop_discovery(browser):
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
-    from threading import Event
-
     browser = False
     try:
         # pylint: disable=unused-argument
