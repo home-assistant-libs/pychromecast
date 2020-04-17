@@ -237,7 +237,7 @@ class SocketClient(threading.Thread):
         self.receiver_controller.register_status_listener(self)
 
     def initialize_connection(
-        self
+        self,
     ):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
@@ -548,8 +548,8 @@ class SocketClient(threading.Thread):
             return 1
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
-        rs = [self.socket, self.socketpair[0]]
-        can_read, _, _ = select.select(rs, [], [], timeout)
+        rlist = [self.socket, self.socketpair[0]]
+        can_read, _, _ = select.select(rlist, [], [], timeout)
 
         # read messages from chromecast
         message = data = None

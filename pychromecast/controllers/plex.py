@@ -515,9 +515,11 @@ class PlexApiController(PlexController):
 
     def disable_subtitle(self):
         """Disable a subtitle."""
-        _, __, part = (
-            self._get_current_media()
-        )  # noqa: 501 pylint disable=unused-variable
+        (
+            _,
+            __,
+            part,
+        ) = self._get_current_media()  # noqa: 501 pylint disable=unused-variable
         part.resetDefaultSubtitleStream()
         self._reset_playback()
 

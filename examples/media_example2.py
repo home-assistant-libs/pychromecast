@@ -14,19 +14,23 @@ import pychromecast
 CAST_NAME = "Living Room"
 
 # Change to an audio or video url
-MEDIA_URL = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+MEDIA_URL = (
+    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+)
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the socket client without callbacks.")
-parser.add_argument('--show-debug', help='Enable debug log',
-                    action='store_true')
-parser.add_argument('--show-status-only', help='Show status, then exit',
-                    action='store_true')
-parser.add_argument('--cast',
-                    help='Name of cast device (default: "%(default)s")',
-                    default=CAST_NAME)
-parser.add_argument('--url', help='Media url (default: "%(default)s")',
-                    default=MEDIA_URL)
+    description="Example on how to use the socket client without callbacks."
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--show-status-only", help="Show status, then exit", action="store_true"
+)
+parser.add_argument(
+    "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
+)
+parser.add_argument(
+    "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
+)
 args = parser.parse_args()
 
 if args.show_debug:
@@ -60,7 +64,7 @@ if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
     t = 5
-    while cast.status.app_id is not None and t >0:
+    while cast.status.app_id is not None and t > 0:
         time.sleep(0.1)
         t = t - 0.1
 

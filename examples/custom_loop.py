@@ -8,7 +8,6 @@ You can use that functionality to include pychromecast into your main loop.
 import argparse
 import logging
 import select
-import sys
 import time
 
 import pychromecast
@@ -19,9 +18,12 @@ CAST_NAME = "Living Room"
 Check for cast.socket_client.get_socket() and
 handle it with cast.socket_client.run_once()
 """
+
+
 def your_main_loop():
     t = 1
     cast = None
+
     def callback(chromecast):
         if chromecast.name == args.cast:
             print("=> Discovered cast...")
@@ -35,28 +37,37 @@ def your_main_loop():
     while True:
         if cast:
             polltime = 0.1
-            can_read, _, _ = select.select([cast.socket_client.get_socket()], [], [], polltime)
+            can_read, _, _ = select.select(
+                [cast.socket_client.get_socket()], [], [], polltime
+            )
             if can_read:
                 # received something on the socket, handle it with run_once()
                 cast.socket_client.run_once()
             do_actions(cast, t)
             t += 1
-            if(t > 50):
-               break
+            if t > 50:
+                break
         else:
             print("=> Waiting for discovery of cast '{}'...".format(args.cast))
         time.sleep(1)
 
+
 """
 Your code which is called by main loop
 """
+
+
 def do_actions(cast, t):
     if t == 5:
         print()
         print("=> Sending non-blocking play_media command")
         cast.play_media(
-            ("http://commondatastorage.googleapis.com/gtv-videos-bucket/"
-             "sample/BigBuckBunny.mp4"), "video/mp4")
+            (
+                "http://commondatastorage.googleapis.com/gtv-videos-bucket/"
+                "sample/BigBuckBunny.mp4"
+            ),
+            "video/mp4",
+        )
     elif t == 30:
         print()
         print("=> Sending non-blocking pause command")
@@ -77,13 +88,14 @@ def do_actions(cast, t):
         print()
         print("Media status", cast.media_controller.status)
 
+
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Media Controller to play an URL.")
-parser.add_argument('--show-debug', help='Enable debug log',
-                    action='store_true')
-parser.add_argument('--cast',
-                    help='Name of cast device (default: "%(default)s")',
-                    default=CAST_NAME)
+    description="Example on how to use the Media Controller to play an URL."
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
+)
 args = parser.parse_args()
 
 if args.show_debug:
@@ -92,4 +104,3 @@ else:
     logging.basicConfig(level=logging.INFO)
 
 your_main_loop()
-
