@@ -1,0 +1,37 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Python application
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    - name: Lint with flake8
+      run: |
+        pip install flake8==3.7.9
+        flake8 --exclude cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py pychromecast
+    - name: Lint with pylint
+      run: |
+        pip install pylint==2.4.4
+        pylint pychromecast
+    - name: Check formatting with black
+      run: |
+        pip install black==19.10b0
+        black pychromecast --check
