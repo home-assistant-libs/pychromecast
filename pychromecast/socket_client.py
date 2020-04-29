@@ -370,7 +370,7 @@ class SocketClient(threading.Thread):
                             self.port,
                         )
                     else:
-                        self.logger.warning(
+                        self.logger.info(
                             "[%s(%s):%s] Connection reestablished!",
                             self.fn or "",
                             self.host,
