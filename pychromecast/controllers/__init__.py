@@ -132,6 +132,7 @@ def quick_play(cast, app_name, data):
     }
     """
     from pychromecast.controllers.youtube import YouTubeController
+    from pychromecast.controllers.supla import SuplaController
 
     if app_name == "youtube":
         controller = YouTubeController()
@@ -139,6 +140,14 @@ def quick_play(cast, app_name, data):
             'video_id': data.pop('media_id'),
             'enqueue': data.pop('enqueue', False),
             'playlist_id': data.pop('extra1', None),
+        }
+    elif app_name == 'supla':
+        controller = SuplaController()
+        kwargs = {
+            'media_id': data.pop('media_id'),
+            'media_type': data.pop('media_type', 'id'),
+            'match': data.pop('extra1', None),
+            'is_live': data.pop('extra2', None),
         }
     else:
         raise NotImplementedError()
