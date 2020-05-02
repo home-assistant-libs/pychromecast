@@ -115,3 +115,37 @@ class BaseController:
                     "with a Cast object."
                 )
             )
+
+
+def quick_play(cast, app_name, data):
+    """
+    CAST_APP_SCHEMA = {
+        vol.Required('app_name', default=""): cv.string,
+        vol.Required('data'): vol.Schema({
+            vol.Required("media_id"): cv.string,
+            vol.Optional("media_type"): cv.string,
+            vol.Optional("enqueue", default=False): cv.boolean,
+            vol.Optional("index"): cv.string,
+            vol.Optional("extra1"): cv.string,
+            vol.Optional("extra2"): cv.string,
+        }),
+    }
+    """
+    from pychromecast.controllers.youtube import YouTubeController
+
+    if app_name == "youtube":
+        controller = YouTubeController()
+        kwargs = {
+            'video_id': data.pop('media_id'),
+            'enqueue': data.pop('enqueue', False),
+            'playlist_id': data.pop('extra1', None),
+        }
+    else:
+        raise NotImplementedError()
+
+    cast.wait()
+    cast.register_handler(controller)
+    controller.quick_play(**kwargs)
+
+    if data:
+        controller.logger.warning('Unused data in quick_play: %s', data)

@@ -101,3 +101,9 @@ class YouTubeController(BaseController):
         """ Process latest status update. """
         self._screen_id = status.get(ATTR_SCREEN_ID)
         self.status_update_event.set()
+
+    def quick_play(self, video_id=None, playlist_id=None, enqueue=False):
+        if enqueue:
+            self.add_to_queue(video_id)
+        else:
+            self.play_video(video_id, playlist_id=playlist_id)
