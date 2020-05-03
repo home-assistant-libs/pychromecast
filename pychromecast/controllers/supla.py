@@ -42,20 +42,5 @@ class SuplaController(BaseController):
         }
         self.send_message(msg, inc_session_id=True)
 
-    def quick_play(self, media_id=None, is_live=False, media_type=False, match=None):
-        if media_type == 'program':
-            import requests
-            from bs4 import BeautifulSoup
-            result = requests.get("https://www.supla.fi/ohjelmat/{}".format(media_id))
-            soup = BeautifulSoup(result.content)
-            query = 'a[href*="/audio"]'
-            if match:
-                query += '[title*="{}"]'.format(match)
-            try:
-                media_id = soup.select(query)[0]["href"].split("/")[-1]
-            except (IndexError, KeyError):
-                media_id = None
-
-        if not media_id:
-            raise AttributeError('Media not found')
+    def quick_play(self, media_id=None, is_live=False):
         self.play_media(media_id, is_live=is_live)

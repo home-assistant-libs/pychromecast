@@ -145,8 +145,6 @@ def quick_play(cast, app_name, data):
         controller = SuplaController()
         kwargs = {
             'media_id': data.pop('media_id'),
-            'media_type': data.pop('media_type', 'id'),
-            'match': data.pop('extra1', None),
             'is_live': data.pop('extra2', None),
         }
     else:
