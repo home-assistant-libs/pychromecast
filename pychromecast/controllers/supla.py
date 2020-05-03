@@ -41,7 +41,7 @@ class SuplaController(BaseController):
             "supla": True,
             "nextInSequenceList": 0,
             "playbackRate": 1,
-            "env": "prod"
+            "env": "prod",
         }
         self.send_message(msg, inc_session_id=True)
 
