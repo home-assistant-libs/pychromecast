@@ -103,6 +103,7 @@ class YouTubeController(BaseController):
         self.status_update_event.set()
 
     def quick_play(self, video_id=None, playlist_id=None, enqueue=False):
+        """ Quick Play """
         if enqueue:
             self.add_to_queue(video_id)
         else:

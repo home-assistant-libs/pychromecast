@@ -131,8 +131,9 @@ def quick_play(cast, app_name, data):
         }),
     }
     """
-    from pychromecast.controllers.youtube import YouTubeController
-    from pychromecast.controllers.supla import SuplaController
+    # pylint: disable=import-outside-toplevel
+    from .youtube import YouTubeController
+    from .supla import SuplaController
 
     if app_name == "youtube":
         controller = YouTubeController()

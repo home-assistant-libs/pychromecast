@@ -24,6 +24,9 @@ class SuplaController(BaseController):
     # pylint: enable=useless-super-delegation
 
     def play_media(self, media_id, is_live=False):
+        """
+        Play Supla media
+        """
         msg = {
             "type": "load",
             "mediaId": media_id,
@@ -43,4 +46,5 @@ class SuplaController(BaseController):
         self.send_message(msg, inc_session_id=True)
 
     def quick_play(self, media_id=None, is_live=False):
+        """ Quick Play """
         self.play_media(media_id, is_live=is_live)
