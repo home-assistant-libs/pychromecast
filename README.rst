@@ -96,12 +96,13 @@ So you've got PyChromecast running and decided it is time to add support to your
 
 The following instructions require the use of the `Google Chrome browser`_ and the `Google Cast plugin`_.
 
- * In Chrome, go to `chrome://net-internals/#capture`
- * Enable the checkbox 'Include the actual bytes sent/received.'
+ * In Chrome, go to `chrome://net-export/`
+ * Select 'Include raw bytes (will include cookies and credentials)'
+ * Click 'Start Logging to Disk'
  * Open a new tab, browse to your favorite application on the web that has Chromecast support and start casting.
  * Go back to the tab that is capturing events and click on stop.
- * From the dropdown click on events. This will show you a table with events that happened while you were recording.
- * In the filter box enter the text `Tr@n$p0rt`. This should give one SOCKET connection as result: the connection with your Chromecast.
+ * Open https://netlog-viewer.appspot.com/ and select your event log file.
+ * Browse to https://netlog-viewer.appspot.com/#events&q=type:SOCKET, and find the socket that has familiar JSON data. (For me, it's usually the second or third from the top.)
  * Go through the results and collect the JSON that is exchanged.
  * Now write a controller that is able to mimic this behavior :-)
 

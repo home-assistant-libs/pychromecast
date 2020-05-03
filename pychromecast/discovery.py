@@ -1,6 +1,7 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import logging
 import socket
+from threading import Event
 from uuid import UUID
 
 import zeroconf
@@ -67,8 +68,8 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
-        ips = zconf.cache.entries_with_name(service.server.lower())
-        host = repr(ips[0]) if ips else service.server
+        addresses = service.parsed_addresses()
+        host = addresses[0] if addresses else service.server
 
         model_name = get_value("md")
         uuid = get_value("id")
@@ -122,8 +123,6 @@ def stop_discovery(browser):
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
-    from threading import Event
-
     browser = False
     try:
         # pylint: disable=unused-argument

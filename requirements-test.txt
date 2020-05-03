@@ -1,0 +1,3 @@
+flake8==3.7.9
+pylint==2.4.4
+black==19.10b0
