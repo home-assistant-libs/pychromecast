@@ -13,6 +13,7 @@ class YleAreenaController(MediaController):
     def __init__(self):
         super(YleAreenaController, self).__init__()
         self.app_id = APP_YLEAREENA
+        self.supporting_app_id = APP_YLEAREENA
 
     def play_areena_media(
         self,
