@@ -35,9 +35,11 @@ def quick_play(cast, app_name, data):
     else:
         raise NotImplementedError()
 
-    cast.wait()
     cast.register_handler(controller)
-    controller.quick_play(**kwargs)
+    if controller.is_active:
+        controller.quick_play(**kwargs)
+    else:
+        controller.launch(callback_function=lambda: controller.quick_play(**kwargs))
 
     if data:
         controller.logger.warning("Unused data in quick_play: %s", data)
