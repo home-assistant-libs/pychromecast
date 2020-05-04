@@ -32,11 +32,11 @@ def quick_play(cast, app_name, data):
                 Audio language (3 characters for YleAreena)
             text_lang: string
                 Subtitle language (3 characters for YleAreena)
-            
+
         Youtube-specific:
             playlist_id: string
                 Youtube playlist id
-        
+
         Supla-specific:
             is_live: boolean
                 Whether the media is a livestream
