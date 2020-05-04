@@ -6,17 +6,31 @@ from .controllers.supla import SuplaController
 
 def quick_play(cast, app_name, data):
     """
-    CAST_APP_SCHEMA = {
-        vol.Required('app_name', default=""): cv.string,
-        vol.Required('data'): vol.Schema({
-            vol.Required("media_id"): cv.string,
-            vol.Optional("media_type"): cv.string,
-            vol.Optional("enqueue", default=False): cv.boolean,
-            vol.Optional("index"): cv.string,
-            vol.Optional("extra1"): cv.string,
-            vol.Optional("extra2"): cv.string,
-        }),
-    }
+        Given a Chromecast connection, launch the app `app_name` and start playing media
+        based on parameters defined in `data`.
+
+        :param cast: Chromecast connection to cast to
+        :param app_name: App name "slug" to cast
+        :param data: Data to send to the app controller. Must contain "media_id", and other
+            values can be passed depending on the controller.
+        :type cast: Chromecast
+        :type app_name: string
+        :type data: dict
+
+        `data` can contain the following keys:
+            media_id: string (Required)
+                Primary identifier of the media
+            media_type: string,
+                Type of the media identified by `media_id`. e.g. "program" if the media is a
+                program name instead of a direct item id.
+            enqueue: boolean,
+                Enqueue the media to the current playlist, if possible.
+            index: string,
+                Play index x of matching media. "random" should also be allowed.
+            extra1: string,
+            extra2: string,
+                Extra lines for controller-specific values.
+
     """
 
     if app_name == "youtube":
