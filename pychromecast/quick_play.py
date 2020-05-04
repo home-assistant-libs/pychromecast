@@ -21,17 +21,25 @@ def quick_play(cast, app_name, data):
         `data` can contain the following keys:
             media_id: string (Required)
                 Primary identifier of the media
-            media_type: string,
+            media_type: string
                 Type of the media identified by `media_id`. e.g. "program" if the media is a
                 program name instead of a direct item id.
-            enqueue: boolean,
+            enqueue: boolean
                 Enqueue the media to the current playlist, if possible.
-            index: string,
+            index: string
                 Play index x of matching media. "random" should also be allowed.
-            extra1: string,
-            extra2: string,
-                Extra lines for controller-specific values.
-
+            audio_lang: string
+                Audio language (3 characters for YleAreena)
+            text_lang: string
+                Subtitle language (3 characters for YleAreena)
+            
+        Youtube-specific:
+            playlist_id: string
+                Youtube playlist id
+        
+        Supla-specific:
+            is_live: boolean
+                Whether the media is a livestream
     """
 
     if app_name == "youtube":
@@ -39,20 +47,20 @@ def quick_play(cast, app_name, data):
         kwargs = {
             "video_id": data.pop("media_id"),
             "enqueue": data.pop("enqueue", False),
-            "playlist_id": data.pop("extra1", None),
+            "playlist_id": data.pop("playlist_id", None),
         }
     elif app_name == "supla":
         controller = SuplaController()
         kwargs = {
             "media_id": data.pop("media_id"),
-            "is_live": data.pop("extra2", None),
+            "is_live": data.pop("is_live", None),
         }
     elif app_name == "yleareena":
         controller = YleAreenaController()
         kwargs = {
             "kaltura_id": data.pop("media_id"),
-            "audio_language": data.pop("extra1", None),
-            "text_language": data.pop("extra2", None),
+            "audio_language": data.pop("audio_lang", None),
+            "text_language": data.pop("text_lang", None),
         }
     else:
         raise NotImplementedError()
