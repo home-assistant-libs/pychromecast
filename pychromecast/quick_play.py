@@ -2,6 +2,7 @@
 
 from .controllers.youtube import YouTubeController
 from .controllers.supla import SuplaController
+from .controllers.yleareena import YleAreenaController
 
 
 def quick_play(cast, app_name, data):
@@ -45,6 +46,13 @@ def quick_play(cast, app_name, data):
         kwargs = {
             "media_id": data.pop("media_id"),
             "is_live": data.pop("extra2", None),
+        }
+    elif app_name == "yleareena":
+        controller = YleAreenaController()
+        kwargs = {
+            "kaltura_id": data.pop("media_id"),
+            "audio_language": data.pop("extra1", None),
+            "text_language": data.pop("extra2", None),
         }
     else:
         raise NotImplementedError()
