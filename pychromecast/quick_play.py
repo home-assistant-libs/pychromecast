@@ -44,29 +44,12 @@ def quick_play(cast, app_name, data):
 
     if app_name == "youtube":
         controller = YouTubeController()
-        kwargs = {
-            "video_id": data.pop("media_id"),
-            "enqueue": data.pop("enqueue", False),
-            "playlist_id": data.pop("playlist_id", None),
-        }
     elif app_name == "supla":
         controller = SuplaController()
-        kwargs = {
-            "media_id": data.pop("media_id"),
-            "is_live": data.pop("is_live", None),
-        }
     elif app_name == "yleareena":
         controller = YleAreenaController()
-        kwargs = {
-            "kaltura_id": data.pop("media_id"),
-            "audio_language": data.pop("audio_lang", None),
-            "text_language": data.pop("text_lang", None),
-        }
     else:
         raise NotImplementedError()
 
     cast.register_handler(controller)
-    controller.quick_play(**kwargs)
-
-    if data:
-        controller.logger.warning("Unused data in quick_play: %s", data)
+    controller.quick_play(**data)

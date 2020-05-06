@@ -54,8 +54,8 @@ class YleAreenaController(MediaController):
 
         self.send_message(msg, inc_session_id=True)
 
-    def quick_play(self, kaltura_id=None, audio_language="", text_language="off"):
+    def quick_play(self, media_id=None, audio_lang="", text_lang="off", **kwargs):
         """ Quick Play """
         self.play_areena_media(
-            kaltura_id, audio_language=audio_language, text_language=text_language
+            media_id, audio_language=audio_lang, text_language=text_lang, **kwargs
         )

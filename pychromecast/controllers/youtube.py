@@ -102,9 +102,9 @@ class YouTubeController(BaseController):
         self._screen_id = status.get(ATTR_SCREEN_ID)
         self.status_update_event.set()
 
-    def quick_play(self, video_id=None, playlist_id=None, enqueue=False):
+    def quick_play(self, media_id=None, playlist_id=None, enqueue=False, **kwargs):
         """ Quick Play """
         if enqueue:
-            self.add_to_queue(video_id)
+            self.add_to_queue(media_id, **kwargs)
         else:
-            self.play_video(video_id, playlist_id=playlist_id)
+            self.play_video(media_id, playlist_id=playlist_id, **kwargs)
