@@ -84,7 +84,7 @@ class CastListener:
             self.add_callback(name)
 
 
-def start_discovery(add_callback=None, remove_callback=None):
+def start_discovery(add_callback=None, remove_callback=None, zeroconf_instance=None):
     """
     Start discovering chromecasts on the network.
 
@@ -97,12 +97,17 @@ def start_discovery(add_callback=None, remove_callback=None):
     object. The CastListener object will contain information for the discovered
     chromecasts. To stop discovery, call the stop_discovery method with the
     ServiceBrowser object.
+
+    A shared zeroconf instance can be passed as zeroconf_instance. If no
+    instance is passed, a new instance will be created.
     """
     listener = CastListener(add_callback, remove_callback)
     service_browser = False
     try:
         service_browser = zeroconf.ServiceBrowser(
-            zeroconf.Zeroconf(), "_googlecast._tcp.local.", listener
+            zeroconf_instance or zeroconf.Zeroconf(),
+            "_googlecast._tcp.local.",
+            listener,
         )
     except (
         zeroconf.BadTypeInNameException,
@@ -118,6 +123,7 @@ def start_discovery(add_callback=None, remove_callback=None):
 
 def stop_discovery(browser):
     """Stop the chromecast discovery thread."""
+    browser.cancel()
     browser.zc.close()
 
 
