@@ -605,17 +605,17 @@ class SocketClient(threading.Thread):
         self._route_message(message, data)
 
         try:
-          if REQUEST_ID in data:
-              callback = self._request_callbacks.pop(data[REQUEST_ID], None)
-              if callback is not None:
-                  event = callback["event"]
-                  callback["response"] = data
-                  function = callback["function"]
-                  event.set()
-                  if function:
-                      function(data)
-        except:
-          pass # Invalid data. Ignoring
+            if REQUEST_ID in data:
+                callback = self._request_callbacks.pop(data[REQUEST_ID], None)
+                if callback is not None:
+                    event = callback["event"]
+                    callback["response"] = data
+                    function = callback["function"]
+                    event.set()
+                    if function:
+                        function(data)
+        except TypeError:
+            pass  # Invalid data. Ignoring
 
         return 0
 
