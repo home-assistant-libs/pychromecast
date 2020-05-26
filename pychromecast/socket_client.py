@@ -604,18 +604,18 @@ class SocketClient(threading.Thread):
         # See if any handlers will accept this message
         self._route_message(message, data)
 
-        try:
-            if REQUEST_ID in data:
-                callback = self._request_callbacks.pop(data[REQUEST_ID], None)
-                if callback is not None:
-                    event = callback["event"]
-                    callback["response"] = data
-                    function = callback["function"]
-                    event.set()
-                    if function:
-                        function(data)
-        except TypeError:
-            pass  # Invalid data. Ignoring
+        if isinstance(data, int):
+            return 0
+
+        if REQUEST_ID in data:
+            callback = self._request_callbacks.pop(data[REQUEST_ID], None)
+            if callback is not None:
+                event = callback["event"]
+                callback["response"] = data
+                function = callback["function"]
+                event.set()
+                if function:
+                    function(data)
 
         return 0
 
