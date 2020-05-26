@@ -42,11 +42,20 @@ class CastListener:
         if self.remove_callback:
             self.remove_callback(name, service)
 
+    def update_service(self, zconf, typ, name):
+        """ Update a service in the collection. """
+        _LOGGER.debug("update_service %s, %s", typ, name)
+        self._add_update_service(zconf, typ, name)
+
     def add_service(self, zconf, typ, name):
         """ Add a service to the collection. """
+        _LOGGER.debug("add_service %s, %s", typ, name)
+        self._add_update_service(zconf, typ, name)
+
+    def _add_update_service(self, zconf, typ, name):
+        """ Add or update a service. """
         service = None
         tries = 0
-        _LOGGER.debug("add_service %s, %s", typ, name)
         while service is None and tries < 4:
             try:
                 service = zconf.get_service_info(typ, name)
