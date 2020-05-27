@@ -14,10 +14,11 @@ _LOGGER = logging.getLogger(__name__)
 class CastListener:
     """Zeroconf Cast Services collection."""
 
-    def __init__(self, add_callback=None, remove_callback=None):
+    def __init__(self, add_callback=None, remove_callback=None, update_callback=None):
         self.services = {}
         self.add_callback = add_callback
         self.remove_callback = remove_callback
+        self.update_callback = update_callback
 
     @property
     def count(self):
@@ -45,14 +46,14 @@ class CastListener:
     def update_service(self, zconf, typ, name):
         """ Update a service in the collection. """
         _LOGGER.debug("update_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name)
+        self._add_update_service(zconf, typ, name, self.update_callback)
 
     def add_service(self, zconf, typ, name):
         """ Add a service to the collection. """
         _LOGGER.debug("add_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name)
+        self._add_update_service(zconf, typ, name, self.add_callback)
 
-    def _add_update_service(self, zconf, typ, name):
+    def _add_update_service(self, zconf, typ, name, callback):
         """ Add or update a service. """
         service = None
         tries = 0
@@ -89,11 +90,11 @@ class CastListener:
 
         self.services[name] = (host, service.port, uuid, model_name, friendly_name)
 
-        if self.add_callback:
-            self.add_callback(name)
+        if callback:
+            callback(name)
 
 
-def start_discovery(add_callback=None, remove_callback=None, zeroconf_instance=None):
+def start_discovery(add_callback=None, remove_callback=None, update_callback=None, zeroconf_instance=None):
     """
     Start discovering chromecasts on the network.
 
@@ -110,7 +111,7 @@ def start_discovery(add_callback=None, remove_callback=None, zeroconf_instance=N
     A shared zeroconf instance can be passed as zeroconf_instance. If no
     instance is passed, a new instance will be created.
     """
-    listener = CastListener(add_callback, remove_callback)
+    listener = CastListener(add_callback, remove_callback, update_callback)
     service_browser = False
     try:
         service_browser = zeroconf.ServiceBrowser(
