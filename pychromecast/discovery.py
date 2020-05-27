@@ -94,7 +94,12 @@ class CastListener:
             callback(name)
 
 
-def start_discovery(add_callback=None, remove_callback=None, update_callback=None, zeroconf_instance=None):
+def start_discovery(
+    add_callback=None,
+    remove_callback=None,
+    update_callback=None,
+    zeroconf_instance=None,
+):
     """
     Start discovering chromecasts on the network.
 
