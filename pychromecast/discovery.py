@@ -117,23 +117,14 @@ def start_discovery(
     instance is passed, a new instance will be created.
     """
     listener = CastListener(add_callback, remove_callback, update_callback)
-    service_browser = False
-    try:
-        service_browser = zeroconf.ServiceBrowser(
+    return (
+        listener,
+        zeroconf.ServiceBrowser(
             zeroconf_instance or zeroconf.Zeroconf(),
             "_googlecast._tcp.local.",
             listener,
-        )
-    except (
-        zeroconf.BadTypeInNameException,
-        NotImplementedError,
-        OSError,
-        socket.error,
-        zeroconf.NonUniqueNameException,
-    ):
-        pass
-
-    return listener, service_browser
+        ),
+    )
 
 
 def stop_discovery(browser):
@@ -144,7 +135,6 @@ def stop_discovery(browser):
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
-    browser = False
     try:
         # pylint: disable=unused-argument
         def callback(name):
@@ -160,8 +150,7 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
 
         return listener.devices
     finally:
-        if browser is not False:
-            stop_discovery(browser)
+        stop_discovery(browser)
 
 
 def get_info_from_service(service, zconf):
