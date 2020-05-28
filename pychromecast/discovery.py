@@ -4,7 +4,7 @@ import socket
 from threading import Event
 from uuid import UUID
 
-from zeroconf import ServiceBrowser, Zeroconf
+import zeroconf
 
 DISCOVER_TIMEOUT = 5
 
@@ -117,7 +117,14 @@ def start_discovery(
     instance is passed, a new instance will be created.
     """
     listener = CastListener(add_callback, remove_callback, update_callback)
-    return listener, ServiceBrowser(Zeroconf(), "_googlecast._tcp.local.", listener)
+    return (
+        listener,
+        zeroconf.ServiceBrowser(
+            zeroconf_instance or zeroconf.Zeroconf(),
+            "_googlecast._tcp.local.",
+            listener,
+        ),
+    )
 
 
 def stop_discovery(browser):
