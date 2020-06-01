@@ -176,10 +176,10 @@ def get_host_from_service_info(service_info):
     if (
         service_info
         and service_info.port
-        and (service_info.server or service_info.address)
+        and (service_info.server or len(service_info.addresses) > 0)
     ):
-        if service_info.address:
-            host = socket.inet_ntoa(service_info.address)
+        if len(service_info.addresses) > 0:
+            host = socket.inet_ntoa(service_info.addresses[0])
         else:
             host = service_info.server.lower()
         port = service_info.port
