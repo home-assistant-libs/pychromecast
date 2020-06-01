@@ -27,7 +27,8 @@ def remove_callback(name, service):
     print("Lost cast device {} {}".format(name, service))
     list_devices()
 
-listener, browser = pychromecast.discovery.start_discovery(add_callback, remove_callback)
+listener = pychromecast.CastListener(add_callback, remove_callback)
+browser = pychromecast.discovery.start_discovery(listener)
 
 try:
     while True:
