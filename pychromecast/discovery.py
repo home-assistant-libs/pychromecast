@@ -112,12 +112,8 @@ def start_discovery(listener, zeroconf_instance=None):
     A shared zeroconf instance can be passed as zeroconf_instance. If no
     instance is passed, a new instance will be created.
     """
-    return (
-        zeroconf.ServiceBrowser(
-            zeroconf_instance or zeroconf.Zeroconf(),
-            "_googlecast._tcp.local.",
-            listener,
-        )
+    return zeroconf.ServiceBrowser(
+        zeroconf_instance or zeroconf.Zeroconf(), "_googlecast._tcp.local.", listener,
     )
 
 
