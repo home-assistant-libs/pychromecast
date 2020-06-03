@@ -94,12 +94,7 @@ class CastListener:
             callback(name)
 
 
-def start_discovery(
-    add_callback=None,
-    remove_callback=None,
-    update_callback=None,
-    zeroconf_instance=None,
-):
+def start_discovery(listener, zeroconf_instance=None):
     """
     Start discovering chromecasts on the network.
 
@@ -108,28 +103,27 @@ def start_discovery(
     discovered chromecast's zeroconf name. This is the dictionary key to find
     the chromecast metadata in listener.services.
 
-    This method returns the CastListener object and the zeroconf ServiceBrowser
-    object. The CastListener object will contain information for the discovered
-    chromecasts. To stop discovery, call the stop_discovery method with the
-    ServiceBrowser object.
+    This method returns the zeroconf ServiceBrowser object.
+
+    A CastListener object must be passed, and will contain information for the
+    discovered chromecasts. To stop discovery, call the stop_discovery method with
+    the ServiceBrowser object.
 
     A shared zeroconf instance can be passed as zeroconf_instance. If no
     instance is passed, a new instance will be created.
     """
-    listener = CastListener(add_callback, remove_callback, update_callback)
-    return (
-        listener,
-        zeroconf.ServiceBrowser(
-            zeroconf_instance or zeroconf.Zeroconf(),
-            "_googlecast._tcp.local.",
-            listener,
-        ),
+    return zeroconf.ServiceBrowser(
+        zeroconf_instance or zeroconf.Zeroconf(), "_googlecast._tcp.local.", listener,
     )
 
 
 def stop_discovery(browser):
     """Stop the chromecast discovery thread."""
-    browser.cancel()
+    try:
+        browser.cancel()
+    except RuntimeError:
+        # Throws if called from service callback when joining the zc browser thread
+        pass
     browser.zc.close()
 
 
@@ -143,7 +137,8 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
                 discover_complete.set()
 
         discover_complete = Event()
-        listener, browser = start_discovery(callback)
+        listener = CastListener(callback)
+        browser = start_discovery(listener)
 
         # Wait for the timeout or the maximum number of devices
         discover_complete.wait(timeout)

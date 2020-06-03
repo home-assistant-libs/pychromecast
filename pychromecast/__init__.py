@@ -12,6 +12,7 @@ from .error import *  # noqa
 from . import socket_client
 from .discovery import (
     DISCOVER_TIMEOUT,
+    CastListener,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
@@ -207,7 +208,8 @@ def get_chromecasts(
         """Stops discovery of new chromecasts."""
         stop_discovery(browser)
 
-    listener, browser = start_discovery(internal_callback)
+    listener = CastListener(internal_callback)
+    browser = start_discovery(listener)
     return internal_stop
 
 
