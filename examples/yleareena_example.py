@@ -3,12 +3,14 @@ Example on how to use the Yle Areena Controller
 
 """
 
-import pychromecast
 import argparse
-from pychromecast.controllers.yleareena import YleAreenaController
+import logging
+import sys
 from time import sleep
 
-import logging
+import pychromecast
+from pychromecast.controllers.yleareena import YleAreenaController
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,11 +61,15 @@ def get_kaltura_id(program_id):
 
     return info.media_id.split('-')[-1]
 
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+if not chromecasts:
+    print('No chromecast with name "{}" discovered'.format(args.cast))
+    sys.exit(1)
 
-chromecasts = pychromecast.get_chromecasts()
-cast = next(cc for cc in chromecasts if cc.device.friendly_name == args.cast)
-print(cast)
+cast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
+
 yt = YleAreenaController()
 cast.register_handler(yt)
 yt.play_areena_media(entry_id=get_kaltura_id(args.program), audio_language=args.audio_language, text_language=args.text_language)

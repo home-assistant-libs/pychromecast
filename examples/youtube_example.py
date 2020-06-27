@@ -34,7 +34,7 @@ args = parser.parse_args()
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
@@ -46,3 +46,6 @@ cast.wait()
 yt = YouTubeController()
 cast.register_handler(yt)
 yt.play_video(VIDEO_ID)
+
+# Shut down discovery
+pychromecast.discovery.stop_discovery(browser)

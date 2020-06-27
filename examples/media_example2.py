@@ -38,7 +38,7 @@ if args.show_debug:
     datefmt = "%Y-%m-%d %H:%M:%S"
     logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
 
-chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
@@ -96,3 +96,6 @@ while True:
         time.sleep(1)
     except KeyboardInterrupt:
         break
+
+# Shut down discovery
+pychromecast.discovery.stop_discovery(browser)
