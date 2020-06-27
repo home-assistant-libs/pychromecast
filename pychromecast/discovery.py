@@ -99,9 +99,16 @@ class CastListener:
             return
         uuid = UUID(uuid)
 
-        services_for_uuid = self.services.setdefault(uuid, ({name}, uuid, model_name, friendly_name))
+        services_for_uuid = self.services.setdefault(
+            uuid, ({name}, uuid, model_name, friendly_name)
+        )
         services_for_uuid[0].add(name)
-        self.services[uuid] = (services_for_uuid[0], services_for_uuid[1], model_name, friendly_name)
+        self.services[uuid] = (
+            services_for_uuid[0],
+            services_for_uuid[1],
+            model_name,
+            friendly_name,
+        )
 
         if callback:
             callback(uuid, name)
@@ -157,7 +164,6 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     discover_complete.wait(timeout)
 
     return (listener.devices, browser)
-
 
 
 def get_info_from_service(service, zconf):
