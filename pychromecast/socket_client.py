@@ -651,6 +651,7 @@ class SocketClient(threading.Thread):
             reset = True
 
         if reset:
+            self.receiver_controller.disconnected()
             for channel in self._open_channels:
                 self.disconnect_channel(channel)
             self._report_connection_status(
@@ -1077,6 +1078,11 @@ class ReceiverController(BaseController):
 
         self._status_listeners = []
         self._launch_error_listeners = []
+
+    def disconnected(self):
+        """ Called when disconnected. Will erase status. """
+        self.logger.info("Receiver:channel_disconnected")
+        self.status = None
 
     @property
     def app_id(self):
