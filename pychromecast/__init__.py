@@ -7,6 +7,9 @@ from threading import Event
 
 # pylint: disable=wildcard-import
 import threading
+
+import zeroconf
+
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
@@ -15,7 +18,6 @@ from .discovery import (
     CastListener,
     discover_chromecasts,
     start_discovery,
-    stop_discovery,
 )
 from .dial import get_device_status, reboot, DeviceStatus
 from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
@@ -61,12 +63,14 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
 _get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-name
 
 
-def get_chromecast_from_service(services, tries=None, retry_wait=None, timeout=None):
+def get_chromecast_from_service(
+    services, zconf, tries=None, retry_wait=None, timeout=None
+):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
     # fetched later on.
-    services, zconf, uuid, model_name, friendly_name = services
+    services, uuid, model_name, friendly_name = services
     _LOGGER.debug("_get_chromecast_from_service %s", services)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
     manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
@@ -120,29 +124,41 @@ def get_listed_chromecasts(
 
     cc_list = set()
 
-    def callback(chromecast):
-        _LOGGER.debug("Found chromecast %s", chromecast)
-        if uuids and chromecast.uuid in uuids:
-            cc_list.add(chromecast)
-            uuids.remove(chromecast.uuid)
-        elif friendly_names and chromecast.name in friendly_names:
-            cc_list.add(chromecast)
-            friendly_names.remove(chromecast.name)
-        if not friendly_names and not uuids:
-            discover_complete.set()
+    def callback(uuid, name):  # pylint: disable=unused-argument
+        _LOGGER.debug("Found chromecast %s", uuid)
+
+        def get_chromecast_from_uuid(uuid):
+            return get_chromecast_from_service(
+                listener.services[uuid],
+                zconf=zconf,
+                tries=tries,
+                retry_wait=retry_wait,
+                timeout=timeout,
+            )
+
+        service = listener.services[uuid]
+        friendly_name = service[3]
+        try:
+            if uuids and uuid in uuids:
+                cc_list.add(get_chromecast_from_uuid(uuid))
+                uuids.remove(uuid)
+            elif friendly_names and friendly_name in friendly_names:
+                cc_list.add(get_chromecast_from_uuid(uuid))
+                friendly_names.remove(friendly_name)
+            if not friendly_names and not uuids:
+                discover_complete.set()
+        except ChromecastConnectionError:  # noqa
+            pass
 
     discover_complete = Event()
-    internal_stop = get_chromecasts(
-        tries=tries,
-        retry_wait=retry_wait,
-        timeout=timeout,
-        callback=callback,
-        blocking=False,
-    )
+
+    listener = CastListener(callback)
+    zconf = zeroconf.Zeroconf()
+    browser = start_discovery(listener, zconf)
+
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
-    internal_stop()
-    return list(cc_list)
+    return (list(cc_list), browser)
 
 
 # pylint: disable=too-many-locals
@@ -173,29 +189,34 @@ def get_chromecasts(
     """
     if blocking:
         # Thread blocking chromecast discovery
-        hosts = discover_chromecasts()
+        devices, browser = discover_chromecasts()
         cc_list = []
-        for host in hosts:
+        for device in devices:
             try:
                 cc_list.append(
-                    get_chromecast_from_host(
-                        host, tries=tries, retry_wait=retry_wait, timeout=timeout
+                    get_chromecast_from_service(
+                        device,
+                        browser.zc,
+                        tries=tries,
+                        retry_wait=retry_wait,
+                        timeout=timeout,
                     )
                 )
             except ChromecastConnectionError:  # noqa
                 pass
-        return cc_list
+        return (cc_list, browser)
 
     # Callback based chromecast discovery
     if not callable(callback):
         raise ValueError("Nonblocking discovery requires a callback function.")
 
-    def internal_callback(name):
+    def internal_callback(uuid, name):  # pylint: disable=unused-argument
         """Called when zeroconf has discovered a new chromecast."""
         try:
             callback(
-                get_chromecast_from_host(
-                    listener.services[name],
+                get_chromecast_from_service(
+                    listener.services[uuid],
+                    zconf=zconf,
                     tries=tries,
                     retry_wait=retry_wait,
                     timeout=timeout,
@@ -204,13 +225,10 @@ def get_chromecasts(
         except ChromecastConnectionError:  # noqa
             pass
 
-    def internal_stop():
-        """Stops discovery of new chromecasts."""
-        stop_discovery(browser)
-
     listener = CastListener(internal_callback)
-    browser = start_discovery(listener)
-    return internal_stop
+    zconf = zeroconf.Zeroconf()
+    browser = start_discovery(listener, zconf)
+    return browser
 
 
 # pylint: disable=too-many-instance-attributes, too-many-public-methods

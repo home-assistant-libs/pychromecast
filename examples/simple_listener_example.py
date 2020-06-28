@@ -46,7 +46,7 @@ args = parser.parse_args()
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
@@ -62,3 +62,6 @@ listenerMedia = StatusMediaListener(chromecast.name, chromecast)
 chromecast.media_controller.register_status_listener(listenerMedia)
 
 input("Listening for Chromecast events...\n\n")
+
+# Shut down discovery
+pychromecast.discovery.stop_discovery(browser)

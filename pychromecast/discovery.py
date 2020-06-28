@@ -34,14 +34,26 @@ class CastListener:
     def remove_service(self, zconf, typ, name):
         """ Remove a service from the collection. """
         _LOGGER.debug("remove_service %s, %s", typ, name)
-        service = self.services.pop(name, None)
+        service = None
+        service_removed = False
+        uuid = None
+        for uuid, services_for_uuid in self.services.items():
+            if name in services_for_uuid[0]:
+                service = services_for_uuid
+                services_for_uuid[0].remove(name)
+                if len(services_for_uuid[0]) == 0:
+                    self.services.pop(uuid)
+                    service_removed = True
+                break
 
         if not service:
             _LOGGER.debug("remove_service unknown %s, %s", typ, name)
             return
 
-        if self.remove_callback:
-            self.remove_callback(name, service)
+        if self.remove_callback and service_removed:
+            self.remove_callback(uuid, name, service)
+        if self.update_callback and not service_removed:
+            self.update_callback(uuid, name)
 
     def update_service(self, zconf, typ, name):
         """ Update a service in the collection. """
@@ -78,23 +90,31 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
-        addresses = service.parsed_addresses()
-        host = addresses[0] if addresses else service.server
-
         model_name = get_value("md")
         uuid = get_value("id")
         friendly_name = get_value("fn")
 
-        if uuid:
-            uuid = UUID(uuid)
+        if not uuid:
+            _LOGGER.debug("add_service failed to get uuid for %s, %s", typ, name)
+            return
+        uuid = UUID(uuid)
 
-        self.services[name] = (host, service.port, uuid, model_name, friendly_name)
+        services_for_uuid = self.services.setdefault(
+            uuid, ({name}, uuid, model_name, friendly_name)
+        )
+        services_for_uuid[0].add(name)
+        self.services[uuid] = (
+            services_for_uuid[0],
+            services_for_uuid[1],
+            model_name,
+            friendly_name,
+        )
 
         if callback:
-            callback(name)
+            callback(uuid, name)
 
 
-def start_discovery(listener, zeroconf_instance=None):
+def start_discovery(listener, zeroconf_instance):
     """
     Start discovering chromecasts on the network.
 
@@ -113,7 +133,7 @@ def start_discovery(listener, zeroconf_instance=None):
     instance is passed, a new instance will be created.
     """
     return zeroconf.ServiceBrowser(
-        zeroconf_instance or zeroconf.Zeroconf(), "_googlecast._tcp.local.", listener,
+        zeroconf_instance, "_googlecast._tcp.local.", listener,
     )
 
 
@@ -129,23 +149,21 @@ def stop_discovery(browser):
 
 def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     """ Discover chromecasts on the network. """
-    try:
-        # pylint: disable=unused-argument
-        def callback(name):
-            """Called when zeroconf has discovered a new chromecast."""
-            if max_devices is not None and listener.count >= max_devices:
-                discover_complete.set()
+    # pylint: disable=unused-argument
+    def callback(uuid, name):
+        """Called when zeroconf has discovered a new chromecast."""
+        if max_devices is not None and listener.count >= max_devices:
+            discover_complete.set()
 
-        discover_complete = Event()
-        listener = CastListener(callback)
-        browser = start_discovery(listener)
+    discover_complete = Event()
+    listener = CastListener(callback)
+    zconf = zeroconf.Zeroconf()
+    browser = start_discovery(listener, zconf)
 
-        # Wait for the timeout or the maximum number of devices
-        discover_complete.wait(timeout)
+    # Wait for the timeout or the maximum number of devices
+    discover_complete.wait(timeout)
 
-        return listener.devices
-    finally:
-        stop_discovery(browser)
+    return (listener.devices, browser)
 
 
 def get_info_from_service(service, zconf):

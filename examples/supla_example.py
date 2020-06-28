@@ -27,9 +27,15 @@ print(MEDIA_ID)
 
 logging.basicConfig(level=logging.DEBUG)
 
-chromecasts = pychromecast.get_chromecasts()
-cast = next(cc for cc in chromecasts if cc.device.friendly_name.lower() == CAST_NAME.lower())
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[CAST_NAME])
+if not chromecasts:
+    print('No chromecast with name "{}" discovered'.format(CAST_NAME))
+    sys.exit(1)
+
+cast = chromecasts[0]
+# Start socket client's worker thread and wait for initial status update
 cast.wait()
+
 supla = SuplaController()
 cast.register_handler(supla)
 supla.launch()

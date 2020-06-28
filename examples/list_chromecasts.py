@@ -13,7 +13,9 @@ args = parser.parse_args()
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-casts = pychromecast.get_chromecasts()
+casts, browser = pychromecast.get_chromecasts()
+# Shut down discovery as we don't care about updates
+pychromecast.discovery.stop_discovery(browser)
 if len(casts) == 0:
     print("No Devices Found")
     exit()

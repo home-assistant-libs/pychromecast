@@ -31,7 +31,7 @@ args = parser.parse_args()
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 
-chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
@@ -49,13 +49,23 @@ cast.media_controller.play_media(args.url, "audio/mp3")
 # Wait for player_state PLAYING
 player_state = None
 t = 30
-while player_state != "PLAYING" and t > 0:
+#while player_state != "PLAYING" and t > 0:
+has_played = False
+while True:
     try:
         if player_state != cast.media_controller.status.player_state:
             player_state = cast.media_controller.status.player_state
             print("Player state:", player_state)
+        if player_state == "PLAYING":
+            has_played = True
+        if cast.socket_client.is_connected and has_played and player_state != "PLAYING":
+            has_played = False
+            cast.media_controller.play_media(args.url, "audio/mp3")
 
         time.sleep(0.1)
         t = t - 0.1
     except KeyboardInterrupt:
         break
+
+# Shut down discovery
+pychromecast.discovery.stop_discovery(browser)

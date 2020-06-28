@@ -40,7 +40,7 @@ if args.show_debug:
     # Uncomment to enable http.client debug log
     # http_client.HTTPConnection.debuglevel = 1
 
-chromecasts = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 cast = None
 for _cast in chromecasts:
     if _cast.name == args.cast:
@@ -53,30 +53,6 @@ if not cast:
     sys.exit(1)
 
 print("cast {}".format(cast))
-
-
-class ConnListener:
-    def __init__(self, mz):
-        self._mz = mz
-
-    def new_connection_status(self, connection_status):
-        """Handle reception of a new ConnectionStatus."""
-        if connection_status.status == "CONNECTED":
-            self._mz.update_members()
-
-
-class MzListener:
-    def __init__(self):
-        self.got_members = False
-
-    def multizone_member_added(self, uuid):
-        pass
-
-    def multizone_member_removed(self, uuid):
-        pass
-
-    def multizone_status_received(self):
-        self.got_members = True
 
 
 # Wait for connection to the chromecast
@@ -126,3 +102,6 @@ if args.uri[0].find("track") > 0:
     client.start_playback(device_id=spotify_device_id, uris=args.uri)
 else:
     client.start_playback(device_id=spotify_device_id, context_uri=args.uri[0])
+
+# Shut down discovery
+pychromecast.discovery.stop_discovery(browser)

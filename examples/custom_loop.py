@@ -30,9 +30,9 @@ def your_main_loop():
             chromecast.connect()
             nonlocal cast
             cast = chromecast
-            stop_discovery()
+            pychromecast.discovery.stop_discovery(browser)
 
-    stop_discovery = pychromecast.get_chromecasts(blocking=False, callback=callback)
+    browser = pychromecast.get_chromecasts(blocking=False, callback=callback)
 
     while True:
         if cast:
