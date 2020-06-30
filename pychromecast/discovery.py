@@ -99,11 +99,16 @@ class CastListener:
             return
         uuid = UUID(uuid)
 
+        hosts = service.parsed_addresses()
+        if len(hosts):
+            host = hosts[0]
+
         services_for_uuid = self.services.setdefault(
             uuid, ({name}, uuid, model_name, friendly_name)
         )
         services_for_uuid[0].add(name)
         self.services[uuid] = (
+            host,
             services_for_uuid[0],
             services_for_uuid[1],
             model_name,

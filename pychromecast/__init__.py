@@ -70,7 +70,7 @@ def get_chromecast_from_service(
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
     # fetched later on.
-    services, uuid, model_name, friendly_name = services
+    host, services, uuid, model_name, friendly_name = services
     _LOGGER.debug("_get_chromecast_from_service %s", services)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
     manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
@@ -82,7 +82,7 @@ def get_chromecast_from_service(
         cast_type=cast_type,
     )
     return Chromecast(
-        host=None,
+        host=host,
         device=device,
         tries=tries,
         timeout=timeout,
