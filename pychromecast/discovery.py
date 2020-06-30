@@ -100,7 +100,7 @@ class CastListener:
         uuid = UUID(uuid)
 
         hosts = service.parsed_addresses()
-        if len(hosts):
+        if len(hosts) > 0:
             host = hosts[0]
 
         services_for_uuid = self.services.setdefault(
