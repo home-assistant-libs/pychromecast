@@ -23,7 +23,7 @@ if len(casts) == 0:
 print("Found cast devices:")
 for cast in casts:
     print(
-        '  "{}" on {}:{} with UUID:{}'.format(
-            cast.name, cast.host, cast.port, cast.uuid
+        '  "{}" on mDNS service {} with UUID:{}'.format(
+            cast.name, cast._services, cast.uuid
         )
     )
