@@ -111,8 +111,12 @@ def get_listed_chromecasts(
     Searches the network for chromecast devices matching a list of friendly
     names or a list of UUIDs.
 
-    Returns a list of Chromecast objects matching the criteria,
-    or an empty list if no matching chromecasts were found.
+    Returns a tuple of:
+      A list of Chromecast objects matching the criteria,
+      or an empty list if no matching chromecasts were found.
+      A service browser to keep the Chromecast mDNS data updated. When updates
+      are (no longer) needed, pass the broswer object to
+      pychromecast.discovery.stop_discover().
 
     To only discover chromcast devices wihtout connecting to them, use
     discover_listed_chromecasts instead.
@@ -175,8 +179,12 @@ def get_chromecasts(
     Searches the network for chromecast devices and creates a Chromecast object
     for each discovered device.
 
-    Returns a list of Chromecast objects, or an empty list if no chromecasts were
-    found.
+    Returns a tuple of:
+      A list of Chromecast objects, or an empty list if no matching chromecasts were
+      found.
+      A service browser to keep the Chromecast mDNS data updated. When updates
+      are (no longer) needed, pass the broswer object to
+      pychromecast.discovery.stop_discover().
 
     To only discover chromcast devices wihtout connecting to them, use
     discover_chromecasts instead.
