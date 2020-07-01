@@ -90,6 +90,9 @@ class CastListener:
                 return value
             return value.decode("utf-8")
 
+        addresses = service.parsed_addresses()
+        host = addresses[0] if addresses else service.server
+
         model_name = get_value("md")
         uuid = get_value("id")
         friendly_name = get_value("fn")
@@ -108,6 +111,8 @@ class CastListener:
             services_for_uuid[1],
             model_name,
             friendly_name,
+            host,
+            service.port,
         )
 
         if callback:
@@ -164,6 +169,47 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
     discover_complete.wait(timeout)
 
     return (listener.devices, browser)
+
+
+def discover_listed_chromecasts(
+    friendly_names=None, uuids=None, discovery_timeout=DISCOVER_TIMEOUT,
+):
+    """
+    Searches the network for chromecast devices matching a list of friendly
+    names or a list of UUIDs.
+
+    Returns a list of discovered chromecast devices matching the criteria,
+    or an empty list if no matching chromecasts were found.
+
+    :param friendly_names: A list of wanted friendly names
+    :param uuids: A list of wanted uuids
+    :param discovery_timeout: A floating point number specifying the time to wait
+                               devices matching the criteria have been found.
+    """
+
+    cc_list = {}
+
+    def callback(uuid, name):  # pylint: disable=unused-argument
+        service = listener.services[uuid]
+        friendly_name = service[3]
+        if uuids and uuid in uuids:
+            cc_list[uuid] = listener.services[uuid]
+            uuids.remove(uuid)
+        if friendly_names and friendly_name in friendly_names:
+            cc_list[uuid] = listener.services[uuid]
+            friendly_names.remove(friendly_name)
+        if not friendly_names and not uuids:
+            discover_complete.set()
+
+    discover_complete = Event()
+
+    listener = CastListener(callback)
+    zconf = zeroconf.Zeroconf()
+    browser = start_discovery(listener, zconf)
+
+    # Wait for the timeout or found all wanted devices
+    discover_complete.wait(discovery_timeout)
+    return (cc_list.values(), browser)
 
 
 def get_info_from_service(service, zconf):

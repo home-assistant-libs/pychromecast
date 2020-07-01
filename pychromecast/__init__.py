@@ -13,11 +13,12 @@ import zeroconf
 from .config import *  # noqa
 from .error import *  # noqa
 from . import socket_client
-from .discovery import (
+from .discovery import (  # noqa
     DISCOVER_TIMEOUT,
     CastListener,
     discover_chromecasts,
     start_discovery,
+    stop_discovery,
 )
 from .dial import get_device_status, reboot, DeviceStatus
 from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
@@ -70,7 +71,7 @@ def get_chromecast_from_service(
     # Build device status from the mDNS service name info, this
     # information is the primary source and the remaining will be
     # fetched later on.
-    services, uuid, model_name, friendly_name = services
+    services, uuid, model_name, friendly_name, _, _ = services
     _LOGGER.debug("_get_chromecast_from_service %s", services)
     cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
     manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
@@ -110,8 +111,11 @@ def get_listed_chromecasts(
     Searches the network for chromecast devices matching a list of friendly
     names or a list of UUIDs.
 
-    Returns a list of discovered chromecast devices matching the criteria,
+    Returns a list of Chromecast objects matching the criteria,
     or an empty list if no matching chromecasts were found.
+
+    To only discover chromcast devices wihtout connecting to them, use
+    discover_listed_chromecasts instead.
 
     :param friendly_names: A list of wanted friendly names
     :param uuids: A list of wanted uuids
@@ -122,7 +126,7 @@ def get_listed_chromecasts(
                                devices matching the criteria have been found.
     """
 
-    cc_list = set()
+    cc_list = {}
 
     def callback(uuid, name):  # pylint: disable=unused-argument
         _LOGGER.debug("Found chromecast %s", uuid)
@@ -140,10 +144,12 @@ def get_listed_chromecasts(
         friendly_name = service[3]
         try:
             if uuids and uuid in uuids:
-                cc_list.add(get_chromecast_from_uuid(uuid))
+                if uuid not in cc_list:
+                    cc_list[uuid] = get_chromecast_from_uuid(uuid)
                 uuids.remove(uuid)
-            elif friendly_names and friendly_name in friendly_names:
-                cc_list.add(get_chromecast_from_uuid(uuid))
+            if friendly_names and friendly_name in friendly_names:
+                if uuid not in cc_list:
+                    cc_list[uuid] = get_chromecast_from_uuid(uuid)
                 friendly_names.remove(friendly_name)
             if not friendly_names and not uuids:
                 discover_complete.set()
@@ -158,7 +164,7 @@ def get_listed_chromecasts(
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
-    return (list(cc_list), browser)
+    return (cc_list.values(), browser)
 
 
 # pylint: disable=too-many-locals
@@ -166,10 +172,14 @@ def get_chromecasts(
     tries=None, retry_wait=None, timeout=None, blocking=True, callback=None
 ):
     """
-    Searches the network for chromecast devices and creates a Chromecast instance
+    Searches the network for chromecast devices and creates a Chromecast object
     for each discovered device.
 
-    May return an empty list if no chromecasts were found.
+    Returns a list of Chromecast objects, or an empty list if no chromecasts were
+    found.
+
+    To only discover chromcast devices wihtout connecting to them, use
+    discover_chromecasts instead.
 
     Parameters tries, timeout, retry_wait and blocking_app_launch controls the
     behavior of the created Chromecast instances.
@@ -189,13 +199,13 @@ def get_chromecasts(
     """
     if blocking:
         # Thread blocking chromecast discovery
-        devices, browser = discover_chromecasts()
+        services, browser = discover_chromecasts()
         cc_list = []
-        for device in devices:
+        for service in services:
             try:
                 cc_list.append(
                     get_chromecast_from_service(
-                        device,
+                        service,
                         browser.zc,
                         tries=tries,
                         retry_wait=retry_wait,
@@ -265,7 +275,7 @@ class Chromecast:
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
         services = kwargs.pop("services", None)
-        zconf = kwargs.pop("zconf", True)
+        zconf = kwargs.pop("zconf", None)
 
         self.logger = logging.getLogger(__name__)
 
