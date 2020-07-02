@@ -532,9 +532,7 @@ class SocketClient(threading.Thread):
                     break
         except Exception:  # pylint: disable=broad-except
             self.logger.exception(
-                (
-                    "[%s(%s):%s] Unhandled exception in worker thread"
-                ),
+                ("[%s(%s):%s] Unhandled exception in worker thread"),
                 self.fn or "",
                 self.host,
                 self.port,
