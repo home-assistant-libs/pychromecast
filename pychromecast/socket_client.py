@@ -525,12 +525,21 @@ class SocketClient(threading.Thread):
 
         self.heartbeat_controller.reset()
         self._force_recon = False
-        logging.debug("Thread started...")
-        while not self.stop.is_set():
+        self.logger.debug("Thread started...")
+        try:
+            while not self.stop.is_set():
+                if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
+                    break
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception(
+                ("[%s(%s):%s] Unhandled exception in worker thread"),
+                self.fn or "",
+                self.host,
+                self.port,
+            )
+            raise
 
-            if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
-                break
-
+        self.logger.debug("Thread done...")
         # Clean up
         self._cleanup()
 
@@ -785,11 +794,23 @@ class SocketClient(threading.Thread):
                 chunks.append(chunk)
                 bytes_recd += len(chunk)
             except socket.timeout:
+                self.logger.debug(
+                    "[%s(%s):%s] timeout in : _read_bytes_from_socket",
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
                 continue
             except ssl.SSLError as exc:
                 # Support older ssl implementations which does not raise
                 # socket.timeout on timeouts
                 if _is_ssl_timeout(exc):
+                    self.logger.debug(
+                        "[%s(%s):%s] ssl timeout in : _read_bytes_from_socket",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                    )
                     continue
                 raise
         return b"".join(chunks)
