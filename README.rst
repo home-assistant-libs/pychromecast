@@ -34,11 +34,17 @@ How to use
     >> import time
     >> import pychromecast
 
-    >> chromecasts = pychromecast.get_chromecasts()
-    >> [cc.device.friendly_name for cc in chromecasts]
-    ['Dev', 'Living Room', 'Den', 'Bedroom']
+    >> # List chromecasts on the network, but don't connect
+    >> services, browser = pychromecast.discovery.discover_chromecasts()
+    >> # Shut down discovery
+    >> pychromecast.discovery.stop_discovery(browser)
 
-    >> cast = next(cc for cc in chromecasts if cc.device.friendly_name == "Living Room")
+    >> # Discover and connect to chromecasts named Living Room
+    >> chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Living Room"])
+    >> [cc.device.friendly_name for cc in chromecasts]
+    ['Living Room']
+
+    >> cast = chromecasts[0]
     >> # Start worker thread and wait for cast device to be ready
     >> cast.wait()
     >> print(cast.device)
@@ -56,6 +62,9 @@ How to use
     >> mc.pause()
     >> time.sleep(5)
     >> mc.play()
+
+    >> # Shut down discovery
+    >> pychromecast.discovery.stop_discovery(browser)
 
 Adding support for extra namespaces
 -----------------------------------
