@@ -53,6 +53,7 @@ def media_to_chromecast_command(
     autoplay=True,
     currentTime=0,
     playQueueID=None,
+    version="1.10.1.4602",
     **kwargs
 ):  # noqa: 501 pylint: disable=invalid-name, too-many-arguments, too-many-locals, protected-access, redefined-builtin
     """Create the message that chromecast requires. Use pass of plexapi media object or
@@ -80,6 +81,7 @@ def media_to_chromecast_command(
         username (None): user name of the person that start the playback.
         autoplay (bool): Auto play after the video is done.
         currentTime (int): Set playback from this time. default 0
+        version (str): pms version. Default 1.10.1.4602
         **kwargs: To allow overrides, this will be merged with the rest of the msg.
 
     Returns:
@@ -126,7 +128,7 @@ def media_to_chromecast_command(
                     "transcoderVideo": transcoderVideo,
                     "transcoderVideoRemuxOnly": transcoderVideoRemuxOnly,
                     "transcoderAudio": transcoderAudio,
-                    "version": "1.4.3.3433",
+                    "version": version,
                     "myPlexSubscription": myPlexSubscription,
                     "isVerifiedHostname": isVerifiedHostname,
                     "protocol": protocol,
