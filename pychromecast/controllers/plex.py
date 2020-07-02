@@ -532,3 +532,16 @@ class PlexApiController(PlexController):
             subtitle (str): could be index, language or languageCode.
         """
         self._change_track(subtitle)
+
+    def play_media(self, media=None, **kwargs):
+        """Start playback on the chromecast
+
+        Args:
+            media (None, optional): Can also be :class:`~plexapi.base.Playable
+                                   if its not, you need to fill out all the kwargs.
+            **kwargs: See media_to_chromecast_command docs string. `version` is by default set to the
+                version of the PMS reported by the API.
+        """  # noqa
+        args = {"version": self.pms.version}
+        args.update(kwargs)
+        super().play_media(media, **args)
