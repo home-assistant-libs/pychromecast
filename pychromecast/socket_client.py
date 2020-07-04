@@ -358,6 +358,7 @@ class SocketClient(threading.Thread):
                         )
                     )
                     self.receiver_controller.update_status()
+                    self.media_controller.update_status()
                     self.heartbeat_controller.ping()
                     self.heartbeat_controller.reset()
 
