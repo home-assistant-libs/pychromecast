@@ -180,6 +180,7 @@ class SocketClient(threading.Thread):
     """
 
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST, **kwargs):
+        blocking = kwargs.pop("blocking", True)
         tries = kwargs.pop("tries", None)
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
@@ -196,6 +197,7 @@ class SocketClient(threading.Thread):
 
         self.cast_type = cast_type
         self.fn = None  # pylint:disable=invalid-name
+        self.blocking = blocking
         self.tries = tries
         self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
@@ -270,7 +272,10 @@ class SocketClient(threading.Thread):
             retry["delay"] = min(retry["delay"] * 2, 300)
             retries[service] = retry
 
-        while not self.stop.is_set() and (
+        if self.blocking == False:
+            tries = 1
+
+        while (not self.stop.is_set() or self.blocking == False) and (
             tries is None or tries > 0
         ):  # noqa: E501 pylint:disable=too-many-nested-blocks
             # Prune retries dict
@@ -430,7 +435,8 @@ class SocketClient(threading.Thread):
             if tries:
                 tries -= 1
 
-        self.stop.set()
+        if self.blocking:
+          self.stop.set()
         self.logger.error(
             "[%s(%s):%s] Failed to connect. No retries.",
             self.fn or "",
@@ -456,7 +462,8 @@ class SocketClient(threading.Thread):
 
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
-        self.stop.set()
+        if self.blocking:
+            self.stop.set()
         try:
             # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
@@ -671,7 +678,8 @@ class SocketClient(threading.Thread):
             try:
                 self.initialize_connection()
             except ChromecastConnectionError:
-                self.stop.set()
+                if self.blocking:
+                  self.stop.set()
             return False
         return True
 
@@ -881,7 +889,7 @@ class SocketClient(threading.Thread):
                 _message_to_string(msg, data),
             )
 
-        if not force and self.stop.is_set():
+        if not force and self.stop.is_set() and self.blocking:
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
