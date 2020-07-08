@@ -440,10 +440,6 @@ class Chromecast:
 
         self.socket_client.receiver_controller.stop_app()
 
-    def reboot(self):
-        """ Reboots the Chromecast. """
-        reboot(self.host)
-
     def volume_up(self, delta=0.1):
         """ Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
