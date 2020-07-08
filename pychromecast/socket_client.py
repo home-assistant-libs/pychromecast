@@ -272,10 +272,10 @@ class SocketClient(threading.Thread):
             retry["delay"] = min(retry["delay"] * 2, 300)
             retries[service] = retry
 
-        if self.blocking == False:
+        if not self.blocking:
             tries = 1
 
-        while (not self.stop.is_set() or self.blocking == False) and (
+        while (not self.stop.is_set() or not self.blocking) and (
             tries is None or tries > 0
         ):  # noqa: E501 pylint:disable=too-many-nested-blocks
             # Prune retries dict
@@ -436,7 +436,7 @@ class SocketClient(threading.Thread):
                 tries -= 1
 
         if self.blocking:
-          self.stop.set()
+            self.stop.set()
         self.logger.error(
             "[%s(%s):%s] Failed to connect. No retries.",
             self.fn or "",
@@ -679,7 +679,7 @@ class SocketClient(threading.Thread):
                 self.initialize_connection()
             except ChromecastConnectionError:
                 if self.blocking:
-                  self.stop.set()
+                    self.stop.set()
             return False
         return True
 
