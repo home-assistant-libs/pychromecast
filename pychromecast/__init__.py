@@ -20,7 +20,7 @@ from .discovery import (  # noqa
     start_discovery,
     stop_discovery,
 )
-from .dial import get_device_status, reboot, DeviceStatus
+from .dial import get_device_status, DeviceStatus
 from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
@@ -439,10 +439,6 @@ class Chromecast:
         self.logger.info("Quiting current app")
 
         self.socket_client.receiver_controller.stop_app()
-
-    def reboot(self):
-        """ Reboots the Chromecast. """
-        reboot(self.host)
 
     def volume_up(self, delta=0.1):
         """ Increment volume by 0.1 (or delta) unless it is already maxed.

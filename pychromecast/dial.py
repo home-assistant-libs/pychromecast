@@ -17,18 +17,6 @@ FORMAT_BASE_URL = "http://{}:8008"
 _LOGGER = logging.getLogger(__name__)
 
 
-def reboot(host):
-    """ Reboots the chromecast. """
-    headers = {"content-type": "application/json"}
-
-    requests.post(
-        FORMAT_BASE_URL.format(host) + "/setup/reboot",
-        data='{"params":"now"}',
-        headers=headers,
-        timeout=10,
-    )
-
-
 def _get_status(host, services, zconf, path):
     """
     :param host: Hostname or ip to fetch status from
