@@ -241,15 +241,16 @@ class SocketClient(threading.Thread):
     def initialize_connection(
         self,
     ):
-        self.curr_tries = self.tries
+        """Initialize the connection and retrying as necessary."""
+        curr_tries = self.tries
         while not self.stop.is_set() and (
-            self.curr_tries is None or self.curr_tries > 0
+            curr_tries is None or curr_tries > 0
         ):
             try:
                 self.initialize_connection_once()
-            except ChromecastConnectionError as e:
+            except ChromecastConnectionError as err:
                 # Only sleep if we have another retry remaining
-                if self.curr_tries is None or self.curr_tries > 1:
+                if curr_tries is None or curr_tries > 1:
                     self.logger.debug(
                         "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
                         self.fn or "",
@@ -260,10 +261,10 @@ class SocketClient(threading.Thread):
                     )
                     time.sleep(self.retry_wait)
 
-                if self.curr_tries:
-                    self.curr_tries -= 1
+                if curr_tries:
+                    curr_tries -= 1
 
-                if self.curr_tries == 0:
+                if curr_tries == 0:
                     self.stop_thread()
                     self.logger.error(
                         "[%s(%s):%s] Failed to connect. No retries.",
@@ -271,16 +272,17 @@ class SocketClient(threading.Thread):
                         self.host,
                         self.port,
                     )
-                    raise e
+                    raise err
 
     def stop_thread(self):
+        """Stop thread only if running in blocking mode."""
         if self.blocking:
             self.stop.set()
 
     def initialize_connection_once(
         self,
     ):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
-        """Initialize a socket to a Chromecast, retrying as necessary."""
+        """Initialize a socket to a Chromecast."""
         if self.socket is not None:
             self.socket.close()
             self.socket = None
