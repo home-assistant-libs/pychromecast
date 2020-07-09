@@ -39,7 +39,7 @@ if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
 
-cast = chromecasts[0]
+cast = list(chromecasts)[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
 
