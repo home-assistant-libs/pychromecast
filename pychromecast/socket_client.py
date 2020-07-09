@@ -240,10 +240,47 @@ class SocketClient(threading.Thread):
 
     def initialize_connection(
         self,
+    ):
+        self.curr_tries = self.tries
+        while not self.stop.is_set() and (
+            self.curr_tries is None or self.curr_tries > 0
+        ):
+            try:
+                self.initialize_connection_once()
+            except ChromecastConnectionError as e:
+                # Only sleep if we have another retry remaining
+                if self.curr_tries is None or self.curr_tries > 1:
+                    self.logger.debug(
+                        "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        self.retry_wait,
+                        self.services,
+                    )
+                    time.sleep(self.retry_wait)
+
+                if self.curr_tries:
+                    self.curr_tries -= 1
+
+                if self.curr_tries == 0:
+                    self.stop_thread()
+                    self.logger.error(
+                        "[%s(%s):%s] Failed to connect. No retries.",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                    )
+                    raise e
+
+    def stop_thread(self):
+        if self.blocking:
+            self.stop.set()
+
+    def initialize_connection_once(
+        self,
     ):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
-        tries = self.tries
-
         if self.socket is not None:
             self.socket.close()
             self.socket = None
@@ -272,178 +309,148 @@ class SocketClient(threading.Thread):
             retry["delay"] = min(retry["delay"] * 2, 300)
             retries[service] = retry
 
-        if not self.blocking:
-            tries = 1
+        # Prune retries dict
+        retries = {
+            key: retries[key]
+            for key in self.services
+            if (key is not None and key in retries)
+        }
 
-        while (not self.stop.is_set() or not self.blocking) and (
-            tries is None or tries > 0
-        ):  # noqa: E501 pylint:disable=too-many-nested-blocks
-            # Prune retries dict
-            retries = {
-                key: retries[key]
-                for key in self.services
-                if (key is not None and key in retries)
-            }
-
-            for service in self.services.copy():
-                now = time.time()
-                retry = retries.get(
-                    service, {"delay": self.retry_wait, "next_retry": now}
+        for service in self.services.copy():
+            now = time.time()
+            retry = retries.get(
+                service, {"delay": self.retry_wait, "next_retry": now}
+            )
+            # If we're connecting to a named service, check if it's time
+            if service and now < retry["next_retry"]:
+                continue
+            try:
+                self.socket = new_socket()
+                self.socket.settimeout(self.timeout)
+                self._report_connection_status(
+                    ConnectionStatus(
+                        CONNECTION_STATUS_CONNECTING,
+                        NetworkAddress(self.host, self.port),
+                    )
                 )
-                # If we're connecting to a named service, check if it's time
-                if service and now < retry["next_retry"]:
-                    continue
-                try:
-                    self.socket = new_socket()
-                    self.socket.settimeout(self.timeout)
-                    self._report_connection_status(
-                        ConnectionStatus(
-                            CONNECTION_STATUS_CONNECTING,
-                            NetworkAddress(self.host, self.port),
-                        )
-                    )
-                    # Resolve the service name. If service is None, we're
-                    # connecting directly to a host name or IP-address
-                    if service:
-                        host = None
-                        port = None
-                        service_info = get_info_from_service(service, self.zconf)
-                        host, port = get_host_from_service_info(service_info)
-                        if host and port:
-                            try:
-                                self.fn = service_info.properties[b"fn"].decode("utf-8")
-                            except (AttributeError, KeyError, UnicodeError):
-                                pass
-                            self.logger.debug(
-                                "[%s(%s):%s] Resolved service %s to %s:%s",
-                                self.fn or "",
-                                self.host,
-                                self.port,
-                                service,
-                                host,
-                                port,
-                            )
-                            self.host = host
-                            self.port = port
-                        else:
-                            self.logger.debug(
-                                "[%s(%s):%s] Failed to resolve service %s",
-                                self.fn or "",
-                                self.host,
-                                self.port,
-                                service,
-                            )
-                            self._report_connection_status(
-                                ConnectionStatus(
-                                    CONNECTION_STATUS_FAILED_RESOLVE,
-                                    NetworkAddress(service, None),
-                                )
-                            )
-                            mdns_backoff(service, retry)
-                            # If zeroconf fails to receive the necessary data,
-                            # try next service
-                            continue
-
-                    self.logger.debug(
-                        "[%s(%s):%s] Connecting to %s:%s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        self.host,
-                        self.port,
-                    )
-                    self.socket.connect((self.host, self.port))
-                    self.socket = ssl.wrap_socket(self.socket)
-                    self.connecting = False
-                    self._force_recon = False
-                    self._report_connection_status(
-                        ConnectionStatus(
-                            CONNECTION_STATUS_CONNECTED,
-                            NetworkAddress(self.host, self.port),
-                        )
-                    )
-                    self.receiver_controller.update_status()
-                    self.heartbeat_controller.ping()
-                    self.heartbeat_controller.reset()
-
-                    if self.first_connection:
-                        self.first_connection = False
+                # Resolve the service name. If service is None, we're
+                # connecting directly to a host name or IP-address
+                if service:
+                    host = None
+                    port = None
+                    service_info = get_info_from_service(service, self.zconf)
+                    host, port = get_host_from_service_info(service_info)
+                    if host and port:
+                        try:
+                            self.fn = service_info.properties[b"fn"].decode("utf-8")
+                        except (AttributeError, KeyError, UnicodeError):
+                            pass
                         self.logger.debug(
-                            "[%s(%s):%s] Connected!",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                        )
-                    else:
-                        self.logger.info(
-                            "[%s(%s):%s] Connection reestablished!",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                        )
-                    return
-                except OSError as err:
-                    self.connecting = True
-                    if self.stop.is_set():
-                        self.logger.error(
-                            "[%s(%s):%s] Failed to connect: %s. aborting due to stop signal.",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                            err,
-                        )
-                        raise ChromecastConnectionError("Failed to connect")
-
-                    self._report_connection_status(
-                        ConnectionStatus(
-                            CONNECTION_STATUS_FAILED,
-                            NetworkAddress(self.host, self.port),
-                        )
-                    )
-                    if service is not None:
-                        retry_log_fun(
-                            "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
+                            "[%s(%s):%s] Resolved service %s to %s:%s",
                             self.fn or "",
                             self.host,
                             self.port,
                             service,
-                            retry["delay"],
+                            host,
+                            port,
                         )
-                        mdns_backoff(service, retry)
+                        self.host = host
+                        self.port = port
                     else:
-                        retry_log_fun(
-                            "[%s(%s):%s] Failed to connect, retrying in %.1fs",
+                        self.logger.debug(
+                            "[%s(%s):%s] Failed to resolve service %s",
                             self.fn or "",
                             self.host,
                             self.port,
-                            self.retry_wait,
+                            service,
                         )
-                    retry_log_fun = self.logger.debug
+                        self._report_connection_status(
+                            ConnectionStatus(
+                                CONNECTION_STATUS_FAILED_RESOLVE,
+                                NetworkAddress(service, None),
+                            )
+                        )
+                        mdns_backoff(service, retry)
+                        # If zeroconf fails to receive the necessary data,
+                        # try next service
+                        continue
 
-            # Only sleep if we have another retry remaining
-            if tries is None or tries > 1:
                 self.logger.debug(
-                    "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
+                    "[%s(%s):%s] Connecting to %s:%s",
                     self.fn or "",
                     self.host,
                     self.port,
-                    self.retry_wait,
-                    self.services,
+                    self.host,
+                    self.port,
                 )
-                time.sleep(self.retry_wait)
+                self.socket.connect((self.host, self.port))
+                self.socket = ssl.wrap_socket(self.socket)
+                self.connecting = False
+                self._force_recon = False
+                self._report_connection_status(
+                    ConnectionStatus(
+                        CONNECTION_STATUS_CONNECTED,
+                        NetworkAddress(self.host, self.port),
+                    )
+                )
+                self.receiver_controller.update_status()
+                self.heartbeat_controller.ping()
+                self.heartbeat_controller.reset()
 
-            if tries:
-                tries -= 1
+                if self.first_connection:
+                    self.first_connection = False
+                    self.logger.debug(
+                        "[%s(%s):%s] Connected!",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                    )
+                else:
+                    self.logger.info(
+                        "[%s(%s):%s] Connection reestablished!",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                    )
+                return
+            except OSError as err:
+                self.connecting = True
+                if self.stop.is_set():
+                    self.logger.error(
+                        "[%s(%s):%s] Failed to connect: %s. aborting due to stop signal.",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        err,
+                    )
+                    raise ChromecastConnectionError("Failed to connect")
 
-        if self.blocking:
-            self.stop.set()
-        self.logger.error(
-            "[%s(%s):%s] Failed to connect. No retries.",
-            self.fn or "",
-            self.host,
-            self.port,
-        )
-        raise ChromecastConnectionError("Failed to connect")
+                self._report_connection_status(
+                    ConnectionStatus(
+                        CONNECTION_STATUS_FAILED,
+                        NetworkAddress(self.host, self.port),
+                    )
+                )
+                if service is not None:
+                    retry_log_fun(
+                        "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        service,
+                        retry["delay"],
+                    )
+                    mdns_backoff(service, retry)
+                else:
+                    retry_log_fun(
+                        "[%s(%s):%s] Failed to connect, retrying in %.1fs",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        self.retry_wait,
+                    )
+                retry_log_fun = self.logger.debug
+                raise ChromecastConnectionError("Failed to connect")
 
     def connect(self):
         """ Connect socket connection to Chromecast device.
@@ -451,7 +458,7 @@ class SocketClient(threading.Thread):
             Must only be called if the worker thread will not be started.
         """
         try:
-            self.initialize_connection()
+            self.initialize_connection_once()
         except ChromecastConnectionError:
             self._report_connection_status(
                 ConnectionStatus(
@@ -462,8 +469,7 @@ class SocketClient(threading.Thread):
 
     def disconnect(self):
         """ Disconnect socket connection to Chromecast device """
-        if self.blocking:
-            self.stop.set()
+        self.stop_thread()
         try:
             # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
@@ -676,10 +682,12 @@ class SocketClient(threading.Thread):
                 )
             )
             try:
-                self.initialize_connection()
-            except ChromecastConnectionError:
                 if self.blocking:
-                    self.stop.set()
+                    self.initialize_connection()
+                else:
+                    self.initialize_connection_once()
+            except ChromecastConnectionError:
+                self.stop_thread()
             return False
         return True
 
@@ -889,7 +897,7 @@ class SocketClient(threading.Thread):
                 _message_to_string(msg, data),
             )
 
-        if not force and self.stop.is_set() and self.blocking:
+        if not force and self.stop.is_set():
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
