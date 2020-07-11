@@ -65,7 +65,7 @@ _get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-
 
 
 def get_chromecast_from_service(
-    services, zconf, tries=None, retry_wait=None, timeout=None, blocking=True
+    services, zconf, tries=None, retry_wait=None, timeout=None
 ):
     """Creates a Chromecast object from a zeroconf service."""
     # Build device status from the mDNS service name info, this
@@ -90,7 +90,6 @@ def get_chromecast_from_service(
         retry_wait=retry_wait,
         services=services,
         zconf=zconf,
-        blocking=blocking,
     )
 
 
@@ -239,7 +238,6 @@ def get_chromecasts(
                     tries=tries,
                     retry_wait=retry_wait,
                     timeout=timeout,
-                    blocking=blocking,
                 )
             )
         except ChromecastConnectionError:  # noqa
@@ -281,7 +279,6 @@ class Chromecast:
     """
 
     def __init__(self, host, port=None, device=None, **kwargs):
-        blocking = kwargs.pop("blocking", True)
         tries = kwargs.pop("tries", None)
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
@@ -328,7 +325,6 @@ class Chromecast:
             host,
             port=port,
             cast_type=self.device.cast_type,
-            blocking=blocking,
             tries=tries,
             timeout=timeout,
             retry_wait=retry_wait,
@@ -500,7 +496,7 @@ class Chromecast:
         :param blocking: If True it will block until the disconnection is
                          complete, otherwise it will return immediately.
         """
-        self.socket_client.disconnect()
+        self.socket_client.disconnect(blocking)
         if blocking:
             self.join(timeout=timeout)
 

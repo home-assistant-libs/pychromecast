@@ -180,7 +180,6 @@ class SocketClient(threading.Thread):
     """
 
     def __init__(self, host, port=None, cast_type=CAST_TYPE_CHROMECAST, **kwargs):
-        blocking = kwargs.pop("blocking", True)
         tries = kwargs.pop("tries", None)
         timeout = kwargs.pop("timeout", None)
         retry_wait = kwargs.pop("retry_wait", None)
@@ -197,7 +196,6 @@ class SocketClient(threading.Thread):
 
         self.cast_type = cast_type
         self.fn = None  # pylint:disable=invalid-name
-        self.blocking = blocking
         self.tries = tries
         self.timeout = timeout or TIMEOUT_TIME
         self.retry_wait = retry_wait or RETRY_TIME
@@ -219,6 +217,7 @@ class SocketClient(threading.Thread):
         self._request_callbacks = {}
         self._open_channels = []
 
+        self.retries = {}
         self.connecting = True
         self.first_connection = True
         self.socket = None
@@ -240,47 +239,6 @@ class SocketClient(threading.Thread):
 
     def initialize_connection(
         self,
-    ):
-        """Initialize the connection and retrying as necessary."""
-        curr_tries = self.tries
-        while not self.stop.is_set() and (
-            curr_tries is None or curr_tries > 0
-        ):
-            try:
-                self.initialize_connection_once()
-            except ChromecastConnectionError as err:
-                # Only sleep if we have another retry remaining
-                if curr_tries is None or curr_tries > 1:
-                    self.logger.debug(
-                        "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        self.retry_wait,
-                        self.services,
-                    )
-                    time.sleep(self.retry_wait)
-
-                if curr_tries:
-                    curr_tries -= 1
-
-                if curr_tries == 0:
-                    self.stop_thread()
-                    self.logger.error(
-                        "[%s(%s):%s] Failed to connect. No retries.",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                    )
-                    raise err
-
-    def stop_thread(self):
-        """Stop thread only if running in blocking mode."""
-        if self.blocking:
-            self.stop.set()
-
-    def initialize_connection_once(
-        self,
     ):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast."""
         if self.socket is not None:
@@ -299,28 +257,24 @@ class SocketClient(threading.Thread):
         self._open_channels = []
 
         self.connecting = True
-        retry_log_fun = self.logger.error
-
-        # Dict keeping track of individual retry delay for each named service
-        retries = {}
 
         def mdns_backoff(service, retry):
             """Exponentional backoff for service name mdns lookups."""
             now = time.time()
             retry["next_retry"] = now + retry["delay"]
             retry["delay"] = min(retry["delay"] * 2, 300)
-            retries[service] = retry
+            self.retries[service] = retry
 
         # Prune retries dict
-        retries = {
-            key: retries[key]
+        self.retries = {
+            key: self.retries[key]
             for key in self.services
-            if (key is not None and key in retries)
+            if (key is not None and key in self.retries)
         }
 
         for service in self.services.copy():
             now = time.time()
-            retry = retries.get(
+            retry = self.retries.get(
                 service, {"delay": self.retry_wait, "next_retry": now}
             )
             # If we're connecting to a named service, check if it's time
@@ -389,6 +343,11 @@ class SocketClient(threading.Thread):
                 self.socket = ssl.wrap_socket(self.socket)
                 self.connecting = False
                 self._force_recon = False
+
+                # reset retries
+                self.retries = {}
+                self.curr_tries = self.tries
+
                 self._report_connection_status(
                     ConnectionStatus(
                         CONNECTION_STATUS_CONNECTED,
@@ -417,15 +376,6 @@ class SocketClient(threading.Thread):
                 return
             except OSError as err:
                 self.connecting = True
-                if self.stop.is_set():
-                    self.logger.error(
-                        "[%s(%s):%s] Failed to connect: %s. aborting due to stop signal.",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        err,
-                    )
-                    raise ChromecastConnectionError("Failed to connect")
 
                 self._report_connection_status(
                     ConnectionStatus(
@@ -433,6 +383,11 @@ class SocketClient(threading.Thread):
                         NetworkAddress(self.host, self.port),
                     )
                 )
+
+                retry_log_fun = self.logger.debug
+                if self.curr_tries < self.tries:
+                    retry_log_fun = self.logger.error
+
                 if service is not None:
                     retry_log_fun(
                         "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
@@ -451,33 +406,26 @@ class SocketClient(threading.Thread):
                         self.port,
                         self.retry_wait,
                     )
-                retry_log_fun = self.logger.debug
                 raise ChromecastConnectionError("Failed to connect")
 
     def connect(self):
-        """ Connect socket connection to Chromecast device.
-
-            Must only be called if the worker thread will not be started.
         """
-        try:
-            self.initialize_connection_once()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
-                )
-            )
-            return
+        This method is just needed for non-blocking reconnect after disconnect
+        """
+        self.stop.clear()
 
-    def disconnect(self):
+    def disconnect(self, blocking=True):
         """ Disconnect socket connection to Chromecast device """
-        self.stop_thread()
-        try:
-            # Write to the socket to interrupt the worker thread
-            self.socketpair[1].send(b"x")
-        except socket.error:
-            # The socketpair may already be closed during shutdown, ignore it
-            pass
+        if blocking:
+            self.stop.set()
+            try:
+                # Write to the socket to interrupt the worker thread
+                self.socketpair[1].send(b"x")
+            except socket.error:
+                # The socketpair may already be closed during shutdown, ignore it
+                pass
+        else:
+            self._cleanup()
 
     def register_handler(self, handler):
         """ Register a new namespace handler. """
@@ -527,59 +475,53 @@ class SocketClient(threading.Thread):
         return self.stop.is_set()
 
     def run(self):
-        """ Connect to the cast and start polling the socket. """
-        try:
-            self.initialize_connection()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
-                )
-            )
-            return
-
-        self.heartbeat_controller.reset()
-        self._force_recon = False
+        """
+        Run main loop thread which connects to the socket and start polling the socket.
+        """
         self.logger.debug("Thread started...")
-        try:
-            while not self.stop.is_set():
-                if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
-                    break
-        except Exception:  # pylint: disable=broad-except
-            self.logger.exception(
-                ("[%s(%s):%s] Unhandled exception in worker thread"),
-                self.fn or "",
-                self.host,
-                self.port,
-            )
-            raise
 
-        self.logger.debug("Thread done...")
-        # Clean up
-        self._cleanup()
-
-    def run_once(self, timeout=POLL_TIME_NON_BLOCKING):
-        """
-        Use run_once() in your own main loop after you
-        receive something on the socket (get_socket()).
-        """
-        # pylint: disable=too-many-branches, too-many-return-statements
-
-        try:
-            if not self._check_connection():
-                return 0
-        except ChromecastConnectionError:
-            return 1
-
-        # poll the socket, as well as the socketpair to allow us to be interrupted
-        rlist = [self.socket, self.socketpair[0]]
-        can_read, _, _ = select.select(rlist, [], [], timeout)
-
-        # read messages from chromecast
-        message = data = None
-        if self.socket in can_read and not self._force_recon:
+        self.curr_tries = self.tries
+        while not self.stop.is_set() and (
+            self.curr_tries is None or self.curr_tries > 0
+        ):
             try:
-                message = self._read_message()
+                self.run_once(timeout=POLL_TIME_BLOCKING)
+            except ChromecastConnectionError as err:
+                if self.stop.is_set():
+                    self.logger.error(
+                        "[%s(%s):%s] Failed to connect: %s. aborting due to stop signal.",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        err,
+                    )
+                    # Exit loop and cleanup things
+                    break
+
+                # Only sleep if we have another retry remaining
+                if self.curr_tries is None or self.curr_tries > 1:
+                    self.logger.debug(
+                        "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        self.retry_wait,
+                        self.services,
+                    )
+                    time.sleep(self.retry_wait)
+
+                if self.curr_tries:
+                    self.curr_tries -= 1
+
+                if self.curr_tries == 0:
+                    self.stop.set()
+                    self.logger.error(
+                        "[%s(%s):%s] Failed to connect. No retries.",
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                    )
+                    raise err
             except InterruptLoop as exc:
                 if self.stop.is_set():
                     self.logger.info(
@@ -596,12 +538,52 @@ class SocketClient(threading.Thread):
                         self.port,
                         exc,
                     )
-                return 1
+                # Exit loop due to interrupt
+                break
             except ssl.SSLError as exc:
                 if exc.errno == ssl.SSL_ERROR_EOF:
                     if self.stop.is_set():
-                        return 1
+                        # Exit loop due to stop set
+                        break
                 raise
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    ("[%s(%s):%s] Unhandled exception in worker thread"),
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
+                raise
+
+        self.logger.debug("Thread done...")
+        # Clean up
+        self._cleanup()
+
+    def run_once(self, timeout=POLL_TIME_NON_BLOCKING):
+        """
+        Use run_once() in your own main loop after you
+        receive something on the socket (get_socket()).
+        """
+        # pylint: disable=too-many-branches, too-many-return-statements
+
+        # do not check connection/reconnect if stop is set
+        if self.stop.is_set():
+            return
+
+        try:
+            self._check_connection()
+        except ChromecastConnectionError:
+            raise
+
+        # poll the socket, as well as the socketpair to allow us to be interrupted
+        rlist = [self.socket, self.socketpair[0]]
+        can_read, _, _ = select.select(rlist, [], [], timeout)
+
+        # read messages from chromecast
+        message = data = None
+        if self.socket in can_read and not self._force_recon:
+            try:
+                message = self._read_message()
             except socket.error:
                 self._force_recon = True
                 self.logger.error(
@@ -620,10 +602,10 @@ class SocketClient(threading.Thread):
         # If we are stopped after receiving a message we skip the message
         # and tear down the connection
         if self.stop.is_set():
-            return 1
+            return
 
         if not message:
-            return 0
+            return
 
         # See if any handlers will accept this message
         self._route_message(message, data)
@@ -638,7 +620,7 @@ class SocketClient(threading.Thread):
                 if function:
                     function(data)
 
-        return 0
+        return
 
     def get_socket(self):
         """
@@ -654,6 +636,17 @@ class SocketClient(threading.Thread):
         :return: True if the connection is active, False if the connection was
                  reset.
         """
+        if self.first_connection:
+            try:
+                self.initialize_connection()
+            except ChromecastConnectionError:
+                self._report_connection_status(
+                    ConnectionStatus(
+                        CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
+                    )
+                )
+            return
+
         # check if connection is expired
         reset = False
         if self._force_recon:
@@ -683,15 +676,7 @@ class SocketClient(threading.Thread):
                     CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port)
                 )
             )
-            try:
-                if self.blocking:
-                    self.initialize_connection()
-                else:
-                    self.initialize_connection_once()
-            except ChromecastConnectionError:
-                self.stop_thread()
-            return False
-        return True
+            self.initialize_connection()
 
     def _route_message(self, message, data):
         """ Route message to any handlers on the message namespace """
