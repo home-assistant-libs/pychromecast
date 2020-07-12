@@ -229,7 +229,8 @@ def get_info_from_service(service, zconf):
     """ Resolve service_info from service. """
     service_info = None
     try:
-        service_info = zconf.get_service_info("_googlecast._tcp.local.", service)
+        # add 50ms timeout for non-blocking
+        service_info = zconf.get_service_info("_googlecast._tcp.local.", service, 50)
         if service_info:
             _LOGGER.debug(
                 "get_info_from_service resolved service %s to service_info %s",

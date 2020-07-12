@@ -575,6 +575,10 @@ class SocketClient(threading.Thread):
         except ChromecastConnectionError:
             raise
 
+        if self.socket is None:
+            # wait for socket
+            return
+
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
         can_read, _, _ = select.select(rlist, [], [], timeout)
@@ -636,15 +640,19 @@ class SocketClient(threading.Thread):
         :return: True if the connection is active, False if the connection was
                  reset.
         """
-        if self.first_connection:
+        # check if we need to connect
+        if self.connecting:
             try:
                 self.initialize_connection()
             except ChromecastConnectionError:
-                self._report_connection_status(
-                    ConnectionStatus(
-                        CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
+                if self.first_connection:
+                    self._report_connection_status(
+                        ConnectionStatus(
+                            CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
+                        )
                     )
-                )
+                else:
+                    raise
             return
 
         # check if connection is expired

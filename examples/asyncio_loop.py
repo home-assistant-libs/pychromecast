@@ -55,6 +55,8 @@ async def startChromecast():
             nonlocal cc
             cc = chromecast
             loop.create_task(connectChromecast())
+            # stop the discovery of pychromecast
+            pychromecast.stop_discovery(browser)
 
     browser = pychromecast.get_chromecasts(blocking=False, tries=1, retry_wait=0.1, timeout=0.1, callback=castFound)
 
@@ -83,8 +85,6 @@ async def startChromecast():
 
             # stop the checkConnectionTask before we close asyncio
             checkConnectionTask.cancel()
-            # stop the discovery of pychromecast
-            pychromecast.stop_discovery(browser)
             return
         else:
             await asyncio.sleep(1)
