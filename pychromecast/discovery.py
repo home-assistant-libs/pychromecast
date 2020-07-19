@@ -42,7 +42,6 @@ class CastListener:
                 service = services_for_uuid
                 services_for_uuid[0].remove(name)
                 if len(services_for_uuid[0]) == 0:
-                    self.services.pop(uuid)
                     service_removed = True
                 break
 
