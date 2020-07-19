@@ -191,6 +191,7 @@ class SocketClient(threading.Thread):
         self.daemon = True
 
         self.logger = logging.getLogger(__name__)
+        self.retry_log_fun = self.logger.error
 
         self._force_recon = False
 
@@ -384,12 +385,8 @@ class SocketClient(threading.Thread):
                     )
                 )
 
-                retry_log_fun = self.logger.debug
-                if self.curr_tries < self.tries:
-                    retry_log_fun = self.logger.error
-
                 if service is not None:
-                    retry_log_fun(
+                    self.retry_log_fun(
                         "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
                         self.fn or "",
                         self.host,
@@ -399,7 +396,7 @@ class SocketClient(threading.Thread):
                     )
                     mdns_backoff(service, retry)
                 else:
-                    retry_log_fun(
+                    self.retry_log_fun(
                         "[%s(%s):%s] Failed to connect, retrying in %.1fs",
                         self.fn or "",
                         self.host,
@@ -512,6 +509,8 @@ class SocketClient(threading.Thread):
 
                 if self.curr_tries:
                     self.curr_tries -= 1
+                    # log error only once
+                    self.retry_log_fun = self.logger.debug
 
                 if self.curr_tries == 0:
                     self.stop.set()
