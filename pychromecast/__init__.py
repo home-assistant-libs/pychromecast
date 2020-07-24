@@ -289,13 +289,11 @@ class Chromecast:
 
         # Resolve host to IP address
         self._services = services
-        self.host = host
-        self.port = port or 8009
 
         self.logger.info("Querying device status")
         self.device = device
         if device:
-            dev_status = get_device_status(self.host, services, zconf)
+            dev_status = get_device_status(host, services, zconf)
             if dev_status:
                 # Values from `device` have priority over `dev_status`
                 # as they come from the dial information.
@@ -311,11 +309,11 @@ class Chromecast:
             else:
                 self.device = device
         else:
-            self.device = get_device_status(self.host, services, zconf)
+            self.device = get_device_status(host, services, zconf)
 
         if not self.device:
             raise ChromecastConnectionError(  # noqa
-                "Could not connect to {}:{}".format(self.host, self.port)
+                "Could not connect to {}:{}".format(host, port or 8009)
             )
 
         self.status = None
@@ -387,7 +385,7 @@ class Chromecast:
     @property
     def uri(self):
         """ Returns the device URI (ip:port) """
-        return "{}:{}".format(self.host, self.port)
+        return "{}:{}".format(self.socket_client.host, self.socket_client.port)
 
     @property
     def model_name(self):
@@ -525,14 +523,14 @@ class Chromecast:
 
     def __repr__(self):
         txt = "Chromecast({!r}, port={!r}, device={!r})".format(
-            self.host, self.port, self.device
+            self.socket_client.host, self.socket_client.port, self.device
         )
         return txt
 
     def __unicode__(self):
         return "Chromecast({}, {}, {}, {}, {})".format(
-            self.host,
-            self.port,
+            self.socket_client.host,
+            self.socket_client.port,
             self.device.friendly_name,
             self.device.model_name,
             self.device.manufacturer,
