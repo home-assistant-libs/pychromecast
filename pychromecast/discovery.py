@@ -68,6 +68,9 @@ class CastListener:
         """ Add or update a service. """
         service = None
         tries = 0
+        if name.endswith("_sub._googlecast._tcp.local."):
+            _LOGGER.debug("_add_update_service ignoring %s, %s", typ, name)
+            return
         while service is None and tries < 4:
             try:
                 service = zconf.get_service_info(typ, name)
@@ -78,7 +81,7 @@ class CastListener:
             tries += 1
 
         if not service:
-            _LOGGER.debug("add_service failed to add %s, %s", typ, name)
+            _LOGGER.debug("_add_update_service failed to add %s, %s", typ, name)
             return
 
         def get_value(key):
@@ -97,7 +100,9 @@ class CastListener:
         friendly_name = get_value("fn")
 
         if not uuid:
-            _LOGGER.debug("add_service failed to get uuid for %s, %s", typ, name)
+            _LOGGER.debug(
+                "_add_update_service failed to get uuid for %s, %s", typ, name
+            )
             return
         uuid = UUID(uuid)
 
@@ -151,7 +156,9 @@ def stop_discovery(browser):
     browser.zc.close()
 
 
-def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
+def discover_chromecasts(
+    max_devices=None, timeout=DISCOVER_TIMEOUT, zeroconf_instance=None
+):
     """
     Discover chromecasts on the network.
 
@@ -159,8 +166,10 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
       A list of chromecast services, or an empty list if no matching chromecasts were
       found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
+
+    :param zeroconf_instance: An existing zeroconf instance.
     """
     # pylint: disable=unused-argument
     def callback(uuid, name):
@@ -170,7 +179,7 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
 
     discover_complete = Event()
     listener = CastListener(callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
 
     # Wait for the timeout or the maximum number of devices
@@ -180,7 +189,10 @@ def discover_chromecasts(max_devices=None, timeout=DISCOVER_TIMEOUT):
 
 
 def discover_listed_chromecasts(
-    friendly_names=None, uuids=None, discovery_timeout=DISCOVER_TIMEOUT,
+    friendly_names=None,
+    uuids=None,
+    discovery_timeout=DISCOVER_TIMEOUT,
+    zeroconf_instance=None,
 ):
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -190,13 +202,14 @@ def discover_listed_chromecasts(
       A list of chromecast services matching the criteria,
       or an empty list if no matching chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
 
     :param friendly_names: A list of wanted friendly names
     :param uuids: A list of wanted uuids
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
+    :param zeroconf_instance: An existing zeroconf instance.
     """
 
     cc_list = {}
@@ -216,7 +229,7 @@ def discover_listed_chromecasts(
     discover_complete = Event()
 
     listener = CastListener(callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
 
     # Wait for the timeout or found all wanted devices

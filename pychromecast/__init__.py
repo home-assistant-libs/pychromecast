@@ -106,6 +106,7 @@ def get_listed_chromecasts(
     retry_wait=None,
     timeout=None,
     discovery_timeout=DISCOVER_TIMEOUT,
+    zeroconf_instance=None,
 ):
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -115,8 +116,8 @@ def get_listed_chromecasts(
       A list of Chromecast objects matching the criteria,
       or an empty list if no matching chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
 
     To only discover chromcast devices wihtout connecting to them, use
     discover_listed_chromecasts instead.
@@ -128,6 +129,7 @@ def get_listed_chromecasts(
     :param timeout: passed to get_chromecasts
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
+    :param zeroconf_instance: An existing zeroconf instance.
     """
 
     cc_list = {}
@@ -163,17 +165,22 @@ def get_listed_chromecasts(
     discover_complete = Event()
 
     listener = CastListener(callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
-    return (cc_list.values(), browser)
+    return (list(cc_list.values()), browser)
 
 
 # pylint: disable=too-many-locals
 def get_chromecasts(
-    tries=None, retry_wait=None, timeout=None, blocking=True, callback=None
+    tries=None,
+    retry_wait=None,
+    timeout=None,
+    blocking=True,
+    callback=None,
+    zeroconf_instance=None,
 ):
     """
     Searches the network for chromecast devices and creates a Chromecast object
@@ -183,8 +190,8 @@ def get_chromecasts(
       A list of Chromecast objects, or an empty list if no matching chromecasts were
       found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
 
     To only discover chromcast devices wihtout connecting to them, use
     discover_chromecasts instead.
@@ -204,6 +211,7 @@ def get_chromecasts(
                      and returns a function which can be executed to stop discovery.
     :param callback: Callback which is triggerd for each discovered chromecast when
                      blocking = False.
+    :param zeroconf_instance: An existing zeroconf instance.
     """
     if blocking:
         # Thread blocking chromecast discovery
@@ -244,7 +252,7 @@ def get_chromecasts(
             pass
 
     listener = CastListener(internal_callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
     return browser
 
