@@ -168,7 +168,7 @@ def discover_chromecasts(
       A service browser to keep the Chromecast mDNS data updated. When updates
       are (no longer) needed, pass the browser object to
       pychromecast.discovery.stop_discovery().
-      
+
     :param zeroconf_instance: An existing zeroconf instance.
     """
     # pylint: disable=unused-argument
