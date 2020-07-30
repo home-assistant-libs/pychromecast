@@ -15,6 +15,7 @@ import pychromecast
 from pychromecast.controllers.spotify import SpotifyController
 import spotify_token as st
 import spotipy
+import zeroconf
 
 CAST_NAME = "My Chromecast"
 
@@ -22,6 +23,7 @@ parser = argparse.ArgumentParser(
     description="Example on how to use the Spotify Controller."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument("--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true")
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
@@ -39,6 +41,9 @@ if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
     # Uncomment to enable http.client debug log
     # http_client.HTTPConnection.debuglevel = 1
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 cast = None

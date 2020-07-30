@@ -10,6 +10,7 @@ from time import sleep
 
 import pychromecast
 from pychromecast.controllers.yleareena import YleAreenaController
+import zeroconf
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ args = parser.parse_args()
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 
 def get_kaltura_id(program_id):
