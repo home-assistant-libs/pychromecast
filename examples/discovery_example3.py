@@ -12,6 +12,7 @@ import zeroconf
 
 parser = argparse.ArgumentParser(description="Example on how to receive updates on discovered chromecasts.")
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument("--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true")
 parser.add_argument(
     "--cast", help='Name of wanted cast device")', default=None
 )
@@ -22,6 +23,10 @@ args = parser.parse_args()
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+
 if args.cast is None and args.uuid is None :
     print("Need to supply `cast` or `uuid`")
     sys.exit(1)
