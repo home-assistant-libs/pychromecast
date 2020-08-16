@@ -79,10 +79,13 @@ class InterruptLoop(Exception):
     """ The chromecast has been manually stopped. """
 
 
-def _json_from_message(message):
-    """ Parses a PB2 message into JSON format. """
+def _dict_from_message(message):
+    """ Parses a PB2 message as a JSON dict. """
     try:
-        return json.loads(message.payload_utf8)
+        dict_data = json.loads(message.payload_utf8)
+        if not isinstance(dict_data, dict):
+            return {}
+        return dict_data
     except ValueError:
         logger = logging.getLogger(__name__)
         logger.warning(
@@ -96,7 +99,7 @@ def _json_from_message(message):
 def _message_to_string(message, data=None):
     """ Gives a string representation of a PB2 message. """
     if data is None:
-        data = _json_from_message(message)
+        data = _dict_from_message(message)
 
     return "Message {} from {} to {}: {}".format(
         message.namespace, message.source_id, message.destination_id, data
@@ -596,7 +599,7 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
             else:
-                data = _json_from_message(message)
+                data = _dict_from_message(message)
 
         if self.socketpair[0] in can_read:
             # Clear the socket's buffer
