@@ -79,17 +79,23 @@ class InterruptLoop(Exception):
     """ The chromecast has been manually stopped. """
 
 
-def _dict_from_message(message):
+def _dict_from_message_payload(message):
     """ Parses a PB2 message as a JSON dict. """
     try:
-        dict_data = json.loads(message.payload_utf8)
-        if not isinstance(dict_data, dict):
+        data = json.loads(message.payload_utf8)
+        if not isinstance(data, dict):
+            logger = logging.getLogger(__name__)
+            logger.info(
+                "Non dict json in namespace %s: '%s'",
+                message.namespace,
+                message.payload_utf8,
+            )
             return {}
-        return dict_data
+        return data
     except ValueError:
         logger = logging.getLogger(__name__)
-        logger.warning(
-            "Ignoring invalid json in namespace %s: %s",
+        logger.info(
+            "Invalid json in namespace %s: '%s'",
             message.namespace,
             message.payload_utf8,
         )
@@ -99,7 +105,7 @@ def _dict_from_message(message):
 def _message_to_string(message, data=None):
     """ Gives a string representation of a PB2 message. """
     if data is None:
-        data = _dict_from_message(message)
+        data = _dict_from_message_payload(message)
 
     return "Message {} from {} to {}: {}".format(
         message.namespace, message.source_id, message.destination_id, data
@@ -599,7 +605,7 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
             else:
-                data = _dict_from_message(message)
+                data = _dict_from_message_payload(message)
 
         if self.socketpair[0] in can_read:
             # Clear the socket's buffer
@@ -678,7 +684,7 @@ class SocketClient(threading.Thread):
             return False
         return True
 
-    def _route_message(self, message, data):
+    def _route_message(self, message, data: dict):
         """ Route message to any handlers on the message namespace """
         # route message to handlers
         if message.namespace in self._handlers:
@@ -1009,8 +1015,12 @@ class ConnectionController(BaseController):
     def __init__(self):
         super(ConnectionController, self).__init__(NS_CONNECTION)
 
-    def receive_message(self, message, data):
-        """ Called when a connection message is received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if self._socket_client.is_stopped:
             return True
 
@@ -1034,8 +1044,12 @@ class HeartbeatController(BaseController):
         self.last_ping = 0
         self.last_pong = time.time()
 
-    def receive_message(self, message, data):
-        """ Called when a heartbeat message is received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a heartbeat message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if self._socket_client.is_stopped:
             return True
 
@@ -1113,8 +1127,12 @@ class ReceiverController(BaseController):
         """ Convenience method to retrieve current app id. """
         return self.status.app_id if self.status else None
 
-    def receive_message(self, message, data):
-        """ Called when a receiver-message has been received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a receiver message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 

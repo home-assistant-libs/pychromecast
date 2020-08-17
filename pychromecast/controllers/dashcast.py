@@ -19,7 +19,7 @@ class DashCastController(BaseController):
 
     # pylint: enable=useless-super-delegation
 
-    def receive_message(self, message, data):
+    def receive_message(self, message, data: dict):
         """
         Called when a load complete message is received.
 

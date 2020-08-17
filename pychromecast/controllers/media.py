@@ -330,7 +330,7 @@ class MediaController(BaseController):
         self.status = MediaStatus()
         self._fire_status_changed()
 
-    def receive_message(self, message, data):
+    def receive_message(self, message, data: dict):
         """ Called when a media message is received. """
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)

@@ -94,10 +94,11 @@ class BaseController:
         self._message_func(self.namespace, data, inc_session_id, callback_function)
 
     # pylint: disable=unused-argument,no-self-use
-    def receive_message(self, message, data):
+    def receive_message(self, message, data: dict):
         """
         Called when a message is received that matches the namespace.
         Returns boolean indicating if message was handled.
+        data is message.payload_utf8 interpreted as a JSON dict.
         """
         return False
 
