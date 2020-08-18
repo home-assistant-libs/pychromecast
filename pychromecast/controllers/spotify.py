@@ -40,8 +40,12 @@ class SpotifyController(BaseController):
     # pylint: enable=useless-super-delegation
 
     # pylint: disable=unused-argument,no-self-use
-    def receive_message(self, message, data):
-        """ Handle the auth flow and active player selection """
+    def receive_message(self, message, data: dict):
+        """
+        Handle the auth flow and active player selection.
+
+        Called when a message is received.
+        """
         if data["type"] == TYPE_SET_CREDENTIALS_RESPONSE:
             self.send_message({"type": TYPE_GET_INFO, "payload": {}})
         if data["type"] == TYPE_SET_CREDENTIALS_ERROR:

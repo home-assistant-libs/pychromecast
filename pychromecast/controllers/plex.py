@@ -225,8 +225,8 @@ class PlexController(BaseController):
         """Called when media channel is connected. Will update status."""
         self.update_status()
 
-    def receive_message(self, message, data):
-        """Called when a messag from plex to our controller is received.
+    def receive_message(self, message, data: dict):
+        """Called when a message from plex to our controller is received.
 
         I havnt seen any message for ut but lets keep for for now, the
         tests i have done is minimal.
@@ -234,7 +234,7 @@ class PlexController(BaseController):
 
         Args:
             message (dict): Description
-            data (dict): Description
+            data (dict): message.payload_utf8 interpreted as a JSON dict
 
         Returns:
             bool: True if the message is handled, False if not.
