@@ -85,7 +85,7 @@ def _dict_from_message_payload(message):
         data = json.loads(message.payload_utf8)
         if not isinstance(data, dict):
             logger = logging.getLogger(__name__)
-            logger.info(
+            logger.debug(
                 "Non dict json in namespace %s: '%s'",
                 message.namespace,
                 message.payload_utf8,
@@ -94,7 +94,7 @@ def _dict_from_message_payload(message):
         return data
     except ValueError:
         logger = logging.getLogger(__name__)
-        logger.info(
+        logger.debug(
             "Invalid json in namespace %s: '%s'",
             message.namespace,
             message.payload_utf8,
