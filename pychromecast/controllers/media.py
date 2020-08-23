@@ -499,6 +499,7 @@ class MediaController(BaseController):
         subtitles_lang="en-US",
         subtitles_mime="text/vtt",
         subtitle_id=1,
+        enqueue=False,
     ):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -518,6 +519,7 @@ class MediaController(BaseController):
         subtitles_lang: str - language for subtitles.
         subtitles_mime: str - mimetype of subtitles.
         subtitle_id: int - id of subtitle to be loaded.
+        enqueue: bool - if True, enqueue the media instead of play it.
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
@@ -541,6 +543,7 @@ class MediaController(BaseController):
                 subtitles_lang,
                 subtitles_mime,
                 subtitle_id,
+                enqueue,
             )
 
         receiver_ctrl = self._socket_client.receiver_controller
@@ -560,31 +563,26 @@ class MediaController(BaseController):
         subtitles_lang="en-US",
         subtitles_mime="text/vtt",
         subtitle_id=1,
+        enqueue=False,
     ):
         # pylint: disable=too-many-locals
-        msg = {
-            "media": {
-                "contentId": url,
-                "streamType": stream_type,
-                "contentType": content_type,
-                "metadata": metadata or {},
-            },
-            MESSAGE_TYPE: TYPE_LOAD,
-            "currentTime": current_time,
-            "autoplay": autoplay,
-            "customData": {},
+        media = {
+            "contentId": url,
+            "streamType": stream_type,
+            "contentType": content_type,
+            "metadata": metadata or {},
         }
 
         if title:
-            msg["media"]["metadata"]["title"] = title
+            media["metadata"]["title"] = title
 
         if thumb:
-            msg["media"]["metadata"]["thumb"] = thumb
+            media["metadata"]["thumb"] = thumb
 
-            if "images" not in msg["media"]["metadata"]:
-                msg["media"]["metadata"]["images"] = []
+            if "images" not in media["metadata"]:
+                media["metadata"]["images"] = []
 
-            msg["media"]["metadata"]["images"].append({"url": thumb})
+            media["metadata"]["images"].append({"url": thumb})
         if subtitles:
             sub_msg = [
                 {
@@ -597,141 +595,38 @@ class MediaController(BaseController):
                     "name": "{} - {} Subtitle".format(subtitles_lang, subtitle_id),
                 }
             ]
-            msg["media"]["tracks"] = sub_msg
-            msg["media"]["textTrackStyle"] = {
+            media["tracks"] = sub_msg
+            media["textTrackStyle"] = {
                 "backgroundColor": "#FFFFFF00",
                 "edgeType": "OUTLINE",
                 "edgeColor": "#000000FF",
             }
-            msg["activeTrackIds"] = [subtitle_id]
-        self.send_message(msg, inc_session_id=True)
 
-    def queue_media(
-        self,
-        url,
-        content_type,
-        title=None,
-        thumb=None,
-        current_time=0,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-    ):
-        """
-        Queue media on the Chromecast.
+        if enqueue:
+            msg = {
+                "mediaSessionId": self.status.media_session_id,
+                "items": [
+                    {
+                        "media": media,
+                        "autoplay": True,
+                        "startTime": 0,
+                        "preloadTime": 0,
+                    }
+                ],
+                MESSAGE_TYPE: TYPE_QUEUE_INSERT,
+            }
+        else:
+            msg = {
+                "media": media,
+                MESSAGE_TYPE: TYPE_LOAD,
+            }
+        msg["currentTime"] = current_time
+        msg["autoplay"] = autoplay
+        msg["customData"] = {}
 
-        Parameters:
-        url: str - url of the media.
-        content_type: str - mime type. Example: 'video/mp4'.
-        title: str - title of the media.
-        thumb: str - thumbnail image url.
-        current_time: float - seconds from the beginning of the media
-            to start playback.
-        autoplay: bool - whether the media will automatically play.
-        stream_type: str - describes the type of media artifact as one of the
-            following: "NONE", "BUFFERED", "LIVE".
-        subtitles: str - url of subtitle file to be shown on chromecast.
-        subtitles_lang: str - language for subtitles.
-        subtitles_mime: str - mimetype of subtitles.
-        subtitle_id: int - id of subtitle to be loaded.
-        metadata: dict - media metadata object, one of the following:
-            GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
-            MusicTrackMediaMetadata, PhotoMediaMetadata.
-
-        Docs:
-        https://developers.google.com/cast/docs/reference/messages#MediaData
-        """
-        # pylint: disable=too-many-locals
-        def app_launched_callback():
-            """Plays media after chromecast has switched to requested app."""
-            self._send_queue_media(
-                url,
-                content_type,
-                title,
-                thumb,
-                current_time,
-                autoplay,
-                stream_type,
-                metadata,
-                subtitles,
-                subtitles_lang,
-                subtitles_mime,
-                subtitle_id,
-            )
-
-        receiver_ctrl = self._socket_client.receiver_controller
-        receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
-
-    def _send_queue_media(
-        self,
-        url,
-        content_type,
-        title=None,
-        thumb=None,
-        current_time=0,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-    ):
-        # pylint: disable=too-many-locals
-        msg = {
-            "mediaSessionId": self.status.media_session_id,
-            "items": [
-                {
-                    "media": {
-                        "contentId": url,
-                        "streamType": stream_type,
-                        "contentType": content_type,
-                        "metadata": metadata or {},
-                    },
-                    "autoplay": True,
-                    "startTime": 0,
-                    "preloadTime": 0,
-                }
-            ],
-            MESSAGE_TYPE: TYPE_QUEUE_INSERT,
-            "currentTime": current_time,
-            "autoplay": autoplay,
-            "customData": {},
-        }
-
-        if title:
-            msg["items"][0]["media"]["metadata"]["title"] = title
-
-        if thumb:
-            msg["items"][0]["media"]["metadata"]["thumb"] = thumb
-
-            if "images" not in msg["items"][0]["media"]["metadata"]:
-                msg["items"][0]["media"]["metadata"]["images"] = []
-
-            msg["items"][0]["media"]["metadata"]["images"].append({"url": thumb})
         if subtitles:
-            sub_msg = [
-                {
-                    "trackId": subtitle_id,
-                    "trackContentId": subtitles,
-                    "language": subtitles_lang,
-                    "subtype": "SUBTITLES",
-                    "type": "TEXT",
-                    "trackContentType": subtitles_mime,
-                    "name": "{} - {} Subtitle".format(subtitles_lang, subtitle_id),
-                }
-            ]
-            msg["items"][0]["media"]["tracks"] = sub_msg
-            msg["items"][0]["media"]["textTrackStyle"] = {
-                "backgroundColor": "#FFFFFF00",
-                "edgeType": "OUTLINE",
-                "edgeColor": "#000000FF",
-            }
             msg["activeTrackIds"] = [subtitle_id]
+
         self.send_message(msg, inc_session_id=True)
 
     def tear_down(self):
