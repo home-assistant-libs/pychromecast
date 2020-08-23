@@ -1,5 +1,5 @@
 """
-Example on how to use the Media Controller
+Example on how to use queuing with Media Controller
 
 """
 
@@ -12,13 +12,13 @@ import pychromecast
 import zeroconf
 
 # Change to the friendly name of your Chromecast
-CAST_NAME = "Living Room speaker"
+CAST_NAME = "Living Room"
 
 # Change to an audio or video url
 MEDIA_URLS = [
     "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/llnws/bbc_radio_fourfm.mpd",
     "https://www.bensound.com/bensound-music/bensound-jazzyfrenchy.mp3",
-    "https://incompetech.com/music/royalty-free/mp3-royaltyfree/The%20Sky%20of%20our%20Ancestors.mp3"
+    "https://audio.guim.co.uk/2020/08/14-65292-200817TIFXR.mp3",
 ]
 
 
@@ -26,7 +26,9 @@ parser = argparse.ArgumentParser(
     description="Example on how to use the Media Controller with a queue."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument("--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
@@ -44,6 +46,7 @@ if not chromecasts:
     sys.exit(1)
 
 cast = chromecasts[0]
+
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
 print('Found chromecast with name "{}"'.format(args.cast))
@@ -51,15 +54,18 @@ print('Found chromecast with name "{}"'.format(args.cast))
 cast.media_controller.play_media(MEDIA_URLS[0], "audio/mp3")
 
 # Wait for Chromecast to start playing
-while (cast.media_controller.status.player_state != "PLAYING"):
+while cast.media_controller.status.player_state != "PLAYING":
     time.sleep(0.1)
 
 # Queue next items
 for URL in MEDIA_URLS[1:]:
-    cast.media_controller.queue_media(URL, "audio/mp3")
+    print("Enqueuing...")
+    cast.media_controller.play_media(URL, "audio/mp3", enqueue=True)
+
 
 for URL in MEDIA_URLS[1:]:
     time.sleep(5)
+    print("Skipping...")
     cast.media_controller.queue_next()
 
 # Shut down discovery
