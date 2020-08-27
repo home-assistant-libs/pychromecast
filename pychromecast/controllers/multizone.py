@@ -118,16 +118,16 @@ class MultizoneManager:
             member["groups"].discard(group_uuid)
 
     def register_listener(self, member_uuid, listener):
-        """ Register a listener for audio group changes of cast uuid.
-            On update will call:
-            listener.added_to_multizone(group_uuid)
-                The cast has been added to group uuid
-            listener.removed_from_multizone(group_uuid)
-                The cast has been removed from group uuid
-            listener.multizone_new_media_status(group_uuid, media_status)
-                The group uuid, of which the cast is a member, has new status
-            listener.multizone_new_cast_status(group_uuid, cast_status)
-                The group uuid, of which the cast is a member, has new status
+        """Register a listener for audio group changes of cast uuid.
+        On update will call:
+        listener.added_to_multizone(group_uuid)
+            The cast has been added to group uuid
+        listener.removed_from_multizone(group_uuid)
+            The cast has been removed from group uuid
+        listener.multizone_new_media_status(group_uuid, media_status)
+            The group uuid, of which the cast is a member, has new status
+        listener.multizone_new_cast_status(group_uuid, cast_status)
+            The group uuid, of which the cast is a member, has new status
         """
         member_uuid = str(member_uuid)
         if member_uuid not in self._casts:
@@ -139,8 +139,7 @@ class MultizoneManager:
         self._casts[str(member_uuid)]["listeners"].remove(listener)
 
     def get_multizone_memberships(self, member_uuid):
-        """ Return a list of audio groups in which cast member_uuid is a member
-        """
+        """Return a list of audio groups in which cast member_uuid is a member"""
         return list(self._casts[str(member_uuid)]["groups"])
 
     def get_multizone_mediacontroller(self, group_uuid):
@@ -185,10 +184,10 @@ class MultizoneController(BaseController):
             listener.multizone_member_removed(uuid)
 
     def register_listener(self, listener):
-        """ Register a listener for audio group changes. On update will call:
-            listener.multizone_member_added(uuid)
-            listener.multizone_member_removed(uuid)
-            listener.multizone_status_received()
+        """Register a listener for audio group changes. On update will call:
+        listener.multizone_member_added(uuid)
+        listener.multizone_member_removed(uuid)
+        listener.multizone_status_received()
         """
         self._status_listeners.append(listener)
 

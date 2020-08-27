@@ -299,7 +299,7 @@ class PlexController(BaseController):
         )  # noqa: 501
 
     def volume_up(self, delta=0.1):
-        """ Increment volume by 0.1 (or delta) unless it is already maxed.
+        """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
         """
         if delta <= 0:
@@ -309,7 +309,7 @@ class PlexController(BaseController):
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
-        """ Decrement the volume by 0.1 (or delta) unless it is already 0.
+        """Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
         if delta <= 0:
@@ -410,14 +410,14 @@ class PlexController(BaseController):
     def block_until_playing(self, media=None, timeout=None, **kwargs):
         """Block until this playing, typically usefull in a script
 
-           another way to the the same is the check if the
-           controllers is_active or use self.status.player_state
+        another way to the the same is the check if the
+        controllers is_active or use self.status.player_state
 
-           Args:
-            media (None, optional): Can also be :class:`~plexapi.base.Playable
-                                   if its not, you need to fill out all the kwargs.
-            timeout (None, int): default None
-            **kwargs: See media_to_chromecast_command docs string.
+        Args:
+         media (None, optional): Can also be :class:`~plexapi.base.Playable
+                                if its not, you need to fill out all the kwargs.
+         timeout (None, int): default None
+         **kwargs: See media_to_chromecast_command docs string.
 
         """  # noqa
         # Incase media isnt playing

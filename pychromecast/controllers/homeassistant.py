@@ -42,8 +42,8 @@ class HomeAssistantController(BaseController):
         )
 
     def channel_connected(self):
-        """ Called when a channel has been openend that supports the
-            namespace of this controller. """
+        """Called when a channel has been openend that supports the
+        namespace of this controller."""
         self.get_status()
 
     def channel_disconnected(self):

@@ -142,7 +142,9 @@ def start_discovery(listener, zeroconf_instance):
     instance is passed, a new instance will be created.
     """
     return zeroconf.ServiceBrowser(
-        zeroconf_instance, "_googlecast._tcp.local.", listener,
+        zeroconf_instance,
+        "_googlecast._tcp.local.",
+        listener,
     )
 
 

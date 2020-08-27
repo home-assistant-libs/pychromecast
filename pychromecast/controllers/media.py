@@ -340,8 +340,8 @@ class MediaController(BaseController):
         return False
 
     def register_status_listener(self, listener):
-        """ Register a listener for new media statuses. A new status will
-            call listener.new_media_status(status) """
+        """Register a listener for new media statuses. A new status will
+        call listener.new_media_status(status)"""
         self._status_listeners.append(listener)
 
     def update_status(self, callback_function_param=False):
@@ -364,32 +364,32 @@ class MediaController(BaseController):
 
     @property
     def is_playing(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_playing.
-            Returns if the Chromecast is playing. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
+        Returns if the Chromecast is playing."""
         return self.status is not None and self.status.player_is_playing
 
     @property
     def is_paused(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_paused.
-            Returns if the Chromecast is paused. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
+        Returns if the Chromecast is paused."""
         return self.status is not None and self.status.player_is_paused
 
     @property
     def is_idle(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_idle.
-            Returns if the Chromecast is idle on a media supported app. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
+        Returns if the Chromecast is idle on a media supported app."""
         return self.status is not None and self.status.player_is_idle
 
     @property
     def title(self):
-        """ Deprecated as of June 8, 2015. Use self.status.title.
-            Return title of the current playing item. """
+        """Deprecated as of June 8, 2015. Use self.status.title.
+        Return title of the current playing item."""
         return None if not self.status else self.status.title
 
     @property
     def thumbnail(self):
-        """ Deprecated as of June 8, 2015. Use self.status.images.
-            Return thumbnail url of current playing item. """
+        """Deprecated as of June 8, 2015. Use self.status.images.
+        Return thumbnail url of current playing item."""
         if not self.status:
             return None
 
