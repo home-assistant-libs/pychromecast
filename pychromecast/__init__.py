@@ -447,7 +447,7 @@ class Chromecast:
         self.socket_client.receiver_controller.stop_app()
 
     def volume_up(self, delta=0.1):
-        """ Increment volume by 0.1 (or delta) unless it is already maxed.
+        """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
 
         """
@@ -458,7 +458,7 @@ class Chromecast:
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
-        """ Decrement the volume by 0.1 (or delta) unless it is already 0.
+        """Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
         if delta <= 0:
@@ -486,9 +486,9 @@ class Chromecast:
         self.status_event.wait(timeout=timeout)
 
     def connect(self):
-        """ Connect to the chromecast.
+        """Connect to the chromecast.
 
-            Must only be called if the worker thread will not be started.
+        Must only be called if the worker thread will not be started.
         """
         self.socket_client.connect()
 

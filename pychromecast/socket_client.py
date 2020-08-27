@@ -108,7 +108,10 @@ def _message_to_string(message, data=None):
         data = _dict_from_message_payload(message)
 
     return "Message {} from {} to {}: {}".format(
-        message.namespace, message.source_id, message.destination_id, data
+        message.namespace,
+        message.source_id,
+        message.destination_id,
+        data or message.payload_utf8,
     )
 
 
@@ -449,9 +452,9 @@ class SocketClient(threading.Thread):
         raise ChromecastConnectionError("Failed to connect")
 
     def connect(self):
-        """ Connect socket connection to Chromecast device.
+        """Connect socket connection to Chromecast device.
 
-            Must only be called if the worker thread will not be started.
+        Must only be called if the worker thread will not be started.
         """
         try:
             self.initialize_connection()
@@ -947,9 +950,9 @@ class SocketClient(threading.Thread):
         )
 
     def register_connection_listener(self, listener):
-        """ Register a connection listener for when the socket connection
-            changes. Listeners will be called with
-            listener.new_connection_status(status) """
+        """Register a connection listener for when the socket connection
+        changes. Listeners will be called with
+        listener.new_connection_status(status)"""
         self._connection_listeners.append(listener)
 
     def _ensure_channel_connected(self, destination_id):
@@ -1146,15 +1149,15 @@ class ReceiverController(BaseController):
         return False
 
     def register_status_listener(self, listener):
-        """ Register a status listener for when a new Chromecast status
-            has been received. Listeners will be called with
-            listener.new_cast_status(status) """
+        """Register a status listener for when a new Chromecast status
+        has been received. Listeners will be called with
+        listener.new_cast_status(status)"""
         self._status_listeners.append(listener)
 
     def register_launch_error_listener(self, listener):
-        """ Register a listener for when a new launch error message
-            has been received. Listeners will be called with
-            listener.new_launch_error(launch_failure) """
+        """Register a listener for when a new launch error message
+        has been received. Listeners will be called with
+        listener.new_launch_error(launch_failure)"""
         self._launch_error_listeners.append(listener)
 
     def update_status(self, callback_function_param=False):
@@ -1165,10 +1168,10 @@ class ReceiverController(BaseController):
         )
 
     def launch_app(self, app_id, force_launch=False, callback_function=False):
-        """ Launches an app on the Chromecast.
+        """Launches an app on the Chromecast.
 
-            Will only launch if it is not currently running unless
-            force_launch=True. """
+        Will only launch if it is not currently running unless
+        force_launch=True."""
 
         if not force_launch and self.status is None:
             self.update_status(
@@ -1204,7 +1207,7 @@ class ReceiverController(BaseController):
         )
 
     def set_volume(self, volume):
-        """ Allows to set volume. Should be value between 0..1.
+        """Allows to set volume. Should be value between 0..1.
         Returns the new volume.
 
         """
