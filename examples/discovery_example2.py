@@ -3,7 +3,6 @@ Example that shows how to list available chromecasts.
 """
 import argparse
 import logging
-import time
 
 import pychromecast
 import zeroconf
@@ -26,4 +25,3 @@ pychromecast.stop_discovery(browser)
 print(f"Discovered {len(devices)} device(s):")
 for device in devices:
     print(f"  {device}")
-    

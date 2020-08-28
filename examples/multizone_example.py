@@ -53,7 +53,7 @@ class mzlistener:
         print("Members: {}".format(mz.members))
 
 
-chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)

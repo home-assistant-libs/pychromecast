@@ -19,22 +19,27 @@ if args.show_zeroconf_debug:
     print("Zeroconf version: " + zeroconf.__version__)
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
+
 def list_devices():
     print("Currently known cast devices:")
     for uuid, service in listener.services.items():
         print("  {} {}".format(uuid, service))
 
+
 def add_callback(uuid, name):
     print("Found mDNS service for cast device {}".format(uuid))
     list_devices()
+
 
 def remove_callback(uuid, name, service):
     print("Lost mDNS service for cast device {} {}".format(uuid, service))
     list_devices()
 
+
 def update_callback(uuid, name):
     print("Updated mDNS service for cast device {}".format(uuid))
     list_devices()
+
 
 listener = pychromecast.CastListener(add_callback, remove_callback, update_callback)
 zconf = zeroconf.Zeroconf()

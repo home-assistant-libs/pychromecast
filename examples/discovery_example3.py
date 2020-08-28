@@ -4,7 +4,6 @@ Example that shows how to list chromecasts matching on name or uuid.
 import argparse
 import logging
 import sys
-import time
 from uuid import UUID
 
 import pychromecast
@@ -40,11 +39,9 @@ if args.uuid:
     uuids.append(UUID(args.uuid))
 
 devices, browser = pychromecast.discovery.discover_listed_chromecasts(friendly_names=friendly_names, uuids=uuids)
-#devices, browser = pychromecast.get_listed_chromecasts(friendly_names=friendly_names, uuids=uuids)
 # Shut down discovery
 pychromecast.stop_discovery(browser)
 
 print(f"Discovered {len(devices)} device(s):")
 for device in devices:
     print(f"  {device}")
-    

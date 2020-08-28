@@ -4,6 +4,7 @@ Example on how to use the Supla Controller
 """
 import logging
 import requests
+import sys
 from bs4 import BeautifulSoup
 
 import pychromecast

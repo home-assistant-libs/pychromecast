@@ -65,6 +65,7 @@ def get_kaltura_id(program_id):
 
     return info.media_id.split('-')[-1]
 
+
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))

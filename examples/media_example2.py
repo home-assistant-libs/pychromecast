@@ -43,7 +43,7 @@ if args.show_zeroconf_debug:
     print("Zeroconf version: " + zeroconf.__version__)
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
-chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
