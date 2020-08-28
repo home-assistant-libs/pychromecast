@@ -24,7 +24,9 @@ parser = argparse.ArgumentParser(
     description="Example on how to use the Youtube Controller."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument("--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
