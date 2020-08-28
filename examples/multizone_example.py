@@ -19,7 +19,9 @@ parser = argparse.ArgumentParser(
     description="Example on how to use the Multizone Controller to track groupp members."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument("--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
 parser.add_argument(
     "--cast", help='Name of speaker group (default: "%(default)s")', default=CAST_NAME
 )
@@ -53,7 +55,7 @@ class mzlistener:
         print("Members: {}".format(mz.members))
 
 
-chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
