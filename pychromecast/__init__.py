@@ -237,6 +237,7 @@ def get_chromecasts(
         raise ValueError("Nonblocking discovery requires a callback function.")
 
     known_uuids = set()
+    
     def internal_callback(uuid, name):  # pylint: disable=unused-argument
         """Called when zeroconf has discovered a new chromecast."""
         if uuid in known_uuids:
