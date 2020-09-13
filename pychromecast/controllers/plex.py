@@ -83,8 +83,9 @@ def media_to_chromecast_command(
         username (None): Username of the user that started playback.
         autoplay (bool): Auto play after the video is done.
         currentTime (int): Set playback from this time. default 0
-        startItem (:class:`~plexapi.media.Media`, optional): Media item in PlayQueue where playback should begin.
         version (str): PMS version. Default 1.10.1.4602
+        startItem (:class:`~plexapi.media.Media`, optional): Media item in PlayQueue where playback should begin.
+                                                             Overrides startItem of existing playQueues.
         **kwargs: To allow overrides, this will be merged with the rest of the msg.
 
     Returns:
