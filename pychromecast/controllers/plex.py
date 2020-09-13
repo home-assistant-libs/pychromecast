@@ -42,7 +42,7 @@ def media_to_chromecast_command(
     transcoderVideoRemuxOnly=False,
     transcoderAudio=True,
     isVerifiedHostname=True,
-    contentType=("video/mp4"),
+    contentType="video",
     myPlexSubscription=True,
     contentId=None,
     streamType=STREAM_TYPE_BUFFERED,
@@ -52,7 +52,9 @@ def media_to_chromecast_command(
     username=None,
     autoplay=True,
     currentTime=0,
+    playQueue=None,
     playQueueID=None,
+    startItem=None,
     version="1.10.1.4602",
     **kwargs
 ):  # noqa: 501 pylint: disable=invalid-name, too-many-arguments, too-many-locals, protected-access, redefined-builtin
@@ -74,13 +76,14 @@ def media_to_chromecast_command(
         isVerifiedHostname (bool): Default True
         contentType (str): default ('video/mp4'), ('audio/mp3') if audio
         myPlexSubscription (bool): Has the user a plexpass
-        contentId (str): They key chromecast use to start playback.
+        contentType (str): Default 'video', 'audio'
         streamType (str): Default BUFFERED, LIVE
         port (int): pms port
         address (str): pms host, without scheme
         username (None): user name of the person that start the playback.
         autoplay (bool): Auto play after the video is done.
         currentTime (int): Set playback from this time. default 0
+        startItem (:class:`~plexapi.media.Media`, optional): Media item in PlayQueue where playback should begin.
         version (str): pms version. Default 1.10.1.4602
         **kwargs: To allow overrides, this will be merged with the rest of the msg.
 
@@ -89,20 +92,22 @@ def media_to_chromecast_command(
     """  # noqa
 
     if media is not None:
-        # Let set som params for the user if they use plexapi.
-        server_url = urlparse(media._server._baseurl)
-        contentType = (
-            ("video/mp4") if media.TYPE in ("movie", "episode") else ("audio/mp3")
-        )
+        # Lets set some params for the user if they use plexapi.
+        server = media[0]._server if isinstance(media, list) else media._server
+        server_url = urlparse(server._baseurl)
         protocol = server_url.scheme
         address = server_url.hostname
         port = server_url.port
-        machineIdentifier = media._server.machineIdentifier
-        playQueueID = media._server.createPlayQueue(media).playQueueID
-        token = media._server._token
-        username = media._server.myPlexUsername
-        myPlexSubscription = media._server.myPlexSubscription
-        contentId = media.key
+        machineIdentifier = server.machineIdentifier
+        token = server._token
+        username = server.myPlexUsername
+        myPlexSubscription = server.myPlexSubscription
+        media = media.items if getattr(media, "TYPE", None) == "playqueue" else media
+        playQueue = server.createPlayQueue(media, startItem=startItem)
+        playQueueID = playQueue.playQueueID
+        contentId = playQueue.selectedItem.key
+        contentType = playQueue.playQueueType
+        version = server.version
 
     # Lets see if this helps
     # chrome cast seems to start playback
