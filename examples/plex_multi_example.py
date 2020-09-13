@@ -93,6 +93,11 @@ def media_info(media, items):
     print(f"Media Items: {items}")
 
 
+def start_item_info(media):
+    if args.startitem:
+        print(f"Starting From: {media}")
+
+
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 cast = next((cc for cc in chromecasts if cc.name == args.cast), None)
 
@@ -124,8 +129,7 @@ elif args.demo == "list":
     startItem = libraryItems[1] if args.startitem else None
     # Print info
     media_info(libraryItems, libraryItems)
-    if args.startitem:
-        print(f"Starting From: {libraryItems[1]}")
+    start_item_info(libraryItems[1])
 elif args.demo == "playqueue":
     # Convert list into a playqueue for media.
     media = plex_server.createPlayQueue(libraryItems)
@@ -133,8 +137,7 @@ elif args.demo == "playqueue":
     startItem = libraryItems[2] if args.startitem else None
     # Print info
     media_info(media, media.items)
-    if args.startitem:
-        print(f"Starting From: {libraryItems[2]}")
+    start_item_info(libraryItems[2])
 elif args.demo == "playlist":
     # Convert list into a playlist for media.
     media = plex_server.createPlaylist("pychromecast test playlist", libraryItems)
@@ -142,8 +145,7 @@ elif args.demo == "playlist":
     startItem = libraryItems[3] if args.startitem else None
     # Print info
     media_info(media, media.items())
-    if args.startitem:
-        print(f"Starting From: {libraryItems[2]}")
+    start_item_info(libraryItems[2])
 
 plex_c = PlexController()
 cast.register_handler(plex_c)
