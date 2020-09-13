@@ -303,24 +303,25 @@ class PlexController(BaseController):
             float(percent / 100)
         )  # noqa: 501
 
+    def volume_error(delta):
+        """Raise error if volume isn't >= 0."""
+        if delta <= 0:
+            raise ValueError(
+                "Volume delta must be greater than zero, not {}.".format(delta)
+            )
+
     def volume_up(self, delta=0.1):
         """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
         """
-        if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+        volume_error(delta)
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
         """Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
-        if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+        volume_error(delta)
         return self.set_volume(self.status.volume_level - delta)
 
     def mute(self, status=None):
@@ -374,12 +375,10 @@ class PlexController(BaseController):
             offset_now = self.status.adjusted_current_time
             msg = deepcopy(self._last_play_msg)
 
-            if offset is None:
-                msg["media"]["customData"]["offset"] = offset_now
-                msg["current_time"] = offset_now
-            else:
-                msg["media"]["customData"]["offset"] = offset
-                msg["current_time"] = offset_now
+            msg["media"]["customData"]["offset"] = (
+                offset_now if offset is None else offset
+            )
+            msg["current_time"] = offset_now
 
             self._send_cmd(
                 msg,
