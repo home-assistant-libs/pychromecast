@@ -85,7 +85,7 @@ def media_to_chromecast_command(
         currentTime (int): Set playback from this time. default 0
         version (str): PMS version. Default 1.10.1.4602
         startItem (:class:`~plexapi.media.Media`, optional): Media item in list/playlist/playqueue where playback should
-                                                             start. Overrides startItem if already set in playQueues.
+                                                             start. Overrides existing startItem for playqueues if set.
         **kwargs: To allow overrides, this will be merged with the rest of the msg.
 
     Returns:
@@ -103,7 +103,11 @@ def media_to_chromecast_command(
         token = server._token
         username = server.myPlexUsername
         myPlexSubscription = server.myPlexSubscription
-        media = media.items if getattr(media, "TYPE", None) == "playqueue" else media
+
+        if getattr(media, "TYPE", None) == "playqueue":
+            startItem = startItem or media.selectedItem
+            media = media.items
+
         playQueue = server.createPlayQueue(media, startItem=startItem)
         playQueueID = playQueue.playQueueID
         contentId = playQueue.selectedItem.key
