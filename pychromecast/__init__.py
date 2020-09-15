@@ -119,7 +119,7 @@ def get_listed_chromecasts(
       are (no longer) needed, pass the browser object to
       pychromecast.discovery.stop_discovery().
 
-    To only discover chromcast devices wihtout connecting to them, use
+    To only discover chromecast devices without connecting to them, use
     discover_listed_chromecasts instead.
 
     :param friendly_names: A list of wanted friendly names
@@ -193,14 +193,14 @@ def get_chromecasts(
       are (no longer) needed, pass the browser object to
       pychromecast.discovery.stop_discovery().
 
-    To only discover chromcast devices wihtout connecting to them, use
+    To only discover chromecast devices without connecting to them, use
     discover_chromecasts instead.
 
     Parameters tries, timeout, retry_wait and blocking_app_launch controls the
     behavior of the created Chromecast instances.
 
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -209,7 +209,7 @@ def get_chromecasts(
     :param blocking: If True, returns a list of discovered chromecast devices.
                      If False, triggers a callback for each discovered chromecast,
                      and returns a function which can be executed to stop discovery.
-    :param callback: Callback which is triggerd for each discovered chromecast when
+    :param callback: Callback which is triggered for each discovered chromecast when
                      blocking = False.
     :param zeroconf_instance: An existing zeroconf instance.
     """
@@ -274,7 +274,7 @@ class Chromecast:
     :param device: DeviceStatus with initial information for the device.
     :type device: pychromecast.dial.DeviceStatus
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to

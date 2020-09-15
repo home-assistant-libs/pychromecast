@@ -174,7 +174,7 @@ class SocketClient(threading.Thread):
     :param cast_type: The type of chromecast to connect to, see
                       dial.CAST_TYPE_* for types.
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
