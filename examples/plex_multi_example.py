@@ -107,11 +107,7 @@ if not cast:
     print(f"Chromecasts found: {foundCasts}")
     sys.exit(1)
 
-try:
-    plex_server = PlexServer(args.url, args.token)
-except:
-    print("Unable to connect to Plex Server.")
-    sys.exit(1)
+plex_server = PlexServer(args.url, args.token)
 
 # Create a list of 5 items from the selected library.
 libraryItems = plex_server.library.search(
