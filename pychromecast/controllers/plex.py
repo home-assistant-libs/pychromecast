@@ -305,25 +305,24 @@ class PlexController(BaseController):
             float(percent / 100)
         )  # noqa: 501
 
-    def volume_error(delta):
-        """Raise error if volume isn't >= 0."""
-        if delta <= 0:
-            raise ValueError(
-                "Volume delta must be greater than zero, not {}.".format(delta)
-            )
-
     def volume_up(self, delta=0.1):
         """Increment volume by 0.1 (or delta) unless at max.
         Returns the new volume.
         """
-        volume_error(delta)
+        if delta <= 0:
+            raise ValueError(
+                "volume delta must be greater than zero, not {}".format(delta)
+            )
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
         """Decrement the volume by 0.1 (or delta) unless at 0.
         Returns the new volume.
         """
-        volume_error(delta)
+        if delta <= 0:
+            raise ValueError(
+                "volume delta must be greater than zero, not {}".format(delta)
+            )
         return self.set_volume(self.status.volume_level - delta)
 
     def mute(self, status=None):
