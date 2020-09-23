@@ -379,12 +379,10 @@ class PlexController(BaseController):
             offset_now = self.status.adjusted_current_time
             msg = deepcopy(self._last_play_msg)
 
-            if offset is None:
-                msg["media"]["customData"]["offset"] = offset_now
-                msg["current_time"] = offset_now
-            else:
-                msg["media"]["customData"]["offset"] = offset
-                msg["current_time"] = offset_now
+            msg["media"]["customData"]["offset"] = (
+                offset_now if offset is None else offset
+            )
+            msg["current_time"] = offset_now
 
             self._send_cmd(
                 msg,
