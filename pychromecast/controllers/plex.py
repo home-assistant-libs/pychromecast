@@ -105,10 +105,14 @@ def media_to_chromecast_command(
         myPlexSubscription = server.myPlexSubscription
 
         if getattr(media, "TYPE", None) == "playqueue":
-            startItem = startItem or media.selectedItem
-            media = media.items
+            if startItem:
+                media = media.items
+            else
+                playQueue = media
 
-        playQueue = server.createPlayQueue(media, startItem=startItem)
+        if playQueue is None:
+            playQueue = server.createPlayQueue(media, startItem=startItem)
+
         playQueueID = playQueue.playQueueID
         contentId = playQueue.selectedItem.key
         contentType = playQueue.playQueueType
