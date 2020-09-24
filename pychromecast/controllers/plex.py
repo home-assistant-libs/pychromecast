@@ -107,7 +107,7 @@ def media_to_chromecast_command(
         if getattr(media, "TYPE", None) == "playqueue":
             if startItem:
                 media = media.items
-            else
+            else:
                 playQueue = media
 
         if playQueue is None:
