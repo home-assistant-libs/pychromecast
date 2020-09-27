@@ -500,6 +500,7 @@ class MediaController(BaseController):
         subtitles_mime="text/vtt",
         subtitle_id=1,
         enqueue=False,
+        media_info=None,
     ):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -520,12 +521,14 @@ class MediaController(BaseController):
         subtitles_mime: str - mimetype of subtitles.
         subtitle_id: int - id of subtitle to be loaded.
         enqueue: bool - if True, enqueue the media instead of play it.
+        media_info: dict - additional MediaInformation attributes not explicitly listed.
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
 
         Docs:
         https://developers.google.com/cast/docs/reference/messages#MediaData
+        https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
         """
         # pylint: disable=too-many-locals
         def app_launched_callback():
@@ -544,6 +547,7 @@ class MediaController(BaseController):
                 subtitles_mime,
                 subtitle_id,
                 enqueue,
+                media_info,
             )
 
         receiver_ctrl = self._socket_client.receiver_controller
@@ -564,13 +568,16 @@ class MediaController(BaseController):
         subtitles_mime="text/vtt",
         subtitle_id=1,
         enqueue=False,
+        media_info=None,
     ):
         # pylint: disable=too-many-locals
+        media_info = media_info or {}
         media = {
             "contentId": url,
             "streamType": stream_type,
             "contentType": content_type,
             "metadata": metadata or {},
+            **media_info,
         }
 
         if title:
