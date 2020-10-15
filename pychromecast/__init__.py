@@ -486,7 +486,7 @@ class Chromecast:
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        if not self.socket_client.isAlive():
+        if not self.socket_client.is_alive():
             self.socket_client.start()
         self.status_event.wait(timeout=timeout)
 
