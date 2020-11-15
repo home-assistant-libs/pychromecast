@@ -19,6 +19,7 @@ TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
 
 LAUNCH_TIMEOUT_MSG = "Timeout when waiting for status response from Spotify app"
 
+
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
     """ Controller to interact with Spotify namespace. """
