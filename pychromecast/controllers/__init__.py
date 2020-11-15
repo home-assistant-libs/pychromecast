@@ -30,8 +30,8 @@ class BaseController:
 
     @property
     def is_active(self):
-        """ True if the controller is connected to a socket client and the
-            Chromecast is running an app that supports this controller. """
+        """True if the controller is connected to a socket client and the
+        Chromecast is running an app that supports this controller."""
         return (
             self._socket_client is not None
             and self.namespace in self._socket_client.app_namespaces
@@ -55,8 +55,8 @@ class BaseController:
             self._message_func = self._socket_client.send_app_message
 
     def channel_connected(self):
-        """ Called when a channel has been openend that supports the
-            namespace of this controller. """
+        """Called when a channel has been openend that supports the
+        namespace of this controller."""
 
     def channel_disconnected(self):
         """ Called when a channel is disconnected. """
@@ -94,10 +94,11 @@ class BaseController:
         self._message_func(self.namespace, data, inc_session_id, callback_function)
 
     # pylint: disable=unused-argument,no-self-use
-    def receive_message(self, message, data):
+    def receive_message(self, message, data: dict):
         """
         Called when a message is received that matches the namespace.
         Returns boolean indicating if message was handled.
+        data is message.payload_utf8 interpreted as a JSON dict.
         """
         return False
 

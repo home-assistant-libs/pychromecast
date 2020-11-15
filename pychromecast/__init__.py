@@ -106,6 +106,7 @@ def get_listed_chromecasts(
     retry_wait=None,
     timeout=None,
     discovery_timeout=DISCOVER_TIMEOUT,
+    zeroconf_instance=None,
 ):
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -115,10 +116,10 @@ def get_listed_chromecasts(
       A list of Chromecast objects matching the criteria,
       or an empty list if no matching chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
 
-    To only discover chromcast devices wihtout connecting to them, use
+    To only discover chromecast devices without connecting to them, use
     discover_listed_chromecasts instead.
 
     :param friendly_names: A list of wanted friendly names
@@ -128,6 +129,7 @@ def get_listed_chromecasts(
     :param timeout: passed to get_chromecasts
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
+    :param zeroconf_instance: An existing zeroconf instance.
     """
 
     cc_list = {}
@@ -163,17 +165,22 @@ def get_listed_chromecasts(
     discover_complete = Event()
 
     listener = CastListener(callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
-    return (cc_list.values(), browser)
+    return (list(cc_list.values()), browser)
 
 
 # pylint: disable=too-many-locals
 def get_chromecasts(
-    tries=None, retry_wait=None, timeout=None, blocking=True, callback=None
+    tries=None,
+    retry_wait=None,
+    timeout=None,
+    blocking=True,
+    callback=None,
+    zeroconf_instance=None,
 ):
     """
     Searches the network for chromecast devices and creates a Chromecast object
@@ -183,17 +190,17 @@ def get_chromecasts(
       A list of Chromecast objects, or an empty list if no matching chromecasts were
       found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the broswer object to
-      pychromecast.discovery.stop_discover().
+      are (no longer) needed, pass the browser object to
+      pychromecast.discovery.stop_discovery().
 
-    To only discover chromcast devices wihtout connecting to them, use
+    To only discover chromecast devices without connecting to them, use
     discover_chromecasts instead.
 
     Parameters tries, timeout, retry_wait and blocking_app_launch controls the
     behavior of the created Chromecast instances.
 
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -202,8 +209,9 @@ def get_chromecasts(
     :param blocking: If True, returns a list of discovered chromecast devices.
                      If False, triggers a callback for each discovered chromecast,
                      and returns a function which can be executed to stop discovery.
-    :param callback: Callback which is triggerd for each discovered chromecast when
+    :param callback: Callback which is triggered for each discovered chromecast when
                      blocking = False.
+    :param zeroconf_instance: An existing zeroconf instance.
     """
     if blocking:
         # Thread blocking chromecast discovery
@@ -228,8 +236,12 @@ def get_chromecasts(
     if not callable(callback):
         raise ValueError("Nonblocking discovery requires a callback function.")
 
+    known_uuids = set()
+
     def internal_callback(uuid, name):  # pylint: disable=unused-argument
         """Called when zeroconf has discovered a new chromecast."""
+        if uuid in known_uuids:
+            return
         try:
             callback(
                 get_chromecast_from_service(
@@ -240,11 +252,12 @@ def get_chromecasts(
                     timeout=timeout,
                 )
             )
+            known_uuids.add(uuid)
         except ChromecastConnectionError:  # noqa
             pass
 
     listener = CastListener(internal_callback)
-    zconf = zeroconf.Zeroconf()
+    zconf = zeroconf_instance or zeroconf.Zeroconf()
     browser = start_discovery(listener, zconf)
     return browser
 
@@ -261,7 +274,7 @@ class Chromecast:
     :param device: DeviceStatus with initial information for the device.
     :type device: pychromecast.dial.DeviceStatus
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -289,13 +302,11 @@ class Chromecast:
 
         # Resolve host to IP address
         self._services = services
-        self.host = host
-        self.port = port or 8009
 
         self.logger.info("Querying device status")
         self.device = device
         if device:
-            dev_status = get_device_status(self.host, services, zconf)
+            dev_status = get_device_status(host, services, zconf)
             if dev_status:
                 # Values from `device` have priority over `dev_status`
                 # as they come from the dial information.
@@ -311,11 +322,11 @@ class Chromecast:
             else:
                 self.device = device
         else:
-            self.device = get_device_status(self.host, services, zconf)
+            self.device = get_device_status(host, services, zconf)
 
         if not self.device:
             raise ChromecastConnectionError(  # noqa
-                "Could not connect to {}:{}".format(self.host, self.port)
+                "Could not connect to {}:{}".format(host, port or 8009)
             )
 
         self.status = None
@@ -387,7 +398,7 @@ class Chromecast:
     @property
     def uri(self):
         """ Returns the device URI (ip:port) """
-        return "{}:{}".format(self.host, self.port)
+        return "{}:{}".format(self.socket_client.host, self.socket_client.port)
 
     @property
     def model_name(self):
@@ -441,7 +452,7 @@ class Chromecast:
         self.socket_client.receiver_controller.stop_app()
 
     def volume_up(self, delta=0.1):
-        """ Increment volume by 0.1 (or delta) unless it is already maxed.
+        """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
 
         """
@@ -452,7 +463,7 @@ class Chromecast:
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
-        """ Decrement the volume by 0.1 (or delta) unless it is already 0.
+        """Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
         if delta <= 0:
@@ -475,14 +486,14 @@ class Chromecast:
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        if not self.socket_client.isAlive():
+        if not self.socket_client.is_alive():
             self.socket_client.start()
         self.status_event.wait(timeout=timeout)
 
     def connect(self):
-        """ Connect to the chromecast.
+        """Connect to the chromecast.
 
-            Must only be called if the worker thread will not be started.
+        Must only be called if the worker thread will not be started.
         """
         self.socket_client.connect()
 
@@ -525,14 +536,14 @@ class Chromecast:
 
     def __repr__(self):
         txt = "Chromecast({!r}, port={!r}, device={!r})".format(
-            self.host, self.port, self.device
+            self.socket_client.host, self.socket_client.port, self.device
         )
         return txt
 
     def __unicode__(self):
         return "Chromecast({}, {}, {}, {}, {})".format(
-            self.host,
-            self.port,
+            self.socket_client.host,
+            self.socket_client.port,
             self.device.friendly_name,
             self.device.model_name,
             self.device.manufacturer,

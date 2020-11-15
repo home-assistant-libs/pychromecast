@@ -9,6 +9,7 @@ import sys
 import time
 
 import pychromecast
+import zeroconf
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
@@ -22,6 +23,9 @@ parser = argparse.ArgumentParser(
     description="Example on how to use the socket client without callbacks."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
 parser.add_argument(
     "--show-status-only", help="Show status, then exit", action="store_true"
 )
@@ -37,8 +41,11 @@ if args.show_debug:
     fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
     logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
-chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
