@@ -1,0 +1,22 @@
+"""
+Simple Controller to use BubbleUPNP as a media controller.
+"""
+
+from ..config import APP_BUBBLEUPNP
+from .media import MediaController
+
+
+class BubbleUPNPController(MediaController):
+    """ Controller to interact with BubbleUPNP app namespace. """
+
+    # pylint: disable=useless-super-delegation
+    def __init__(self):
+        super(BubbleUPNPController, self).__init__()
+        self.app_id = APP_BUBBLEUPNP
+        self.supporting_app_id = APP_BUBBLEUPNP
+
+    def quick_play(self, url, content_type='video/mp4', **kwargs):
+        """ Quick Play """
+        self.play_media(
+            url, content_type, **kwargs
+        )

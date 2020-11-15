@@ -3,6 +3,7 @@
 from .controllers.youtube import YouTubeController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
+from .controllers.bubbleupnp import BubbleUPNPController
 
 
 def quick_play(cast, app_name, data):
@@ -24,6 +25,8 @@ def quick_play(cast, app_name, data):
             media_type: string
                 Type of the media identified by `media_id`. e.g. "program" if the media is a
                 program name instead of a direct item id.
+                When using a regular media controller (e.g. BubbleUPNP) this should be the 
+                content_type ('audio/mp3')
             enqueue: boolean
                 Enqueue the media to the current playlist, if possible.
             index: string
@@ -40,6 +43,10 @@ def quick_play(cast, app_name, data):
         Supla-specific:
             is_live: boolean
                 Whether the media is a livestream
+
+        Media controller (BubbleUPNP)-specific:
+            stream_type: string
+                "BUFFERED" or "LIVE"
     """
 
     if app_name == "youtube":
@@ -48,6 +55,8 @@ def quick_play(cast, app_name, data):
         controller = SuplaController()
     elif app_name == "yleareena":
         controller = YleAreenaController()
+    elif app_name == "bubbleupnp":
+        controller = BubbleUPNPController()
     else:
         raise NotImplementedError()
 
