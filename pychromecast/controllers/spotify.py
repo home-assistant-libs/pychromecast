@@ -3,8 +3,6 @@ Controller to interface with Spotify.
 """
 import logging
 import threading
-import time
-import json
 
 from . import BaseController
 from ..config import APP_SPOTIFY
@@ -17,8 +15,6 @@ TYPE_SET_CREDENTIALS = "setCredentials"
 TYPE_SET_CREDENTIALS_ERROR = "setCredentialsError"
 TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
 
-LAUNCH_TIMEOUT_MSG = "Timeout when waiting for status response from Spotify app"
-
 
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
@@ -27,10 +23,8 @@ class SpotifyController(BaseController):
     # pylint: disable=useless-super-delegation
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
-    def __init__(self, access_token, expires):
+    def __init__(self, access_token=None, expires=None):
         super(SpotifyController, self).__init__(APP_NAMESPACE, APP_SPOTIFY)
-        if access_token is None or expires is None:
-            raise ValueError("access_token and expires cannot be empty")
 
         self.logger = logging.getLogger(__name__)
         self.session_started = False
@@ -70,6 +64,9 @@ class SpotifyController(BaseController):
         Spotify app within timeout seconds.
         """
 
+        if self.access_token is None or self.expires is None:
+            raise ValueError("access_token and expires cannot be empty")
+
         def callback():
             """Callback function"""
             self.send_message(
@@ -85,86 +82,23 @@ class SpotifyController(BaseController):
         self.waiting.clear()
         self.launch(callback_function=callback)
 
-        # Need to wait for Spotify to be launched on Chromecast completely
-        self.waiting.wait(timeout)
-
-        if not self.is_launched:
-            raise LaunchError(LAUNCH_TIMEOUT_MSG)
-
-    @classmethod
-    def from_cookie(cls, sp_dc, sp_key):
-        """ Generate a SpotifyController from given cookie values from spotify web player """
-        try:
-            # pylint: disable=import-outside-toplevel
-            import spotify_token as st
-        except ImportError:
-            raise ImportError(
-                """
-                You need to install the spotipy and spotify-token dependencies.
-
-                This can be done by running the following:
-                pip install spotify-token
-                pip install git+https://github.com/plamere/spotipy.git
-                """
-            )
-        data = st.start_session(sp_dc, sp_key)
-        access_token = data[0]
-        expires = data[1] - int(time.time())
-        return cls(access_token, expires)
-
-    # pylint: disable=too-many-locals
-    def quick_play(self, media_id=None, **kwargs):
-        """ Quick Play """
-        # pylint: disable=import-outside-toplevel
-        import spotipy
-
-        # Create a spotify client
-        client = spotipy.Spotify(auth=self.access_token)
-
-        try:
-            self.launch_app(timeout=0)
-        except LaunchError as error:
-            if str(error) != LAUNCH_TIMEOUT_MSG:
-                raise
-
         counter = 0
-        while counter < 10:
+        while counter < (timeout + 1):
             if self.is_launched:
-                break
-            time.sleep(1)
+                return
+            self.waiting.wait(1)
             counter += 1
 
         if not self.is_launched:
-            raise LaunchError(LAUNCH_TIMEOUT_MSG)
+            raise LaunchError("Timeout when waiting for status response from Spotify app")
 
-        # Query spotify for active devices
-        devices_available = client.devices()
+    # pylint: disable=too-many-locals
+    def quick_play(self, **kwargs):
+        """
+        Launches the spotify controller and returns when it's ready.
+        To actually play media, another application using spotify connect is required.
+        """
+        self.access_token = kwargs['access_token']
+        self.expires = kwargs['expires']
 
-        # Match active spotify devices with the spotify controller's device id
-        spotify_device_id = None
-        for device in devices_available["devices"]:
-            if device["id"] == self.device:
-                spotify_device_id = device["id"]
-                break
-
-        if not spotify_device_id:
-            logging.error('No device with id "%s" known by Spotify', self.device)
-            logging.error("Known devices: %s", devices_available["devices"])
-            return
-
-        # Parse media_id (allow sending JSON formatted list)
-        try:
-            json_media = json.loads(media_id)
-            if not isinstance(json_media, list):
-                json_media = [json_media]
-        except json.JSONDecodeError:
-            logging.debug("Not a JSON formatted string: %s", media_id)
-            json_media = [media_id]
-
-        # Start playback
-        if json_media[0].find("track") > 0:
-            client.start_playback(device_id=spotify_device_id, uris=json_media)
-        else:
-            client.start_playback(
-                device_id=spotify_device_id, context_uri=json_media[0]
-            )
+        self.launch_app(timeout=20)

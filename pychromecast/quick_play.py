@@ -50,9 +50,7 @@ def quick_play(cast, app_name, data):
     elif app_name == "yleareena":
         controller = YleAreenaController()
     elif app_name == "spotify":
-        controller = SpotifyController.from_cookie(
-            data.pop("sp_dc"), data.pop("sp_key")
-        )
+        controller = SpotifyController()
     else:
         raise NotImplementedError()
 
