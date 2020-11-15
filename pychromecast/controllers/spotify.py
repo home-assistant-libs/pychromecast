@@ -90,7 +90,9 @@ class SpotifyController(BaseController):
             counter += 1
 
         if not self.is_launched:
-            raise LaunchError("Timeout when waiting for status response from Spotify app")
+            raise LaunchError(
+                "Timeout when waiting for status response from Spotify app"
+            )
 
     # pylint: disable=too-many-locals
     def quick_play(self, **kwargs):
@@ -98,7 +100,7 @@ class SpotifyController(BaseController):
         Launches the spotify controller and returns when it's ready.
         To actually play media, another application using spotify connect is required.
         """
-        self.access_token = kwargs['access_token']
-        self.expires = kwargs['expires']
+        self.access_token = kwargs["access_token"]
+        self.expires = kwargs["expires"]
 
         self.launch_app(timeout=20)
