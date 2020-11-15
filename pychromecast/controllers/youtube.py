@@ -89,8 +89,8 @@ class YouTubeController(BaseController):
         self.status_update_event.wait()
         self.status_update_event.clear()
 
-    def receive_message(self, message, data):
-        """ Called when a media message is received. """
+    def receive_message(self, message, data: dict):
+        """Called when a message is received."""
         if data[MESSAGE_TYPE] == TYPE_STATUS:
             self._process_status(data.get("data"))
             return True

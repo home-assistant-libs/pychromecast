@@ -26,6 +26,7 @@ MESSAGE_TYPE = "type"
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_LOAD = "LOAD"
+TYPE_QUEUE_INSERT = "QUEUE_INSERT"
 TYPE_MEDIA_STATUS = "MEDIA_STATUS"
 TYPE_PAUSE = "PAUSE"
 TYPE_PLAY = "PLAY"
@@ -330,7 +331,7 @@ class MediaController(BaseController):
         self.status = MediaStatus()
         self._fire_status_changed()
 
-    def receive_message(self, message, data):
+    def receive_message(self, message, data: dict):
         """ Called when a media message is received. """
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)
@@ -340,8 +341,8 @@ class MediaController(BaseController):
         return False
 
     def register_status_listener(self, listener):
-        """ Register a listener for new media statuses. A new status will
-            call listener.new_media_status(status) """
+        """Register a listener for new media statuses. A new status will
+        call listener.new_media_status(status)"""
         self._status_listeners.append(listener)
 
     def update_status(self, callback_function_param=False):
@@ -364,32 +365,32 @@ class MediaController(BaseController):
 
     @property
     def is_playing(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_playing.
-            Returns if the Chromecast is playing. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
+        Returns if the Chromecast is playing."""
         return self.status is not None and self.status.player_is_playing
 
     @property
     def is_paused(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_paused.
-            Returns if the Chromecast is paused. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
+        Returns if the Chromecast is paused."""
         return self.status is not None and self.status.player_is_paused
 
     @property
     def is_idle(self):
-        """ Deprecated as of June 8, 2015. Use self.status.player_is_idle.
-            Returns if the Chromecast is idle on a media supported app. """
+        """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
+        Returns if the Chromecast is idle on a media supported app."""
         return self.status is not None and self.status.player_is_idle
 
     @property
     def title(self):
-        """ Deprecated as of June 8, 2015. Use self.status.title.
-            Return title of the current playing item. """
+        """Deprecated as of June 8, 2015. Use self.status.title.
+        Return title of the current playing item."""
         return None if not self.status else self.status.title
 
     @property
     def thumbnail(self):
-        """ Deprecated as of June 8, 2015. Use self.status.images.
-            Return thumbnail url of current playing item. """
+        """Deprecated as of June 8, 2015. Use self.status.images.
+        Return thumbnail url of current playing item."""
         if not self.status:
             return None
 
@@ -498,6 +499,8 @@ class MediaController(BaseController):
         subtitles_lang="en-US",
         subtitles_mime="text/vtt",
         subtitle_id=1,
+        enqueue=False,
+        media_info=None,
     ):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -517,12 +520,15 @@ class MediaController(BaseController):
         subtitles_lang: str - language for subtitles.
         subtitles_mime: str - mimetype of subtitles.
         subtitle_id: int - id of subtitle to be loaded.
+        enqueue: bool - if True, enqueue the media instead of play it.
+        media_info: dict - additional MediaInformation attributes not explicitly listed.
         metadata: dict - media metadata object, one of the following:
             GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
             MusicTrackMediaMetadata, PhotoMediaMetadata.
 
         Docs:
         https://developers.google.com/cast/docs/reference/messages#MediaData
+        https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
         """
         # pylint: disable=too-many-locals
         def app_launched_callback():
@@ -540,6 +546,8 @@ class MediaController(BaseController):
                 subtitles_lang,
                 subtitles_mime,
                 subtitle_id,
+                enqueue,
+                media_info,
             )
 
         receiver_ctrl = self._socket_client.receiver_controller
@@ -559,31 +567,29 @@ class MediaController(BaseController):
         subtitles_lang="en-US",
         subtitles_mime="text/vtt",
         subtitle_id=1,
+        enqueue=False,
+        media_info=None,
     ):
         # pylint: disable=too-many-locals
-        msg = {
-            "media": {
-                "contentId": url,
-                "streamType": stream_type,
-                "contentType": content_type,
-                "metadata": metadata or {},
-            },
-            MESSAGE_TYPE: TYPE_LOAD,
-            "currentTime": current_time,
-            "autoplay": autoplay,
-            "customData": {},
+        media_info = media_info or {}
+        media = {
+            "contentId": url,
+            "streamType": stream_type,
+            "contentType": content_type,
+            "metadata": metadata or {},
+            **media_info,
         }
 
         if title:
-            msg["media"]["metadata"]["title"] = title
+            media["metadata"]["title"] = title
 
         if thumb:
-            msg["media"]["metadata"]["thumb"] = thumb
+            media["metadata"]["thumb"] = thumb
 
-            if "images" not in msg["media"]["metadata"]:
-                msg["media"]["metadata"]["images"] = []
+            if "images" not in media["metadata"]:
+                media["metadata"]["images"] = []
 
-            msg["media"]["metadata"]["images"].append({"url": thumb})
+            media["metadata"]["images"].append({"url": thumb})
         if subtitles:
             sub_msg = [
                 {
@@ -596,13 +602,38 @@ class MediaController(BaseController):
                     "name": "{} - {} Subtitle".format(subtitles_lang, subtitle_id),
                 }
             ]
-            msg["media"]["tracks"] = sub_msg
-            msg["media"]["textTrackStyle"] = {
+            media["tracks"] = sub_msg
+            media["textTrackStyle"] = {
                 "backgroundColor": "#FFFFFF00",
                 "edgeType": "OUTLINE",
                 "edgeColor": "#000000FF",
             }
+
+        if enqueue:
+            msg = {
+                "mediaSessionId": self.status.media_session_id,
+                "items": [
+                    {
+                        "media": media,
+                        "autoplay": True,
+                        "startTime": 0,
+                        "preloadTime": 0,
+                    }
+                ],
+                MESSAGE_TYPE: TYPE_QUEUE_INSERT,
+            }
+        else:
+            msg = {
+                "media": media,
+                MESSAGE_TYPE: TYPE_LOAD,
+            }
+        msg["currentTime"] = current_time
+        msg["autoplay"] = autoplay
+        msg["customData"] = {}
+
+        if subtitles:
             msg["activeTrackIds"] = [subtitle_id]
+
         self.send_message(msg, inc_session_id=True)
 
     def tear_down(self):

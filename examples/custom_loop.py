@@ -11,6 +11,7 @@ import select
 import time
 
 import pychromecast
+import zeroconf
 
 CAST_NAME = "Living Room"
 
@@ -94,6 +95,9 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
+parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
 args = parser.parse_args()
@@ -102,5 +106,8 @@ if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 else:
     logging.basicConfig(level=logging.INFO)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 your_main_loop()

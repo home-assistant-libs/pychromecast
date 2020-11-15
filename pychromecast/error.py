@@ -28,7 +28,7 @@ class LaunchError(PyChromecastError):
 
 
 class PyChromecastStopped(PyChromecastError):
-    """ Raised when a command is invoked while the Chromecast's socket_client
+    """Raised when a command is invoked while the Chromecast's socket_client
     is stopped.
 
     """

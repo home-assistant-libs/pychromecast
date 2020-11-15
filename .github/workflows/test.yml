@@ -25,10 +25,10 @@ jobs:
           pip install -r requirements-test.txt
       - name: Lint with flake8
         run: |
-          flake8 --exclude cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py pychromecast
+          flake8 --exclude cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py examples pychromecast
       - name: Lint with pylint
         run: |
           pylint pychromecast
       - name: Check formatting with black
         run: |
-          black pychromecast --check
+          black examples pychromecast --check

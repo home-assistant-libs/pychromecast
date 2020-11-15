@@ -9,6 +9,7 @@ import sys
 
 import pychromecast
 from pychromecast.controllers.youtube import YouTubeController
+import zeroconf
 
 
 # Change to the name of your Chromecast
@@ -24,6 +25,9 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
+parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
 parser.add_argument(
@@ -33,8 +37,11 @@ args = parser.parse_args()
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
-chromecasts, browser  = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)

@@ -79,14 +79,23 @@ class InterruptLoop(Exception):
     """ The chromecast has been manually stopped. """
 
 
-def _json_from_message(message):
-    """ Parses a PB2 message into JSON format. """
+def _dict_from_message_payload(message):
+    """ Parses a PB2 message as a JSON dict. """
     try:
-        return json.loads(message.payload_utf8)
+        data = json.loads(message.payload_utf8)
+        if not isinstance(data, dict):
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                "Non dict json in namespace %s: '%s'",
+                message.namespace,
+                message.payload_utf8,
+            )
+            return {}
+        return data
     except ValueError:
         logger = logging.getLogger(__name__)
-        logger.warning(
-            "Ignoring invalid json in namespace %s: %s",
+        logger.debug(
+            "Invalid json in namespace %s: '%s'",
             message.namespace,
             message.payload_utf8,
         )
@@ -96,10 +105,13 @@ def _json_from_message(message):
 def _message_to_string(message, data=None):
     """ Gives a string representation of a PB2 message. """
     if data is None:
-        data = _json_from_message(message)
+        data = _dict_from_message_payload(message)
 
     return "Message {} from {} to {}: {}".format(
-        message.namespace, message.source_id, message.destination_id, data
+        message.namespace,
+        message.source_id,
+        message.destination_id,
+        data or message.payload_utf8,
     )
 
 
@@ -162,7 +174,7 @@ class SocketClient(threading.Thread):
     :param cast_type: The type of chromecast to connect to, see
                       dial.CAST_TYPE_* for types.
     :param tries: Number of retries to perform if the connection fails.
-                  None for inifinite retries.
+                  None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
                     seconds. None means to use the default which is 30 seconds.
     :param retry_wait: A floating point number specifying how many seconds to
@@ -440,9 +452,9 @@ class SocketClient(threading.Thread):
         raise ChromecastConnectionError("Failed to connect")
 
     def connect(self):
-        """ Connect socket connection to Chromecast device.
+        """Connect socket connection to Chromecast device.
 
-            Must only be called if the worker thread will not be started.
+        Must only be called if the worker thread will not be started.
         """
         try:
             self.initialize_connection()
@@ -596,7 +608,7 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
             else:
-                data = _json_from_message(message)
+                data = _dict_from_message_payload(message)
 
         if self.socketpair[0] in can_read:
             # Clear the socket's buffer
@@ -675,7 +687,7 @@ class SocketClient(threading.Thread):
             return False
         return True
 
-    def _route_message(self, message, data):
+    def _route_message(self, message, data: dict):
         """ Route message to any handlers on the message namespace """
         # route message to handlers
         if message.namespace in self._handlers:
@@ -938,9 +950,9 @@ class SocketClient(threading.Thread):
         )
 
     def register_connection_listener(self, listener):
-        """ Register a connection listener for when the socket connection
-            changes. Listeners will be called with
-            listener.new_connection_status(status) """
+        """Register a connection listener for when the socket connection
+        changes. Listeners will be called with
+        listener.new_connection_status(status)"""
         self._connection_listeners.append(listener)
 
     def _ensure_channel_connected(self, destination_id):
@@ -1006,8 +1018,12 @@ class ConnectionController(BaseController):
     def __init__(self):
         super(ConnectionController, self).__init__(NS_CONNECTION)
 
-    def receive_message(self, message, data):
-        """ Called when a connection message is received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if self._socket_client.is_stopped:
             return True
 
@@ -1031,8 +1047,12 @@ class HeartbeatController(BaseController):
         self.last_ping = 0
         self.last_pong = time.time()
 
-    def receive_message(self, message, data):
-        """ Called when a heartbeat message is received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a heartbeat message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if self._socket_client.is_stopped:
             return True
 
@@ -1110,8 +1130,12 @@ class ReceiverController(BaseController):
         """ Convenience method to retrieve current app id. """
         return self.status.app_id if self.status else None
 
-    def receive_message(self, message, data):
-        """ Called when a receiver-message has been received. """
+    def receive_message(self, message, data: dict):
+        """
+        Called when a receiver message is received.
+
+        data is message.payload_utf8 interpreted as a JSON dict.
+        """
         if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 
@@ -1125,15 +1149,15 @@ class ReceiverController(BaseController):
         return False
 
     def register_status_listener(self, listener):
-        """ Register a status listener for when a new Chromecast status
-            has been received. Listeners will be called with
-            listener.new_cast_status(status) """
+        """Register a status listener for when a new Chromecast status
+        has been received. Listeners will be called with
+        listener.new_cast_status(status)"""
         self._status_listeners.append(listener)
 
     def register_launch_error_listener(self, listener):
-        """ Register a listener for when a new launch error message
-            has been received. Listeners will be called with
-            listener.new_launch_error(launch_failure) """
+        """Register a listener for when a new launch error message
+        has been received. Listeners will be called with
+        listener.new_launch_error(launch_failure)"""
         self._launch_error_listeners.append(listener)
 
     def update_status(self, callback_function_param=False):
@@ -1144,10 +1168,10 @@ class ReceiverController(BaseController):
         )
 
     def launch_app(self, app_id, force_launch=False, callback_function=False):
-        """ Launches an app on the Chromecast.
+        """Launches an app on the Chromecast.
 
-            Will only launch if it is not currently running unless
-            force_launch=True. """
+        Will only launch if it is not currently running unless
+        force_launch=True."""
 
         if not force_launch and self.status is None:
             self.update_status(
@@ -1183,7 +1207,7 @@ class ReceiverController(BaseController):
         )
 
     def set_volume(self, volume):
-        """ Allows to set volume. Should be value between 0..1.
+        """Allows to set volume. Should be value between 0..1.
         Returns the new volume.
 
         """

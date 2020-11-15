@@ -10,6 +10,7 @@ from time import sleep
 
 import pychromecast
 from pychromecast.controllers.yleareena import YleAreenaController
+import zeroconf
 
 logger = logging.getLogger(__name__)
 
@@ -18,22 +19,22 @@ logger = logging.getLogger(__name__)
 CAST_NAME = "My Chromecast"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Yle Areena Controller.")
-parser.add_argument('--show-debug', help='Enable debug log',
-                    action='store_true')
-parser.add_argument('--cast',
-                    help='Name of cast device (default: "%(default)s")',
-                    default=CAST_NAME)
-parser.add_argument('--program', help='Areena Program ID',
-                    default="1-50097921")
-parser.add_argument('--audio_language', help='audio_language',
-                    default="")
-parser.add_argument('--text_language', help='text_language',
-                    default="off")
+    description="Example on how to use the Yle Areena Controller."
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
+)
+parser.add_argument("--program", help="Areena Program ID", default="1-50097921")
+parser.add_argument("--audio_language", help="audio_language", default="")
+parser.add_argument("--text_language", help="text_language", default="off")
 args = parser.parse_args()
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 
 def get_kaltura_id(program_id):
@@ -48,18 +49,19 @@ def get_kaltura_id(program_id):
     from yledl.titleformatter import TitleFormatter
 
     title_formatter = TitleFormatter()
-    language_chooser = TranslationChooser('fin')
+    language_chooser = TranslationChooser("fin")
     httpclient = HttpClient(None)
     stream_filters = StreamFilters()
 
-    url = 'https://areena.yle.fi/{}'.format(program_id)
+    url = "https://areena.yle.fi/{}".format(program_id)
 
     extractor = extractor_factory(url, stream_filters, language_chooser, httpclient)
     pid = extractor.program_id_from_url(url)
 
     info = extractor.program_info_for_pid(pid, url, title_formatter, None)
 
-    return info.media_id.split('-')[-1]
+    return info.media_id.split("-")[-1]
+
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
 if not chromecasts:
@@ -72,5 +74,9 @@ cast.wait()
 
 yt = YleAreenaController()
 cast.register_handler(yt)
-yt.play_areena_media(entry_id=get_kaltura_id(args.program), audio_language=args.audio_language, text_language=args.text_language)
+yt.play_areena_media(
+    entry_id=get_kaltura_id(args.program),
+    audio_language=args.audio_language,
+    text_language=args.text_language,
+)
 sleep(10)
