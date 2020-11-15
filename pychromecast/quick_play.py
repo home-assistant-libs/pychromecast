@@ -25,7 +25,7 @@ def quick_play(cast, app_name, data):
         media_type: string
             Type of the media identified by `media_id`. e.g. "program" if the media is a
             program name instead of a direct item id.
-            When using a regular media controller (e.g. BubbleUPNP) this should be the 
+            When using a regular media controller (e.g. BubbleUPNP) this should be the
             content_type ('audio/mp3')
         enqueue: boolean
             Enqueue the media to the current playlist, if possible.

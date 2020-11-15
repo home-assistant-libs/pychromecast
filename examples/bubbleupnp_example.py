@@ -30,7 +30,7 @@ cast.wait()
 bubbleupnp = BubbleUPNPController()
 cast.register_handler(bubbleupnp)
 bubbleupnp.launch()
-bubbleupnp.play_media(URL, 'audio/mp3', stream_type="LIVE")
+bubbleupnp.play_media(URL, "audio/mp3", stream_type="LIVE")
 cast.wait()
 
 sleep(10)
