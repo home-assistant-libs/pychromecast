@@ -32,6 +32,7 @@ TYPE_PAUSE = "PAUSE"
 TYPE_PLAY = "PLAY"
 TYPE_QUEUE_NEXT = "QUEUE_NEXT"
 TYPE_QUEUE_PREV = "QUEUE_PREV"
+TYPE_QUEUE_UPDATE = "QUEUE_UPDATE"
 TYPE_SEEK = "SEEK"
 TYPE_STOP = "STOP"
 
@@ -430,11 +431,11 @@ class MediaController(BaseController):
 
     def queue_next(self):
         """ Send the QUEUE_NEXT command. """
-        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_NEXT})
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1})
 
     def queue_prev(self):
         """ Send the QUEUE_PREV command. """
-        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_PREV})
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1})
 
     def enable_subtitle(self, track_id):
         """ Enable specific text track. """
