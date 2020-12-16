@@ -23,10 +23,8 @@ class SpotifyController(BaseController):
     # pylint: disable=useless-super-delegation
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
-    def __init__(self, access_token, expires):
+    def __init__(self, access_token=None, expires=None):
         super(SpotifyController, self).__init__(APP_NAMESPACE, APP_SPOTIFY)
-        if access_token is None or expires is None:
-            raise ValueError("access_token and expires cannot be empty")
 
         self.logger = logging.getLogger(__name__)
         self.session_started = False
@@ -66,6 +64,9 @@ class SpotifyController(BaseController):
         Spotify app within timeout seconds.
         """
 
+        if self.access_token is None or self.expires is None:
+            raise ValueError("access_token and expires cannot be empty")
+
         def callback():
             """Callback function"""
             self.send_message(
@@ -81,10 +82,25 @@ class SpotifyController(BaseController):
         self.waiting.clear()
         self.launch(callback_function=callback)
 
-        # Need to wait for Spotify to be launched on Chromecast completely
-        self.waiting.wait(timeout)
+        counter = 0
+        while counter < (timeout + 1):
+            if self.is_launched:
+                return
+            self.waiting.wait(1)
+            counter += 1
 
         if not self.is_launched:
             raise LaunchError(
                 "Timeout when waiting for status response from Spotify app"
             )
+
+    # pylint: disable=too-many-locals
+    def quick_play(self, **kwargs):
+        """
+        Launches the spotify controller and returns when it's ready.
+        To actually play media, another application using spotify connect is required.
+        """
+        self.access_token = kwargs["access_token"]
+        self.expires = kwargs["expires"]
+
+        self.launch_app(timeout=20)

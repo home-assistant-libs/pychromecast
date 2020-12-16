@@ -48,11 +48,7 @@ if args.show_zeroconf_debug:
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
-cast = None
-for _cast in chromecasts:
-    if _cast.name == args.cast:
-        cast = _cast
-        break
+cast = list(chromecasts)[0]
 
 if not cast:
     print('No chromecast with name "{}" discovered'.format(args.cast))

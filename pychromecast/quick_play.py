@@ -3,6 +3,7 @@
 from .controllers.youtube import YouTubeController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
+from .controllers.spotify import SpotifyController
 from .controllers.bubbleupnp import BubbleUPNPController
 
 
@@ -55,6 +56,8 @@ def quick_play(cast, app_name, data):
         controller = SuplaController()
     elif app_name == "yleareena":
         controller = YleAreenaController()
+    elif app_name == "spotify":
+        controller = SpotifyController()
     elif app_name == "bubbleupnp":
         controller = BubbleUPNPController()
     else:
