@@ -6,6 +6,7 @@ from uuid import UUID
 
 import logging
 import requests
+import urllib3
 from urllib3.exceptions import InsecureRequestWarning
 
 from .const import CAST_TYPE_CHROMECAST, CAST_TYPES
@@ -42,7 +43,7 @@ def _get_status(host, services, zconf, path, secure=False):
     else:
         url = FORMAT_BASE_URL_HTTP.format(host) + path
     _LOGGER.error("url: %s", url)
-    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+    urllib3.disable_warnings(category=InsecureRequestWarning)
     req = requests.get(url, headers=headers, timeout=10, verify=False)
 
     req.raise_for_status()
