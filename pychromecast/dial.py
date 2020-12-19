@@ -6,18 +6,20 @@ from uuid import UUID
 
 import logging
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
-from .const import CAST_TYPE_CHROMECAST
+from .const import CAST_TYPE_CHROMECAST, CAST_TYPES
 from .discovery import get_info_from_service, get_host_from_service_info
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
-FORMAT_BASE_URL = "http://{}:8008"
+FORMAT_BASE_URL_HTTP = "http://{}:8008"
+FORMAT_BASE_URL_HTTPS = "https://{}:8443"
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _get_status(host, services, zconf, path):
+def _get_status(host, services, zconf, path, secure=False):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -35,7 +37,13 @@ def _get_status(host, services, zconf, path):
 
     headers = {"content-type": "application/json"}
 
-    req = requests.get(FORMAT_BASE_URL.format(host) + path, headers=headers, timeout=10)
+    if secure:
+        url = FORMAT_BASE_URL_HTTPS.format(host) + path
+    else:
+        url = FORMAT_BASE_URL_HTTP.format(host) + path
+    _LOGGER.error("url: %s", url)
+    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+    req = requests.get(url, headers=headers, timeout=10, verify=False)
 
     req.raise_for_status()
 
@@ -60,17 +68,20 @@ def get_device_status(host, services=None, zconf=None):
     """
 
     try:
-        status = _get_status(host, services, zconf, "/setup/eureka_info?options=detail")
+        status = _get_status(
+            host, services, zconf, "/setup/eureka_info?options=detail", secure=True
+        )
 
         friendly_name = status.get("name", "Unknown Chromecast")
-        # model_name and manufacturer is no longer included in the response,
-        # mark as unknown
         model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
+        if "detail" in status:
+            model_name = status["detail"].get("model_name", model_name)
+            manufacturer = status["detail"].get("manufacturer", manufacturer)
 
         udn = status.get("ssdp_udn", None)
 
-        cast_type = CAST_TYPE_CHROMECAST
+        cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
 
         uuid = None
         if udn:
@@ -79,8 +90,53 @@ def get_device_status(host, services=None, zconf=None):
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
     except (requests.exceptions.RequestException, OSError, ValueError):
+        _LOGGER.exception("get_device_status caught exception")
         return None
 
+
+def get_multizone_status(host, services=None, zconf=None):
+    """
+    :param host: Hostname or ip to fetch status from
+    :type host: str
+    :return: The multizone status as a named tuple.
+    :rtype: pychromecast.dial.MultizoneStatus or None
+    """
+
+    try:
+        status = _get_status(
+            host, services, zconf, "/setup/eureka_info?params=multizone", secure=True
+        )
+
+        dynamic_groups = []
+        if "multizone" in status and "dynamic_groups" in status["multizone"]:
+            for group in status["multizone"]["dynamic_groups"]:
+                name = group.get("name", "Unknown group name")
+                udn = group.get("uuid", None)
+                uuid = None
+                if udn:
+                    uuid = UUID(udn.replace("-", ""))
+                dynamic_groups.append(MultizoneInfo(name, uuid))
+
+        groups = []
+        if "multizone" in status and "groups" in status["multizone"]:
+            for group in status["multizone"]["groups"]:
+                name = group.get("name", "Unknown group name")
+                udn = group.get("uuid", None)
+                uuid = None
+                if udn:
+                    uuid = UUID(udn.replace("-", ""))
+                groups.append(MultizoneInfo(name, uuid))
+
+        return MultizoneStatus(dynamic_groups, groups)
+
+    except (requests.exceptions.RequestException, OSError, ValueError):
+        _LOGGER.exception("get_multizone_status caught exception")
+        return None
+
+
+MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid"])
+
+MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])
 
 DeviceStatus = namedtuple(
     "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
