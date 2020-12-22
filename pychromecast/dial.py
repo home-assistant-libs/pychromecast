@@ -42,7 +42,6 @@ def _get_status(host, services, zconf, path, secure=False):
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
     else:
         url = FORMAT_BASE_URL_HTTP.format(host) + path
-    _LOGGER.error("url: %s", url)
     urllib3.disable_warnings(category=InsecureRequestWarning)
     req = requests.get(url, headers=headers, timeout=10, verify=False)
 
@@ -91,7 +90,6 @@ def get_device_status(host, services=None, zconf=None):
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
     except (requests.exceptions.RequestException, OSError, ValueError):
-        _LOGGER.exception("get_device_status caught exception")
         return None
 
 
@@ -131,7 +129,6 @@ def get_multizone_status(host, services=None, zconf=None):
         return MultizoneStatus(dynamic_groups, groups)
 
     except (requests.exceptions.RequestException, OSError, ValueError):
-        _LOGGER.exception("get_multizone_status caught exception")
         return None
 
 
