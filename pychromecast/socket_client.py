@@ -753,12 +753,13 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 pass
 
-        try:
-            self.socket.close()
-        except Exception:  # pylint: disable=broad-except
-            self.logger.exception(
-                "[%s(%s):%s] _cleanup", self.fn or "", self.host, self.port
-            )
+        if self.socket is not None:
+            try:
+                self.socket.close()
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    "[%s(%s):%s] _cleanup", self.fn or "", self.host, self.port
+                )
         self._report_connection_status(
             ConnectionStatus(
                 CONNECTION_STATUS_DISCONNECTED, NetworkAddress(self.host, self.port)
