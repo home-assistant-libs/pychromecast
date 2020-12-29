@@ -59,7 +59,7 @@ def media_to_chromecast_command(
     **kwargs
 ):  # noqa: 501 pylint: disable=invalid-name, too-many-arguments, too-many-locals, protected-access, redefined-builtin
     """Create the message that chromecast requires. Use pass of plexapi media object or
-       set all the neeeded kwargs manually. See the code for what to set.
+       set all the needed kwargs manually. See the code for what to set.
 
     Args:
         media (None, optional): a :class:`~plexapi.base.Playable
