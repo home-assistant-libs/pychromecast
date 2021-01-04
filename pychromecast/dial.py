@@ -2,12 +2,11 @@
 Implements the DIAL-protocol to communicate with the Chromecast
 """
 from collections import namedtuple
-from uuid import UUID
-
+import json
 import logging
-import requests
-import urllib3
-from urllib3.exceptions import InsecureRequestWarning
+import ssl
+import urllib.request
+from uuid import UUID
 
 from .const import CAST_TYPE_CHROMECAST, CAST_TYPES
 from .discovery import get_info_from_service, get_host_from_service_info
@@ -38,25 +37,18 @@ def _get_status(host, services, zconf, path, secure=False):
 
     headers = {"content-type": "application/json"}
 
+    context = None
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
+        context = ssl.SSLContext()
+        context.verify_mode = ssl.CERT_NONE
     else:
         url = FORMAT_BASE_URL_HTTP.format(host) + path
-    urllib3.disable_warnings(category=InsecureRequestWarning)
-    req = requests.get(url, headers=headers, timeout=10, verify=False)
 
-    req.raise_for_status()
-
-    # The Requests library will fall back to guessing the encoding in case
-    # no encoding is specified in the response headers - which is the case
-    # for the Chromecast.
-    # The standard mandates utf-8 encoding, let's fall back to that instead
-    # if no encoding is provided, since the autodetection does not always
-    # provide correct results.
-    if req.encoding is None:
-        req.encoding = "utf-8"
-
-    return req.json()
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=10, context=context) as response:
+        data = response.read()
+    return json.loads(data.decode("utf-8"))
 
 
 def get_device_status(host, services=None, zconf=None):
@@ -89,7 +81,7 @@ def get_device_status(host, services=None, zconf=None):
 
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
-    except (requests.exceptions.RequestException, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
 
 
@@ -128,7 +120,7 @@ def get_multizone_status(host, services=None, zconf=None):
 
         return MultizoneStatus(dynamic_groups, groups)
 
-    except (requests.exceptions.RequestException, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
 
 
