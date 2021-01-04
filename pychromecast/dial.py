@@ -37,7 +37,7 @@ def _get_status(host, services, zconf, path, secure=False):
 
     headers = {"content-type": "application/json"}
 
-    contect = None
+    context = None
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
         context = ssl.SSLContext()
@@ -81,7 +81,7 @@ def get_device_status(host, services=None, zconf=None):
 
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
-    except (urrlib.error.HTTPError, urrlib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
 
 
@@ -120,7 +120,7 @@ def get_multizone_status(host, services=None, zconf=None):
 
         return MultizoneStatus(dynamic_groups, groups)
 
-    except (urrlib.error.HTTPError, urrlib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
 
 
