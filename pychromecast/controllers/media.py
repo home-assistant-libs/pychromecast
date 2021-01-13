@@ -492,7 +492,7 @@ class MediaController(BaseController):
         content_type,
         title=None,
         thumb=None,
-        current_time=0,
+        current_time=None,
         autoplay=True,
         stream_type=STREAM_TYPE_BUFFERED,
         metadata=None,
@@ -512,8 +512,9 @@ class MediaController(BaseController):
         content_type: str - mime type. Example: 'video/mp4'.
         title: str - title of the media.
         thumb: str - thumbnail image url.
-        current_time: float - seconds from the beginning of the media
-            to start playback.
+        current_time: float - Seconds since beginning of content. If the content is
+            live content, and position is not specifed, the stream will start at the
+            live position
         autoplay: bool - whether the media will automatically play.
         stream_type: str - describes the type of media artifact as one of the
             following: "NONE", "BUFFERED", "LIVE".
@@ -560,7 +561,7 @@ class MediaController(BaseController):
         content_type,
         title=None,
         thumb=None,
-        current_time=0,
+        current_time=None,
         autoplay=True,
         stream_type=STREAM_TYPE_BUFFERED,
         metadata=None,
@@ -628,7 +629,8 @@ class MediaController(BaseController):
                 "media": media,
                 MESSAGE_TYPE: TYPE_LOAD,
             }
-        msg["currentTime"] = current_time
+        if current_time is not None:
+            msg["currentTime"] = current_time
         msg["autoplay"] = autoplay
         msg["customData"] = {}
 
