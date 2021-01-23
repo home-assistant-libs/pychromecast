@@ -35,6 +35,7 @@ TYPE_QUEUE_PREV = "QUEUE_PREV"
 TYPE_QUEUE_UPDATE = "QUEUE_UPDATE"
 TYPE_SEEK = "SEEK"
 TYPE_STOP = "STOP"
+TYPE_SET_PLAYBACK_RATE = "SET_PLAYBACK_RATE"
 
 METADATA_TYPE_GENERIC = 0
 METADATA_TYPE_MOVIE = 1
@@ -255,6 +256,11 @@ class MediaStatus:
         """ True if QUEUE_PREV is supported. """
         return bool(self.supported_media_commands & CMD_SUPPORT_QUEUE_PREV)
 
+    @property
+    def supports_playback_rate(self):
+        """ True if PLAYBACK_RATE is supported. """
+        return bool(self.supported_media_commands & CMD_SUPPORT_PLAYBACK_RATE)
+
     def update(self, data):
         """ New data will only contain the changed attributes. """
         if not data.get("status", []):
@@ -446,6 +452,10 @@ class MediaController(BaseController):
     def disable_subtitle(self):
         """ Disable subtitle. """
         self._send_command({MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []})
+
+    def set_playback_rate(self, rate):
+        """ Sets the playback rate of the media. """
+        self._send_command({MESSAGE_TYPE: TYPE_SET_PLAYBACK_RATE, "playbackRate": rate})
 
     def block_until_active(self, timeout=None):
         """
