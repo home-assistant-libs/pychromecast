@@ -8,6 +8,7 @@ Without him this would not have been possible.
 # Pylint does not understand the protobuf objects correctly
 # pylint: disable=no-member, too-many-lines
 
+import abc
 import errno
 import json
 import logging
@@ -160,6 +161,30 @@ CastStatus = namedtuple(
 )
 
 LaunchFailure = namedtuple("LaunchStatus", ["reason", "app_id", "request_id"])
+
+
+class CastStatusListener(abc.ABC):
+    """Listener for receiving cast status events."""
+
+    @abc.abstractmethod
+    async def new_cast_status(self, status: CastStatus):
+        """Updated cast status."""
+
+
+class ConnectionStatusListener(abc.ABC):
+    """Listener for receiving connection status events."""
+
+    @abc.abstractmethod
+    async def new_connection_status(self, status: ConnectionStatus):
+        """Updated connection status."""
+
+
+class LaunchErrorListener(abc.ABC):
+    """Listener for receiving launch error events."""
+
+    @abc.abstractmethod
+    async def new_launch_error(self, status: LaunchFailure):
+        """Launch error."""
 
 
 # pylint: disable=too-many-instance-attributes
@@ -476,7 +501,7 @@ class SocketClient(threading.Thread):
             # The socketpair may already be closed during shutdown, ignore it
             pass
 
-    def register_handler(self, handler):
+    def register_handler(self, handler: BaseController):
         """ Register a new namespace handler. """
         self._handlers[handler.namespace] = handler
 
@@ -950,7 +975,7 @@ class SocketClient(threading.Thread):
             callback_function_param,
         )
 
-    def register_connection_listener(self, listener):
+    def register_connection_listener(self, listener: ConnectionStatusListener):
         """Register a connection listener for when the socket connection
         changes. Listeners will be called with
         listener.new_connection_status(status)"""
@@ -1149,13 +1174,13 @@ class ReceiverController(BaseController):
 
         return False
 
-    def register_status_listener(self, listener):
+    def register_status_listener(self, listener: CastStatusListener):
         """Register a status listener for when a new Chromecast status
         has been received. Listeners will be called with
         listener.new_cast_status(status)"""
         self._status_listeners.append(listener)
 
-    def register_launch_error_listener(self, listener):
+    def register_launch_error_listener(self, listener: LaunchErrorListener):
         """Register a listener for when a new launch error message
         has been received. Listeners will be called with
         listener.new_launch_error(launch_failure)"""
