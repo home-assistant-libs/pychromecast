@@ -2,6 +2,7 @@
 Provides a controller for controlling the default media players
 on the Chromecast.
 """
+import abc
 from datetime import datetime
 import logging
 
@@ -310,6 +311,14 @@ class MediaStatus:
         return "<MediaStatus {}>".format(info)
 
 
+class MediaStatusListener(abc.ABC):
+    """Listener for receiving media status events."""
+
+    @abc.abstractmethod
+    async def new_media_status(self, status: MediaStatus):
+        """Updated media status."""
+
+
 # pylint: disable=too-many-public-methods
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
@@ -341,7 +350,7 @@ class MediaController(BaseController):
 
         return False
 
-    def register_status_listener(self, listener):
+    def register_status_listener(self, listener: MediaStatusListener):
         """Register a listener for new media statuses. A new status will
         call listener.new_media_status(status)"""
         self._status_listeners.append(listener)

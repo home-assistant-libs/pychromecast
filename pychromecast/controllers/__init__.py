@@ -1,12 +1,13 @@
 """
 Provides controllers to handle specific namespaces in Chromecast communication.
 """
+import abc
 import logging
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
 
 
-class BaseController:
+class BaseController(abc.ABC):
     """ ABC for namespace controllers. """
 
     def __init__(self, namespace, supporting_app_id=None, target_platform=False):
