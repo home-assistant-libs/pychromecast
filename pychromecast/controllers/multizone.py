@@ -105,7 +105,9 @@ class MultiZoneManagerListener(abc.ABC):
         """The cast has been removed from group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def multizone_new_media_status(self, group_uuid: str, media_status: MediaStatus):
+    async def multizone_new_media_status(
+        self, group_uuid: str, media_status: MediaStatus
+    ):
         """The group identified by group_uuid, of which the cast is a member, has new media status."""
 
     @abc.abstractmethod
@@ -182,7 +184,9 @@ class MultiZoneControllerListener(abc.ABC):
         """The cast has been removed from group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def multizone_status_received(self, group_uuid: str, media_status: MediaStatus):
+    async def multizone_status_received(
+        self, group_uuid: str, media_status: MediaStatus
+    ):
         """The group identified by group_uuid, of which the cast is a member, has new status."""
 
 
