@@ -315,7 +315,7 @@ class MediaStatusListener(abc.ABC):
     """Listener for receiving media status events."""
 
     @abc.abstractmethod
-    async def new_media_status(self, status: MediaStatus):
+    def new_media_status(self, status: MediaStatus):
         """Updated media status."""
 
 
