@@ -2,13 +2,16 @@
 Example on how to use the Supla Controller
 
 """
+# pylint: disable=invalid-name
+
 import logging
-import requests
+from time import sleep
 import sys
-from bs4 import BeautifulSoup
+
+import requests
+from bs4 import BeautifulSoup  # pylint: disable=import-error
 
 import pychromecast
-from time import sleep
 from pychromecast.controllers.supla import SuplaController
 
 

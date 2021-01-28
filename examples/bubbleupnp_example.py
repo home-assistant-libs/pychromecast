@@ -2,14 +2,17 @@
 Example on how to use the BubbleUPNP Controller
 
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
 import sys
 from time import sleep
 
+import zeroconf
+
 import pychromecast
 from pychromecast.controllers.bubbleupnp import BubbleUPNPController
-import zeroconf
 
 
 # Change to the friendly name of your Chromecast
