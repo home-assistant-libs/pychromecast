@@ -2,25 +2,20 @@
 Example showing how to create a simple Chromecast event listener for
 device and media status events
 """
-# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
 import time
-import zeroconf
 
 import pychromecast
-from pychromecast.controllers.media import MediaStatusListener
-from pychromecast.socket_client import CastStatusListener
+import zeroconf
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room Speaker"
 
 
-class MyCastStatusListener(CastStatusListener):
-    """Cast status listener"""
-
+class StatusListener:
     def __init__(self, name, cast):
         self.name = name
         self.cast = cast
@@ -30,9 +25,7 @@ class MyCastStatusListener(CastStatusListener):
         print(status)
 
 
-class MyMediaStatusListener(MediaStatusListener):
-    """Status media listener"""
-
+class StatusMediaListener:
     def __init__(self, name, cast):
         self.name = name
         self.cast = cast
@@ -69,10 +62,10 @@ chromecast = chromecasts[0]
 # Start socket client's worker thread and wait for initial status update
 chromecast.wait()
 
-listenerCast = MyCastStatusListener(chromecast.name, chromecast)
+listenerCast = StatusListener(chromecast.name, chromecast)
 chromecast.register_status_listener(listenerCast)
 
-listenerMedia = MyMediaStatusListener(chromecast.name, chromecast)
+listenerMedia = StatusMediaListener(chromecast.name, chromecast)
 chromecast.media_controller.register_status_listener(listenerMedia)
 
 input("Listening for Chromecast events...\n\n")

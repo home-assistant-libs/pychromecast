@@ -2,16 +2,14 @@
 Example on how to use queuing with Media Controller
 
 """
-# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
 import time
 
-import zeroconf
-
 import pychromecast
+import zeroconf
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"

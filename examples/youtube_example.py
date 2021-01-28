@@ -2,15 +2,14 @@
 Example on how to use the YouTube Controller
 
 """
-# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
-import zeroconf
 
 import pychromecast
 from pychromecast.controllers.youtube import YouTubeController
+import zeroconf
 
 
 # Change to the name of your Chromecast

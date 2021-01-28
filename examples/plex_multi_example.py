@@ -15,17 +15,15 @@ This demo uses features that require the latest Python-PlexAPI
 pip install plexapi
 
 """
-# pylint: disable=invalid-name
-
-import argparse
-import logging
-import sys
-
-import zeroconf
-from plexapi.server import PlexServer  # pylint: disable=import-error
 
 import pychromecast
+import argparse
+import logging
+import zeroconf
+import sys
+
 from pychromecast.controllers.plex import PlexController
+from plexapi.server import PlexServer
 
 
 # Change to the friendly name of your Chromecast.
@@ -89,17 +87,15 @@ if args.show_zeroconf_debug:
 startItem = None
 
 
-def media_info(_media, items):
-    """Print media info."""
+def media_info(media, items):
     print(f"Cast Device: {cast.name}")
-    print(f"Media Type: {type(_media)}")
+    print(f"Media Type: {type(media)}")
     print(f"Media Items: {items}")
 
 
-def start_item_info(_media):
-    """Print item info."""
+def start_item_info(media):
     if args.startitem:
-        print(f"Starting From: {_media}")
+        print(f"Starting From: {media}")
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])

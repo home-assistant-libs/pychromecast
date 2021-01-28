@@ -82,7 +82,6 @@ def get_device_status(host, services=None, zconf=None):
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        _LOGGER.exception("get_device_status caught exception")
         return None
 
 
@@ -122,7 +121,6 @@ def get_multizone_status(host, services=None, zconf=None):
         return MultizoneStatus(dynamic_groups, groups)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        _LOGGER.exception("get_multizone_status caught exception")
         return None
 
 
