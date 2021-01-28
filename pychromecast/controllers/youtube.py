@@ -20,7 +20,7 @@ class YouTubeController(BaseController):
     """ Controller to interact with Youtube."""
 
     def __init__(self):
-        super(YouTubeController, self).__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
+        super().__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
         self.status_update_event = threading.Event()
         self._screen_id = None
         self._session = None

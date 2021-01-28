@@ -197,9 +197,7 @@ class MultizoneController(BaseController):
         self._members = {}
         self._status_listeners = []
         self._uuid = str(uuid)
-        super(MultizoneController, self).__init__(
-            MULTIZONE_NAMESPACE, target_platform=True
-        )
+        super().__init__(MULTIZONE_NAMESPACE, target_platform=True)
 
     def _add_member(self, uuid, name):
         if uuid not in self._members:
@@ -307,6 +305,6 @@ class MultizoneController(BaseController):
 
     def tear_down(self):
         """ Called when controller is destroyed. """
-        super(MultizoneController, self).tear_down()
+        super().tear_down()
 
         self._status_listeners[:] = []

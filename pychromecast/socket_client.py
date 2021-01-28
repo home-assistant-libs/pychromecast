@@ -223,7 +223,7 @@ class SocketClient(threading.Thread):
         services = kwargs.pop("services", None)
         zconf = kwargs.pop("zconf", None)
 
-        super(SocketClient, self).__init__()
+        super().__init__()
 
         self.daemon = True
 
@@ -424,7 +424,7 @@ class SocketClient(threading.Thread):
                             self.port,
                             err,
                         )
-                        raise ChromecastConnectionError("Failed to connect")
+                        raise ChromecastConnectionError("Failed to connect") from err
 
                     self._report_connection_status(
                         ConnectionStatus(
@@ -1042,7 +1042,7 @@ class ConnectionController(BaseController):
     """ Controller to respond to connection messages. """
 
     def __init__(self):
-        super(ConnectionController, self).__init__(NS_CONNECTION)
+        super().__init__(NS_CONNECTION)
 
     def receive_message(self, message, data: dict):
         """
@@ -1069,7 +1069,7 @@ class HeartbeatController(BaseController):
     """ Controller to respond to heartbeat messages. """
 
     def __init__(self):
-        super(HeartbeatController, self).__init__(NS_HEARTBEAT, target_platform=True)
+        super().__init__(NS_HEARTBEAT, target_platform=True)
         self.last_ping = 0
         self.last_pong = time.time()
 
@@ -1134,7 +1134,7 @@ class ReceiverController(BaseController):
     """
 
     def __init__(self, cast_type=CAST_TYPE_CHROMECAST):
-        super(ReceiverController, self).__init__(NS_RECEIVER, target_platform=True)
+        super().__init__(NS_RECEIVER, target_platform=True)
 
         self.status = None
         self.launch_failure = None
@@ -1343,7 +1343,7 @@ class ReceiverController(BaseController):
 
     def tear_down(self):
         """ Called when controller is destroyed. """
-        super(ReceiverController, self).tear_down()
+        super().tear_down()
 
         self.status = None
         self.launch_failure = None

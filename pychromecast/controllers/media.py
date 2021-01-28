@@ -324,7 +324,7 @@ class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
     def __init__(self):
-        super(MediaController, self).__init__("urn:x-cast:com.google.cast.media")
+        super().__init__("urn:x-cast:com.google.cast.media")
 
         self.media_session_id = 0
         self.status = MediaStatus()
@@ -650,6 +650,6 @@ class MediaController(BaseController):
 
     def tear_down(self):
         """ Called when controller is destroyed. """
-        super(MediaController, self).tear_down()
+        super().tear_down()
 
         self._status_listeners[:] = []
