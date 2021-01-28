@@ -167,7 +167,7 @@ class CastStatusListener(abc.ABC):
     """Listener for receiving cast status events."""
 
     @abc.abstractmethod
-    async def new_cast_status(self, status: CastStatus):
+    def new_cast_status(self, status: CastStatus):
         """Updated cast status."""
 
 
@@ -175,7 +175,7 @@ class ConnectionStatusListener(abc.ABC):
     """Listener for receiving connection status events."""
 
     @abc.abstractmethod
-    async def new_connection_status(self, status: ConnectionStatus):
+    def new_connection_status(self, status: ConnectionStatus):
         """Updated connection status."""
 
 
@@ -183,7 +183,7 @@ class LaunchErrorListener(abc.ABC):
     """Listener for receiving launch error events."""
 
     @abc.abstractmethod
-    async def new_launch_error(self, status: LaunchFailure):
+    def new_launch_error(self, status: LaunchFailure):
         """Launch error."""
 
 

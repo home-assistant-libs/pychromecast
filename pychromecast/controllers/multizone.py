@@ -97,21 +97,19 @@ class MultiZoneManagerListener(abc.ABC):
     """Listener for receiving audio group events for a cast device."""
 
     @abc.abstractmethod
-    async def added_to_multizone(self, group_uuid: str):
+    def added_to_multizone(self, group_uuid: str):
         """The cast has been added to group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def removed_from_multizone(self, group_uuid: str):
+    def removed_from_multizone(self, group_uuid: str):
         """The cast has been removed from group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def multizone_new_media_status(
-        self, group_uuid: str, media_status: MediaStatus
-    ):
+    def multizone_new_media_status(self, group_uuid: str, media_status: MediaStatus):
         """The group identified by group_uuid, of which the cast is a member, has new media status."""
 
     @abc.abstractmethod
-    async def multizone_new_cast_status(self, group_uuid: str, cast_status: CastStatus):
+    def multizone_new_cast_status(self, group_uuid: str, cast_status: CastStatus):
         """The group identified by group_uuid, of which the cast is a member, has new status."""
 
 
@@ -176,17 +174,15 @@ class MultiZoneControllerListener(abc.ABC):
     """Listener for receiving audio group events."""
 
     @abc.abstractmethod
-    async def multizone_member_added(self, group_uuid: str):
+    def multizone_member_added(self, group_uuid: str):
         """The cast has been added to group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def multizone_member_removed(self, group_uuid: str):
+    def multizone_member_removed(self, group_uuid: str):
         """The cast has been removed from group identified by group_uuid."""
 
     @abc.abstractmethod
-    async def multizone_status_received(
-        self, group_uuid: str, media_status: MediaStatus
-    ):
+    def multizone_status_received(self, group_uuid: str, media_status: MediaStatus):
         """The group identified by group_uuid, of which the cast is a member, has new status."""
 
 
