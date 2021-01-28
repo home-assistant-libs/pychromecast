@@ -5,23 +5,27 @@ Chromecast.connect().
 
 You can use that functionality to include pychromecast into your main loop.
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
 import select
 import time
 
-import pychromecast
 import zeroconf
+
+import pychromecast
 
 CAST_NAME = "Living Room"
 
-"""
-Check for cast.socket_client.get_socket() and
-handle it with cast.socket_client.run_once()
-"""
-
 
 def your_main_loop():
+    """
+    Main loop example.
+    Check for cast.socket_client.get_socket() and
+    handle it with cast.socket_client.run_once()
+    """
+
     t = 1
     cast = None
 
@@ -53,12 +57,8 @@ def your_main_loop():
         time.sleep(1)
 
 
-"""
-Your code which is called by main loop
-"""
-
-
 def do_actions(cast, t):
+    """Your code which is called by main loop."""
     if t == 5:
         print()
         print("=> Sending non-blocking play_media command")

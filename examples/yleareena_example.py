@@ -2,15 +2,16 @@
 Example on how to use the Yle Areena Controller
 
 """
+# pylint: disable=invalid-name, import-outside-toplevel
 
 import argparse
 import logging
 import sys
 from time import sleep
+import zeroconf
 
 import pychromecast
 from pychromecast.controllers.yleareena import YleAreenaController
-import zeroconf
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +43,12 @@ def get_kaltura_id(program_id):
     Dive into the yledl internals and fetch the kaltura player id.
     This can be used with Chromecast
     """
-    from yledl.streamfilters import StreamFilters
-    from yledl.http import HttpClient
-    from yledl.localization import TranslationChooser
-    from yledl.extractors import extractor_factory
-    from yledl.titleformatter import TitleFormatter
+    # yledl is not available in CI, silence import warnings
+    from yledl.streamfilters import StreamFilters  # pylint: disable=import-error
+    from yledl.http import HttpClient  # pylint: disable=import-error
+    from yledl.localization import TranslationChooser  # pylint: disable=import-error
+    from yledl.extractors import extractor_factory  # pylint: disable=import-error
+    from yledl.titleformatter import TitleFormatter  # pylint: disable=import-error
 
     title_formatter = TitleFormatter()
     language_chooser = TranslationChooser("fin")
@@ -75,7 +77,7 @@ cast.wait()
 yt = YleAreenaController()
 cast.register_handler(yt)
 yt.play_areena_media(
-    entry_id=get_kaltura_id(args.program),
+    get_kaltura_id(args.program),
     audio_language=args.audio_language,
     text_language=args.text_language,
 )

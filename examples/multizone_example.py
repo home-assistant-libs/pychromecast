@@ -2,15 +2,21 @@
 Example on how to use the Multizone (Audio Group) Controller
 
 """
+# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
 import time
 
-import pychromecast
-from pychromecast.controllers.multizone import MultizoneController
 import zeroconf
+
+import pychromecast
+from pychromecast.controllers.multizone import (
+    MultizoneController,
+    MultiZoneControllerListener,
+)
+from pychromecast.socket_client import ConnectionStatusListener
 
 # Change to the name of your Chromecast
 CAST_NAME = "Whole house"
@@ -34,24 +40,27 @@ if args.show_zeroconf_debug:
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 
-class connlistener:
-    def __init__(self, mz):
-        self._mz = mz
+class MyConnectionStatusListener(ConnectionStatusListener):
+    """ConnectionStatusListener"""
 
-    def new_connection_status(self, connection_status):
-        """Handle reception of a new ConnectionStatus."""
-        if connection_status.status == "CONNECTED":
+    def __init__(self, _mz):
+        self._mz = _mz
+
+    def new_connection_status(self, status):
+        if status.status == "CONNECTED":
             self._mz.update_members()
 
 
-class mzlistener:
-    def multizone_member_added(self, uuid):
-        print("New member: {}".format(uuid))
+class MyMultiZoneControllerListener(MultiZoneControllerListener):
+    """MultiZoneControllerListener"""
 
-    def multizone_member_removed(self, uuid):
-        print("Removed member: {}".format(uuid))
+    def multizone_member_added(self, group_uuid):
+        print("New member: {}".format(group_uuid))
 
-    def multizone_status_received(self):
+    def multizone_member_removed(self, group_uuid):
+        print("Removed member: {}".format(group_uuid))
+
+    def multizone_status_received(self, group_uuid, media_status):
         print("Members: {}".format(mz.members))
 
 
@@ -63,9 +72,9 @@ if not chromecasts:
 cast = chromecasts[0]
 # Add listeners
 mz = MultizoneController(cast.uuid)
-mz.register_listener(mzlistener())
+mz.register_listener(MyMultiZoneControllerListener())
 cast.register_handler(mz)
-cast.register_connection_listener(connlistener(mz))
+cast.register_connection_listener(MyConnectionStatusListener(mz))
 
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
