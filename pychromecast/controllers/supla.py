@@ -17,7 +17,7 @@ class SuplaController(BaseController):
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
     def __init__(self):
-        super(SuplaController, self).__init__(APP_NAMESPACE, APP_SUPLA)
+        super().__init__(APP_NAMESPACE, APP_SUPLA)
 
         self.logger = logging.getLogger(__name__)
 

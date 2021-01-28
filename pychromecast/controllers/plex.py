@@ -175,7 +175,7 @@ class PlexController(BaseController):
     """ Controller to interact with Plex namespace. """
 
     def __init__(self):
-        super(PlexController, self).__init__("urn:x-cast:plex", "9AC194DC")
+        super().__init__("urn:x-cast:plex", "9AC194DC")
         self.app_id = "9AC194DC"
         self.namespace = "urn:x-cast:plex"
         self.request_id = 0
@@ -468,7 +468,7 @@ class PlexApiController(PlexController):
     """A controller that can use PlexAPI."""
 
     def __init__(self, pms):
-        super(PlexApiController, self).__init__()
+        super().__init__()
         self.pms = pms
 
     def _get_current_media(self):

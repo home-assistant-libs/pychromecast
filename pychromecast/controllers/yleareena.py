@@ -11,7 +11,7 @@ class YleAreenaController(MediaController):
 
     # pylint: disable=useless-super-delegation
     def __init__(self):
-        super(YleAreenaController, self).__init__()
+        super().__init__()
         self.app_id = APP_YLEAREENA
         self.supporting_app_id = APP_YLEAREENA
 

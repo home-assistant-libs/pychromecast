@@ -11,7 +11,7 @@ class BubbleUPNPController(MediaController):
 
     # pylint: disable=useless-super-delegation
     def __init__(self):
-        super(BubbleUPNPController, self).__init__()
+        super().__init__()
         self.app_id = APP_BUBBLEUPNP
         self.supporting_app_id = APP_BUBBLEUPNP
 

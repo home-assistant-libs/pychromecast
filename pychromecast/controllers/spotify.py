@@ -24,7 +24,7 @@ class SpotifyController(BaseController):
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
     def __init__(self, access_token=None, expires=None):
-        super(SpotifyController, self).__init__(APP_NAMESPACE, APP_SPOTIFY)
+        super().__init__(APP_NAMESPACE, APP_SPOTIFY)
 
         self.logger = logging.getLogger(__name__)
         self.session_started = False

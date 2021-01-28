@@ -15,7 +15,7 @@ class DashCastController(BaseController):
     # The pylint rule useless-super-delegation doesn't realize
     # we are setting default values here.
     def __init__(self, appNamespace=APP_NAMESPACE, appId=APP_DASHCAST):
-        super(DashCastController, self).__init__(appNamespace, appId)
+        super().__init__(appNamespace, appId)
 
     # pylint: enable=useless-super-delegation
 
