@@ -1,11 +1,14 @@
 """
 Example that shows how to list available chromecasts.
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
 
-import pychromecast
 import zeroconf
+
+import pychromecast
 
 parser = argparse.ArgumentParser(
     description="Example on how to receive updates on discovered chromecasts."

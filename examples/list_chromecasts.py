@@ -1,11 +1,15 @@
 """
 Example that shows how to list chromecasts.
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
+import sys
+
+import zeroconf
 
 import pychromecast
-import zeroconf
 
 parser = argparse.ArgumentParser(description="Example on how to list chromecasts.")
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
@@ -25,12 +29,12 @@ casts, browser = pychromecast.get_chromecasts()
 pychromecast.discovery.stop_discovery(browser)
 if len(casts) == 0:
     print("No Devices Found")
-    exit()
+    sys.exit(1)
 
 print("Found cast devices:")
 for cast in casts:
     print(
         '  "{}" on mDNS service {} with UUID:{}'.format(
-            cast.name, cast._services, cast.uuid
+            cast.name, cast._services, cast.uuid  # pylint: disable=protected-access
         )
     )

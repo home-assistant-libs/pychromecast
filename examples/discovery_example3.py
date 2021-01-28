@@ -1,13 +1,16 @@
 """
 Example that shows how to list chromecasts matching on name or uuid.
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
 import sys
 from uuid import UUID
 
-import pychromecast
 import zeroconf
+
+import pychromecast
 
 parser = argparse.ArgumentParser(
     description="Example on how to receive updates on discovered chromecasts."

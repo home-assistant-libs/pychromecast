@@ -2,14 +2,16 @@
 Example on how to use the Media Controller.
 
 """
+# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
 import time
 
-import pychromecast
 import zeroconf
+
+import pychromecast
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
