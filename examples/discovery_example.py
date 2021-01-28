@@ -1,15 +1,12 @@
 """
 Example that shows how to receive updates on discovered chromecasts.
 """
-# pylint: disable=invalid-name
-
 import argparse
 import logging
 import time
 
-import zeroconf
-
 import pychromecast
+import zeroconf
 
 parser = argparse.ArgumentParser(
     description="Example on how to receive updates on discovered chromecasts."
@@ -28,26 +25,22 @@ if args.show_zeroconf_debug:
 
 
 def list_devices():
-    """Print a list of known devices."""
     print("Currently known cast devices:")
     for uuid, service in listener.services.items():
         print("  {} {}".format(uuid, service))
 
 
-def add_callback(uuid, _name):
-    """Called when a new cast has beeen discovered."""
+def add_callback(uuid, name):
     print("Found mDNS service for cast device {}".format(uuid))
     list_devices()
 
 
-def remove_callback(uuid, _name, service):
-    """Called when a cast has beeen lost (MDNS info expired)."""
+def remove_callback(uuid, name, service):
     print("Lost mDNS service for cast device {} {}".format(uuid, service))
     list_devices()
 
 
-def update_callback(uuid, _name):
-    """Called when a cast has beeen updated (MDNS info renewed or changed)."""
+def update_callback(uuid, name):
     print("Updated mDNS service for cast device {}".format(uuid))
     list_devices()
 
