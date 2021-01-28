@@ -9,6 +9,7 @@ from time import sleep
 
 import pychromecast
 from pychromecast.controllers.bubbleupnp import BubbleUPNPController
+import zeroconf
 
 
 # Change to the friendly name of your Chromecast
