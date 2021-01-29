@@ -1,15 +1,17 @@
 """
 Example that shows how the DashCast controller can be used.
 """
+# pylint: disable=invalid-name
 
 import argparse
 import logging
 import sys
 import time
 
+import zeroconf
+
 import pychromecast
 import pychromecast.controllers.dashcast as dashcast
-import zeroconf
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"

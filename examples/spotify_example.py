@@ -6,16 +6,19 @@ This can be done by running the following:
 pip install spotify-token
 pip install git+https://github.com/plamere/spotipy.git
 """
+# pylint: disable=invalid-name
+
 import argparse
 import logging
 import time
 import sys
 
+import zeroconf
+import spotify_token as st  # pylint: disable=import-error
+import spotipy  # pylint: disable=import-error
+
 import pychromecast
 from pychromecast.controllers.spotify import SpotifyController
-import spotify_token as st
-import spotipy
-import zeroconf
 
 CAST_NAME = "My Chromecast"
 
