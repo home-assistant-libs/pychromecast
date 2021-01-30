@@ -115,7 +115,7 @@ def media_to_chromecast_command(
 
         playQueueID = playQueue.playQueueID
         contentId = playQueue.selectedItem.key
-        contentType = playQueue.playQueueType
+        contentType = playQueue.items[0].listType
         version = server.version
 
     # Chromecasts seem to start playback 5 seconds before the offset.
