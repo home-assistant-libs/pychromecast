@@ -12,7 +12,7 @@ import zeroconf
 
 import pychromecast
 from pychromecast.controllers.media import MediaStatusListener
-from pychromecast.socket_client import CastStatusListener
+from pychromecast.controllers.receiver import CastStatusListener
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room Speaker"
