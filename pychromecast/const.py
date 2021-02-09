@@ -23,3 +23,7 @@ CAST_TYPES = {
 
 # Known models not manufactured by Google
 CAST_MANUFACTURERS = {}
+
+MESSAGE_TYPE = "type"
+REQUEST_ID = "requestId"
+SESSION_ID = "sessionId"
