@@ -27,6 +27,10 @@ TYPE_RECEIVER_STATUS = "RECEIVER_STATUS"
 TYPE_LAUNCH = "LAUNCH"
 TYPE_LAUNCH_ERROR = "LAUNCH_ERROR"
 
+VOLUME_CONTROL_TYPE_ATTENUATION = "attenuation"
+VOLUME_CONTROL_TYPE_FIXED = "fixed"
+VOLUME_CONTROL_TYPE_MASTER = "master"
+
 CastStatus = namedtuple(
     "CastStatus",
     [
@@ -41,6 +45,7 @@ CastStatus = namedtuple(
         "transport_id",
         "status_text",
         "icon_url",
+        "volume_control_type",
     ],
 )
 
@@ -215,6 +220,7 @@ class ReceiverController(BaseController):
             app_data.get("transportId"),
             app_data.get("statusText", ""),
             app_data.get("iconUrl"),
+            volume_data.get("controlType", VOLUME_CONTROL_TYPE_ATTENUATION),
         )
         return status
 
