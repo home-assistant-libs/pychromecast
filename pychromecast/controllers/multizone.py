@@ -6,16 +6,16 @@ import logging
 
 from . import BaseController
 from .media import MediaStatus
+from .receiver import CastStatus
+from ..const import MESSAGE_TYPE
 from ..socket_client import (
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_DISCONNECTED,
     CONNECTION_STATUS_LOST,
-    CastStatus,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-MESSAGE_TYPE = "type"
 MULTIZONE_NAMESPACE = "urn:x-cast:com.google.cast.multizone"
 TYPE_CASTING_GROUPS = "CASTING_GROUPS"
 TYPE_DEVICE_ADDED = "DEVICE_ADDED"

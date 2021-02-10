@@ -8,8 +8,8 @@ from copy import deepcopy
 from urllib.parse import urlparse
 
 from . import BaseController
+from ..const import MESSAGE_TYPE
 
-MESSAGE_TYPE = "type"
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
 STREAM_TYPE_LIVE = "LIVE"
