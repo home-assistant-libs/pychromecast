@@ -340,7 +340,8 @@ class SocketClient(threading.Thread):
                         self.port,
                     )
                     self.socket.connect((self.host, self.port))
-                    self.socket = ssl.wrap_socket(self.socket)
+                    context = ssl.SSLContext()
+                    self.socket = context.wrap_socket(self.socket)
                     self.connecting = False
                     self._force_recon = False
                     self._report_connection_status(

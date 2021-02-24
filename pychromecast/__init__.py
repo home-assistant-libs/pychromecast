@@ -363,10 +363,8 @@ class Chromecast:
     def ignore_cec(self):
         """ Returns whether the CEC data should be ignored. """
         return self.device is not None and any(
-            [
-                fnmatch.fnmatchcase(self.device.friendly_name, pattern)
-                for pattern in IGNORE_CEC
-            ]
+            fnmatch.fnmatchcase(self.device.friendly_name, pattern)
+            for pattern in IGNORE_CEC
         )
 
     @property
