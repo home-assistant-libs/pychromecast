@@ -56,4 +56,4 @@ cast.register_handler(yt)
 yt.play_video(VIDEO_ID)
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

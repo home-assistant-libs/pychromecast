@@ -1,68 +1,120 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
+import abc
+from collections import namedtuple
+import itertools
 import logging
-import socket
-from threading import Event
+import threading
+import time
 from uuid import UUID
 
 import zeroconf
 
+from .const import SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
+from .dial import get_device_status, get_multizone_status
+
 DISCOVER_TIMEOUT = 5
+
+ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
+CastInfo = namedtuple(
+    "CastInfo", ["services", "uuid", "model_name", "friendly_name", "host", "port"]
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class CastListener:
-    """Zeroconf Cast Services collection."""
+class AbstractCastListener(abc.ABC):
+    """Listener for discovering chromecasts."""
+
+    @abc.abstractmethod
+    def add_cast(self, uuid, service):
+        """A cast has been discovered.
+
+        uuid: The cast's uuid, this is the dictionary key to find
+        the chromecast metadata in CastBrowser.devices.
+        service: First known MDNS service name or host:port
+        """
+
+    @abc.abstractmethod
+    def remove_cast(self, uuid, service, cast_info):
+        """A cast has been removed, meaning there are no longer any known services.
+
+        uuid: The cast's uuid
+        service: Last valid MDNS service name or host:port
+        cast_info: CastInfo for the service to aid cleanup
+        """
+
+    @abc.abstractmethod
+    def update_cast(self, uuid, service):
+        """A cast has been updated.
+
+        uuid: The cast's uuid
+        service: MDNS service name or host:port
+        """
+
+
+class SimpleCastListener(AbstractCastListener):
+    """Helper for backwards compatibility."""
 
     def __init__(self, add_callback=None, remove_callback=None, update_callback=None):
-        self.services = {}
-        self.add_callback = add_callback
-        self.remove_callback = remove_callback
-        self.update_callback = update_callback
+        self._add_callback = add_callback
+        self._remove_callback = remove_callback
+        self._update_callback = update_callback
 
-    @property
-    def count(self):
-        """Number of discovered cast services."""
-        return len(self.services)
+    def add_cast(self, uuid, service):
+        if self._add_callback:
+            self._add_callback(uuid, service)
 
-    @property
-    def devices(self):
-        """List of tuples (ip, host) for each discovered device."""
-        return list(self.services.values())
+    def remove_cast(self, uuid, service, cast_info):
+        if self._remove_callback:
+            self._remove_callback(uuid, service, cast_info)
+
+    def update_cast(self, uuid, service):
+        if self._update_callback:
+            self._update_callback(uuid, service)
+
+
+class ZeroConfListener:
+    """Listener for ZeroConf service browser."""
 
     # pylint: disable=unused-argument
+    def __init__(self, cast_listener, devices, host_browser):
+        self._cast_listener = cast_listener
+        self._devices = devices
+        self._host_browser = host_browser
+
     def remove_service(self, zconf, typ, name):
-        """ Remove a service from the collection. """
+        """Called by zeroconf when an mDNS service is lost."""
         _LOGGER.debug("remove_service %s, %s", typ, name)
-        service = None
-        service_removed = False
+        cast_info = None
+        device_removed = False
         uuid = None
-        for uuid, services_for_uuid in self.services.items():
-            if name in services_for_uuid[0]:
-                service = services_for_uuid
-                services_for_uuid[0].remove(name)
-                if len(services_for_uuid[0]) == 0:
-                    service_removed = True
+        service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
+        for uuid, info_for_uuid in self._devices.items():
+            if service_info in info_for_uuid.services:
+                cast_info = info_for_uuid
+                info_for_uuid.services.remove(service_info)
+                if len(info_for_uuid.services) == 0:
+                    device_removed = True
                 break
 
-        if not service:
+        if not cast_info:
             _LOGGER.debug("remove_service unknown %s, %s", typ, name)
             return
 
-        if self.remove_callback and service_removed:
-            self.remove_callback(uuid, name, service)
-        if self.update_callback and not service_removed:
-            self.update_callback(uuid, name)
+        if device_removed:
+            self._cast_listener.remove_cast(uuid, name, cast_info)
+        else:
+            self._cast_listener.update_cast(uuid, name)
 
     def update_service(self, zconf, typ, name):
-        """ Update a service in the collection. """
+        """Called by zeroconf when an mDNS service is updated."""
         _LOGGER.debug("update_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name, self.update_callback)
+        self._add_update_service(zconf, typ, name, self._cast_listener.update_cast)
 
     def add_service(self, zconf, typ, name):
-        """ Add a service to the collection. """
+        """Called by zeroconf when an mDNS service is discovered."""
         _LOGGER.debug("add_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name, self.add_callback)
+        self._add_update_service(zconf, typ, name, self._cast_listener.add_cast)
 
     def _add_update_service(self, zconf, typ, name, callback):
         """ Add or update a service. """
@@ -95,6 +147,10 @@ class CastListener:
         addresses = service.parsed_addresses()
         host = addresses[0] if addresses else service.server
 
+        # Store the host, in case mDNS stops working
+        if self._host_browser:
+            self._host_browser.add_hosts([host])
+
         model_name = get_value("md")
         uuid = get_value("id")
         friendly_name = get_value("fn")
@@ -106,56 +162,252 @@ class CastListener:
             return
         uuid = UUID(uuid)
 
-        services_for_uuid = self.services.setdefault(
-            uuid, ({name}, uuid, model_name, friendly_name)
+        cast_info = self._devices.setdefault(
+            uuid, CastInfo(set(), uuid, model_name, friendly_name, host, service.port)
         )
-        services_for_uuid[0].add(name)
-        self.services[uuid] = (
-            services_for_uuid[0],
-            services_for_uuid[1],
-            model_name,
-            friendly_name,
-            host,
-            service.port,
+        # Update stored information
+        cast_info.services.add(ServiceInfo(SERVICE_TYPE_MDNS, name))
+        self._devices[uuid] = CastInfo(
+            cast_info.services, uuid, model_name, friendly_name, host, service.port
         )
 
+        callback(uuid, name)
+
+
+class HostStatus:
+    """Status of known host."""
+
+    def __init__(self):
+        self.failcount = 0
+
+
+HOSTLISTENER_CYCLE_TIME = 5
+HOSTLISTENER_MAX_FAIL = 5
+
+
+class HostBrowser(threading.Thread):
+    """"Repeateadly poll a set of known hosts."""
+
+    # pylint: disable=unused-argument
+    def __init__(self, cast_listener, devices):
+        super().__init__(daemon=True)
+        self._cast_listener = cast_listener
+        self._devices = devices
+        self._known_hosts = {}
+        self._next_update = time.time()
+        self._start_requested = False
+        self.stop = threading.Event()
+
+    def add_hosts(self, known_hosts):
+        """Add a list of known hosts to the set."""
+        for host in known_hosts:
+            self._known_hosts.setdefault(host, HostStatus())
+
+    def run(self):
+        """Start worker thread."""
+        _LOGGER.debug("HostBrowser thread started")
+        try:
+            while not self.stop.is_set():
+                self._poll_hosts()
+                self._next_update += HOSTLISTENER_CYCLE_TIME
+                self.stop.wait(max(self._next_update - time.time(), 0))
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Unhandled exception in worker thread")
+            raise
+        _LOGGER.debug("HostBrowser thread done")
+
+    def _poll_hosts(self):
+        known_hosts = list(self._known_hosts.keys())
+        for host in known_hosts:
+            if self.stop.is_set():
+                break
+            device_status = get_device_status(host, timeout=4)
+            try:
+                hoststatus = self._known_hosts[host]
+            except KeyError:
+                # The host has been removed by another thread
+                continue
+
+            if not device_status:
+                hoststatus.failcount += 1
+                if hoststatus.failcount == HOSTLISTENER_MAX_FAIL:
+                    self._remove_update_host(host)
+                hoststatus.failcount = min(
+                    hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1
+                )
+                continue
+
+            # We got device_status, try to get multizone status, and update services
+            hoststatus.failcount = 0
+            self._add_update_host(
+                host,
+                8009,
+                device_status.friendly_name,
+                device_status.model_name,
+                device_status.uuid,
+            )
+
+            multizone_status = get_multizone_status(host)
+            if not multizone_status:
+                return
+
+            for group in itertools.chain(
+                multizone_status.dynamic_groups, multizone_status.groups
+            ):
+                # Note: This is currently (2021-02) not working for dynamic_groups, the
+                # ports of dynamic groups are not present in the eureka_info reply.
+                if group.host and group.host not in self._known_hosts:
+                    self.add_hosts([group.host])
+                if group.port is None or group.host != host:
+                    continue
+                self._add_update_host(
+                    host,
+                    group.port,
+                    group.friendly_name,
+                    "Google Cast Group",
+                    group.uuid,
+                )
+
+    def _add_update_host(self, host, port, friendly_name, model_name, uuid):
+        service_info = ServiceInfo(SERVICE_TYPE_HOST, (host, port))
+
+        callback = self._cast_listener.add_cast
+        if uuid in self._devices:
+            callback = self._cast_listener.update_cast
+            cast_info = self._devices[uuid]
+            if (
+                service_info in cast_info.services
+                and cast_info.model_name == model_name
+                and cast_info.friendly_name == friendly_name
+            ):
+                # No changes, return
+                return
+
+        cast_info = self._devices.setdefault(
+            uuid, CastInfo(set(), uuid, model_name, friendly_name, host, port)
+        )
+        # Update stored information
+        cast_info.services.add(service_info)
+        self._devices[uuid] = CastInfo(
+            cast_info.services, uuid, model_name, friendly_name, host, port
+        )
+
+        name = f"{host}:{port}"
+        _LOGGER.debug(
+            "Host %s (%s) up, adding or updating host based service", name, uuid
+        )
         if callback:
             callback(uuid, name)
 
+    def _remove_update_host(self, host):
+        for uuid, info_for_uuid in self._devices.items():
+            for service in info_for_uuid.services:
+                if service.type == SERVICE_TYPE_HOST and service.data[0] == host:
+                    info_for_uuid.services.remove(service)
+                    port = service.data[1]
+                    name = f"{host}:{port}"
+                    _LOGGER.debug(
+                        "Host %s (%s) down, removing host based service", name, uuid
+                    )
+                    if len(info_for_uuid.services) == 0:
+                        self._cast_listener.remove_cast(uuid, name, info_for_uuid)
+                    else:
+                        self._cast_listener.update_cast(uuid, name)
+                    break
 
-def start_discovery(listener, zeroconf_instance):
-    """
-    Start discovering chromecasts on the network.
 
-    This method will start discovering chromecasts on a separate thread. When
-    a chromecast is discovered, the callback will be called with the
-    discovered chromecast's zeroconf name. This is the dictionary key to find
-    the chromecast metadata in listener.services.
+class CastBrowser:
+    """Discover Chromecasts on the network.
 
-    This method returns the zeroconf ServiceBrowser object.
-
-    A CastListener object must be passed, and will contain information for the
-    discovered chromecasts. To stop discovery, call the stop_discovery method with
-    the ServiceBrowser object.
+    When a Chromecast is found, cast_listener.add_cast is called
+    When a Chromecast is updated, cast_listener.update_cast is called
+    When a Chromecast is lost, the cast_listener.remove_cast is called
 
     A shared zeroconf instance can be passed as zeroconf_instance. If no
     instance is passed, a new instance will be created.
     """
-    return zeroconf.ServiceBrowser(
-        zeroconf_instance,
-        "_googlecast._tcp.local.",
-        listener,
+
+    def __init__(self, cast_listener, zeroconf_instance=None, known_hosts=None):
+        self._cast_listener = cast_listener
+        self.zc = zeroconf_instance  # pylint: disable=invalid-name
+        self._zc_browser = None
+        self.devices = {}
+        self.services = self.devices  # For backwards compatibility
+        self.host_browser = HostBrowser(self._cast_listener, self.devices)
+        self.zeroconf_listener = ZeroConfListener(
+            self._cast_listener, self.devices, self.host_browser
+        )
+        if known_hosts:
+            self.host_browser.add_hosts(known_hosts)
+
+    @property
+    def count(self):
+        """Number of discovered cast devices."""
+        return len(self.devices)
+
+    def set_zeroconf_instance(self, zeroconf_instance):
+        """Set zeroconf_instance."""
+        if self.zc:
+            return
+        self.zc = zeroconf_instance
+
+    def start_discovery(self):
+        """
+        This method will start discovering chromecasts on separate threads. When
+        a chromecast is discovered, callback will be called with the
+        discovered chromecast's zeroconf name. This is the dictionary key to find
+        the chromecast metadata in CastBrowser.devices.
+
+        A shared zeroconf instance can be passed as zeroconf_instance. If no
+        instance is passed, a new instance will be created.
+        """
+
+        if self.zc:
+            self._zc_browser = zeroconf.ServiceBrowser(
+                self.zc,
+                "_googlecast._tcp.local.",
+                self.zeroconf_listener,
+            )
+        self.host_browser.start()
+
+    def stop_discovery(self):
+        """Stop the chromecast discovery threads."""
+        if self._zc_browser:
+            try:
+                self._zc_browser.cancel()
+            except RuntimeError:
+                # Throws if called from service callback when joining the zc browser thread
+                pass
+            self._zc_browser.zc.close()
+        self.host_browser.stop.set()
+        self.host_browser.join()
+
+
+class CastListener(CastBrowser):
+    """Backwards compatible helper class."""
+
+    def __init__(self, add_callback=None, remove_callback=None, update_callback=None):
+        _LOGGER.info("CastListener is deprecated, update to use CastBrowser instead")
+        listener = SimpleCastListener(add_callback, remove_callback, update_callback)
+        super().__init__(listener)
+
+
+def start_discovery(cast_browser, zeroconf_instance):
+    """Start discovering chromecasts on the network."""
+    _LOGGER.info(
+        "start_discovery is deprecated, call cast_browser.start_discovery() instead"
     )
+    cast_browser.set_zeroconf_instance(zeroconf_instance)
+    cast_browser.start_discovery()
+    return cast_browser
 
 
-def stop_discovery(browser):
-    """Stop the chromecast discovery thread."""
-    try:
-        browser.cancel()
-    except RuntimeError:
-        # Throws if called from service callback when joining the zc browser thread
-        pass
-    browser.zc.close()
+def stop_discovery(cast_browser):
+    """Stop the chromecast discovery threads."""
+    _LOGGER.info(
+        "stop_discovery is deprecated, call cast_browser.stop_discovery() instead"
+    )
+    cast_browser.stop_discovery()
 
 
 def discover_chromecasts(
@@ -165,29 +417,28 @@ def discover_chromecasts(
     Discover chromecasts on the network.
 
     Returns a tuple of:
-      A list of chromecast services, or an empty list if no matching chromecasts were
+      A list of chromecast devices, or an empty list if no matching chromecasts were
       found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the browser object to
-      pychromecast.discovery.stop_discovery().
+      are (no longer) needed, call browser.stop_discovery().
 
     :param zeroconf_instance: An existing zeroconf instance.
     """
     # pylint: disable=unused-argument
-    def callback(uuid, name):
+    def add_callback(uuid, service):
         """Called when zeroconf has discovered a new chromecast."""
-        if max_devices is not None and listener.count >= max_devices:
+        if max_devices is not None and browser.count >= max_devices:
             discover_complete.set()
 
-    discover_complete = Event()
-    listener = CastListener(callback)
+    discover_complete = threading.Event()
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = start_discovery(listener, zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser.start_discovery()
 
     # Wait for the timeout or the maximum number of devices
     discover_complete.wait(timeout)
 
-    return (listener.devices, browser)
+    return (browser.devices.values(), browser)
 
 
 def discover_listed_chromecasts(
@@ -201,11 +452,10 @@ def discover_listed_chromecasts(
     names or a list of UUIDs.
 
     Returns a tuple of:
-      A list of chromecast services matching the criteria,
+      A list of chromecast devices matching the criteria,
       or an empty list if no matching chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the browser object to
-      pychromecast.discovery.stop_discovery().
+      are (no longer) needed, call browser.stop_discovery().
 
     :param friendly_names: A list of wanted friendly names
     :param uuids: A list of wanted uuids
@@ -216,57 +466,25 @@ def discover_listed_chromecasts(
 
     cc_list = {}
 
-    def callback(uuid, name):  # pylint: disable=unused-argument
-        service = listener.services[uuid]
+    def add_callback(uuid, service):  # pylint: disable=unused-argument
+        _LOGGER.debug("Got cast %s, %s", uuid, service)
+        service = browser.devices[uuid]
         friendly_name = service[3]
         if uuids and uuid in uuids:
-            cc_list[uuid] = listener.services[uuid]
+            cc_list[uuid] = browser.devices[uuid]
             uuids.remove(uuid)
         if friendly_names and friendly_name in friendly_names:
-            cc_list[uuid] = listener.services[uuid]
+            cc_list[uuid] = browser.devices[uuid]
             friendly_names.remove(friendly_name)
         if not friendly_names and not uuids:
             discover_complete.set()
 
-    discover_complete = Event()
+    discover_complete = threading.Event()
 
-    listener = CastListener(callback)
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = start_discovery(listener, zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
     return (cc_list.values(), browser)
-
-
-def get_info_from_service(service, zconf):
-    """ Resolve service_info from service. """
-    service_info = None
-    try:
-        service_info = zconf.get_service_info("_googlecast._tcp.local.", service)
-        if service_info:
-            _LOGGER.debug(
-                "get_info_from_service resolved service %s to service_info %s",
-                service,
-                service_info,
-            )
-    except IOError:
-        pass
-    return service_info
-
-
-def get_host_from_service_info(service_info):
-    """ Get hostname or IP from service_info. """
-    host = None
-    port = None
-    if (
-        service_info
-        and service_info.port
-        and (service_info.server or len(service_info.addresses) > 0)
-    ):
-        if len(service_info.addresses) > 0:
-            host = socket.inet_ntoa(service_info.addresses[0])
-        else:
-            host = service_info.server.lower()
-        port = service_info.port
-    return (host, port)

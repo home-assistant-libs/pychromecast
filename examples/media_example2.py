@@ -22,7 +22,7 @@ MEDIA_URL = (
 )
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the socket client without callbacks."
+    description="Example on how to use the Media Controller."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
@@ -107,4 +107,4 @@ while True:
         break
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

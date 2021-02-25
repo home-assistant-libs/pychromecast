@@ -71,4 +71,4 @@ for URL in MEDIA_URLS[1:]:
     cast.media_controller.queue_next()
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

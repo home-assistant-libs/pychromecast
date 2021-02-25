@@ -78,4 +78,4 @@ chromecast.media_controller.register_status_listener(listenerMedia)
 input("Listening for Chromecast events...\n\n")
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()
