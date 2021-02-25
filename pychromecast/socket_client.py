@@ -918,7 +918,7 @@ class SocketClient(threading.Thread):
         if namespace not in self.app_namespaces:
             raise UnsupportedNamespace(
                 (
-                    "Namespace {} is not supported by current app. " "Supported are {}"
+                    "Namespace {} is not supported by current app. Supported are {}"
                 ).format(namespace, ", ".join(self.app_namespaces))
             )
 
@@ -1066,7 +1066,7 @@ class HeartbeatController(BaseController):
             self.send_message({MESSAGE_TYPE: TYPE_PING})
         except NotConnected:
             self._socket_client.logger.error(
-                "Chromecast is disconnected. " "Cannot ping until reconnected."
+                "Chromecast is disconnected. Cannot ping until reconnected."
             )
 
     def reset(self):

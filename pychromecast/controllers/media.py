@@ -489,9 +489,7 @@ class MediaController(BaseController):
             try:
                 listener.new_media_status(self.status)
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception(
-                    "Exception thrown when calling media status " "callback"
-                )
+                _LOGGER.exception("Exception thrown when calling media status callback")
 
     # pylint: disable=too-many-arguments
     def play_media(
