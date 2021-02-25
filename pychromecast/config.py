@@ -37,7 +37,7 @@ def get_app_config(app_id):
     """ Get specific configuration for 'app_id'. """
     try:
         req = requests.get(
-            ("https://clients3.google.com/" "cast/chromecast/device/app?a={}").format(
+            ("https://clients3.google.com/cast/chromecast/device/app?a={}").format(
                 app_id
             )
         )

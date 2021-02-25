@@ -83,7 +83,7 @@ class BaseController(abc.ABC):
                 return
 
             raise UnsupportedNamespace(
-                ("Namespace {} is not supported by running" "application.").format(
+                ("Namespace {} is not supported by running application.").format(
                     self.namespace
                 )
             )
