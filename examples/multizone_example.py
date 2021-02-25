@@ -60,7 +60,7 @@ class MyMultiZoneControllerListener(MultiZoneControllerListener):
     def multizone_member_removed(self, group_uuid):
         print("Removed member: {}".format(group_uuid))
 
-    def multizone_status_received(self, group_uuid, media_status):
+    def multizone_status_received(self):
         print("Members: {}".format(mz.members))
 
 
