@@ -9,7 +9,6 @@ from .media import MediaController
 class BubbleUPNPController(MediaController):
     """ Controller to interact with BubbleUPNP app namespace. """
 
-    # pylint: disable=useless-super-delegation
     def __init__(self):
         super().__init__()
         self.app_id = APP_BUBBLEUPNP

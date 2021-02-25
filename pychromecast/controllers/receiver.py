@@ -98,7 +98,7 @@ class ReceiverController(BaseController):
         """ Convenience method to retrieve current app id. """
         return self.status.app_id if self.status else None
 
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, data: dict):
         """
         Called when a receiver message is received.
 

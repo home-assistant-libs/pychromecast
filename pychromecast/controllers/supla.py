@@ -13,15 +13,10 @@ APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 class SuplaController(BaseController):
     """ Controller to interact with Supla namespace. """
 
-    # pylint: disable=useless-super-delegation
-    # The pylint rule useless-super-delegation doesn't realize
-    # we are setting default values here.
     def __init__(self):
         super().__init__(APP_NAMESPACE, APP_SUPLA)
 
         self.logger = logging.getLogger(__name__)
-
-    # pylint: enable=useless-super-delegation
 
     def play_media(self, media_id, is_live=False):
         """

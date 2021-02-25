@@ -94,8 +94,7 @@ class BaseController(abc.ABC):
         """Send a message."""
         self._message_func(self.namespace, data, inc_session_id, callback_function)
 
-    # pylint: disable=unused-argument,no-self-use
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, _data: dict):  # pylint: disable=no-self-use
         """
         Called when a message is received that matches the namespace.
         Returns boolean indicating if message was handled.
