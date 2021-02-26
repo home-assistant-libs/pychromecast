@@ -1,5 +1,5 @@
 """
-Example on how to use the BubbleUPNP Controller
+Example on how to use the BubbleUPNP Controller to play an URL.
 
 """
 # pylint: disable=invalid-name
@@ -62,3 +62,5 @@ bubbleupnp.launch()
 bubbleupnp.play_media(args.url, "audio/mp3", stream_type="LIVE")
 
 sleep(10)
+
+browser.stop_discovery()

@@ -13,7 +13,7 @@ import zeroconf
 import pychromecast
 
 parser = argparse.ArgumentParser(
-    description="Example on how to receive updates on discovered chromecasts."
+    description="Example that shows how to list chromecasts matching on name or uuid."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
@@ -45,7 +45,7 @@ devices, browser = pychromecast.discovery.discover_listed_chromecasts(
     friendly_names=friendly_names, uuids=uuids
 )
 # Shut down discovery
-pychromecast.stop_discovery(browser)
+browser.stop_discovery()
 
 print(f"Discovered {len(devices)} device(s):")
 for device in devices:

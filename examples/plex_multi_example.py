@@ -158,3 +158,6 @@ plex_c.block_until_playing(media, startItem=startItem)
 
 if getattr(media, "TYPE", None) == "playlist":
     media.delete()
+
+# Shut down discovery
+browser.stop_discovery()

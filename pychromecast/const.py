@@ -24,6 +24,9 @@ CAST_TYPES = {
 # Known models not manufactured by Google
 CAST_MANUFACTURERS = {}
 
+SERVICE_TYPE_HOST = "host"
+SERVICE_TYPE_MDNS = "mdns"
+
 MESSAGE_TYPE = "type"
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"

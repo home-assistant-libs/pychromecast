@@ -17,7 +17,7 @@ import pychromecast.controllers.dashcast as dashcast
 CAST_NAME = "Living Room"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Media Controller to play an URL."
+    description="Example that shows how the DashCast controller can be used."
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
@@ -79,4 +79,4 @@ if args.show_debug:
     time.sleep(10)
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

@@ -110,4 +110,4 @@ else:
     client.start_playback(device_id=spotify_device_id, context_uri=args.uri[0])
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

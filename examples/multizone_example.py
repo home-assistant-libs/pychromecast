@@ -86,4 +86,4 @@ while True:
         break
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()

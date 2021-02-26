@@ -82,3 +82,6 @@ yt.play_areena_media(
     text_language=args.text_language,
 )
 sleep(10)
+
+# Shut down discovery
+browser.stop_discovery()

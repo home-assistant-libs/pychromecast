@@ -35,7 +35,6 @@ def your_main_loop():
             chromecast.connect()
             nonlocal cast
             cast = chromecast
-            pychromecast.discovery.stop_discovery(browser)
 
     browser = pychromecast.get_chromecasts(blocking=False, callback=callback)
 
@@ -55,6 +54,9 @@ def your_main_loop():
         else:
             print("=> Waiting for discovery of cast '{}'...".format(args.cast))
         time.sleep(1)
+
+    print("All done, shutting down discovery")
+    browser.stop_discovery()
 
 
 def do_actions(cast, t):
@@ -90,9 +92,7 @@ def do_actions(cast, t):
         print("Media status", cast.media_controller.status)
 
 
-parser = argparse.ArgumentParser(
-    description="Example on how to use the Media Controller to play an URL."
-)
+parser = argparse.ArgumentParser(description="Example without socket_client thread")
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"

@@ -15,7 +15,9 @@ from .error import *  # noqa
 from . import socket_client
 from .discovery import (  # noqa
     DISCOVER_TIMEOUT,
-    CastListener,
+    CastBrowser,
+    CastListener,  # Deprecated
+    SimpleCastListener,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
@@ -64,22 +66,22 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
 _get_chromecast_from_host = get_chromecast_from_host  # pylint: disable=invalid-name
 
 
-def get_chromecast_from_service(
-    services, zconf, tries=None, retry_wait=None, timeout=None
+def get_chromecast_from_cast_info(
+    cast_info, zconf, tries=None, retry_wait=None, timeout=None
 ):
     """Creates a Chromecast object from a zeroconf service."""
-    # Build device status from the mDNS service name info, this
+    # Build device status from the CastInfo, this
     # information is the primary source and the remaining will be
     # fetched later on.
-    services, uuid, model_name, friendly_name, _, _ = services
-    _LOGGER.debug("_get_chromecast_from_service %s", services)
-    cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
-    manufacturer = CAST_MANUFACTURERS.get(model_name.lower(), "Google Inc.")
+    services = cast_info.services
+    _LOGGER.debug("get_chromecast_from_cast_info %s", services)
+    cast_type = CAST_TYPES.get(cast_info.model_name.lower(), CAST_TYPE_CHROMECAST)
+    manufacturer = CAST_MANUFACTURERS.get(cast_info.model_name.lower(), "Google Inc.")
     device = DeviceStatus(
-        friendly_name=friendly_name,
-        model_name=model_name,
+        friendly_name=cast_info.friendly_name,
+        model_name=cast_info.model_name,
         manufacturer=manufacturer,
-        uuid=uuid,
+        uuid=cast_info.uuid,
         cast_type=cast_type,
     )
     return Chromecast(
@@ -95,7 +97,7 @@ def get_chromecast_from_service(
 
 # Alias for backwards compatibility
 _get_chromecast_from_service = (  # pylint: disable=invalid-name
-    get_chromecast_from_service
+    get_chromecast_from_cast_info
 )
 
 
@@ -116,8 +118,7 @@ def get_listed_chromecasts(
       A list of Chromecast objects matching the criteria,
       or an empty list if no matching chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the browser object to
-      pychromecast.discovery.stop_discovery().
+      are (no longer) needed, call browser.stop_discovery().
 
     To only discover chromecast devices without connecting to them, use
     discover_listed_chromecasts instead.
@@ -134,20 +135,21 @@ def get_listed_chromecasts(
 
     cc_list = {}
 
-    def callback(uuid, name):  # pylint: disable=unused-argument
-        _LOGGER.debug("Found chromecast %s", uuid)
+    def add_callback(uuid, service):  # pylint: disable=unused-argument
+        _LOGGER.debug(
+            "Found chromecast %s (%s)", browser.devices[uuid].friendly_name, uuid
+        )
 
         def get_chromecast_from_uuid(uuid):
-            return get_chromecast_from_service(
-                listener.services[uuid],
+            return get_chromecast_from_cast_info(
+                browser.devices[uuid],
                 zconf=zconf,
                 tries=tries,
                 retry_wait=retry_wait,
                 timeout=timeout,
             )
 
-        service = listener.services[uuid]
-        friendly_name = service[3]
+        friendly_name = browser.devices[uuid].friendly_name
         try:
             if uuids and uuid in uuids:
                 if uuid not in cc_list:
@@ -164,9 +166,9 @@ def get_listed_chromecasts(
 
     discover_complete = Event()
 
-    listener = CastListener(callback)
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = start_discovery(listener, zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
@@ -190,8 +192,7 @@ def get_chromecasts(
       A list of Chromecast objects, or an empty list if no matching chromecasts were
       found.
       A service browser to keep the Chromecast mDNS data updated. When updates
-      are (no longer) needed, pass the browser object to
-      pychromecast.discovery.stop_discovery().
+      are (no longer) needed, call browser.stop_discovery().
 
     To only discover chromecast devices without connecting to them, use
     discover_chromecasts instead.
@@ -215,13 +216,13 @@ def get_chromecasts(
     """
     if blocking:
         # Thread blocking chromecast discovery
-        services, browser = discover_chromecasts()
+        devices, browser = discover_chromecasts()
         cc_list = []
-        for service in services:
+        for device in devices:
             try:
                 cc_list.append(
-                    get_chromecast_from_service(
-                        service,
+                    get_chromecast_from_cast_info(
+                        device,
                         browser.zc,
                         tries=tries,
                         retry_wait=retry_wait,
@@ -238,14 +239,14 @@ def get_chromecasts(
 
     known_uuids = set()
 
-    def internal_callback(uuid, name):  # pylint: disable=unused-argument
+    def add_callback(uuid, service):  # pylint: disable=unused-argument
         """Called when zeroconf has discovered a new chromecast."""
         if uuid in known_uuids:
             return
         try:
             callback(
-                get_chromecast_from_service(
-                    listener.services[uuid],
+                get_chromecast_from_cast_info(
+                    browser.devices[uuid],
                     zconf=zconf,
                     tries=tries,
                     retry_wait=retry_wait,
@@ -256,9 +257,9 @@ def get_chromecasts(
         except ChromecastConnectionError:  # noqa
             pass
 
-    listener = CastListener(internal_callback)
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = start_discovery(listener, zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser.start_discovery()
     return browser
 
 
@@ -280,7 +281,7 @@ class Chromecast:
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
-    :param services: A list of mDNS services to try to connect to. If present,
+    :param services: A set of mDNS or host services to try to connect to. If present,
                      parameters host and port are ignored and host and port are
                      instead resolved through mDNS. The list of services may be
                      modified, for example if speaker group leadership is handed

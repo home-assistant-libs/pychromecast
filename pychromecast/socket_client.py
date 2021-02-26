@@ -26,7 +26,7 @@ from .controllers import BaseController
 from .controllers.media import MediaController
 from .controllers.receiver import ReceiverController
 from .const import CAST_TYPE_CHROMECAST, MESSAGE_TYPE, REQUEST_ID, SESSION_ID
-from .discovery import get_info_from_service, get_host_from_service_info
+from .dial import get_host_from_service
 from .error import (
     ChromecastConnectionError,
     UnsupportedNamespace,
@@ -294,13 +294,17 @@ class SocketClient(threading.Thread):
                     if service:
                         host = None
                         port = None
-                        service_info = get_info_from_service(service, self.zconf)
-                        host, port = get_host_from_service_info(service_info)
+                        host, port, service_info = get_host_from_service(
+                            service, self.zconf
+                        )
                         if host and port:
-                            try:
-                                self.fn = service_info.properties[b"fn"].decode("utf-8")
-                            except (AttributeError, KeyError, UnicodeError):
-                                pass
+                            if service_info:
+                                try:
+                                    self.fn = service_info.properties[b"fn"].decode(
+                                        "utf-8"
+                                    )
+                                except (AttributeError, KeyError, UnicodeError):
+                                    pass
                             self.logger.debug(
                                 "[%s(%s):%s] Resolved service %s to %s:%s",
                                 self.fn or "",

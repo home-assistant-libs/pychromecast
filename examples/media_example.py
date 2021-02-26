@@ -1,5 +1,5 @@
 """
-Example on how to use the Media Controller
+Example on how to use the Media Controller to play an URL.
 
 """
 # pylint: disable=invalid-name
@@ -76,4 +76,4 @@ while True:
         break
 
 # Shut down discovery
-pychromecast.discovery.stop_discovery(browser)
+browser.stop_discovery()
