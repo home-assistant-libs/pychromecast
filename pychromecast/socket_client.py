@@ -551,7 +551,18 @@ class SocketClient(threading.Thread):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
-        can_read, _, _ = select.select(rlist, [], [], timeout)
+        try:
+            can_read, _, _ = select.select(rlist, [], [], timeout)
+        except (ValueError, OSError) as exc:
+            self.logger.error(
+                "[%s(%s):%s] Error in select call: %s",
+                self.fn or "",
+                self.host,
+                self.port,
+                exc,
+            )
+            self._force_recon = True
+            return 0
 
         # read messages from chromecast
         message = data = None
