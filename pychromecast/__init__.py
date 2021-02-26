@@ -5,15 +5,14 @@ import logging
 import fnmatch
 from threading import Event
 
-# pylint: disable=wildcard-import
 import threading
 
 import zeroconf
 
-from .config import *  # noqa
-from .error import *  # noqa
+from .config import *  # noqa: F403
+from .error import *  # noqa: F403
 from . import socket_client
-from .discovery import (  # noqa
+from .discovery import (  # noqa: F401
     DISCOVER_TIMEOUT,
     CastBrowser,
     CastListener,  # Deprecated
@@ -24,7 +23,7 @@ from .discovery import (  # noqa
 )
 from .dial import get_device_status, DeviceStatus
 from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST
-from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
+from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
 
 __all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
 __version_info__ = ("0", "7", "6")
@@ -135,7 +134,7 @@ def get_listed_chromecasts(
 
     cc_list = {}
 
-    def add_callback(uuid, service):  # pylint: disable=unused-argument
+    def add_callback(uuid, _service):
         _LOGGER.debug(
             "Found chromecast %s (%s)", browser.devices[uuid].friendly_name, uuid
         )
@@ -161,7 +160,7 @@ def get_listed_chromecasts(
                 friendly_names.remove(friendly_name)
             if not friendly_names and not uuids:
                 discover_complete.set()
-        except ChromecastConnectionError:  # noqa
+        except ChromecastConnectionError:  # noqa: F405
             pass
 
     discover_complete = Event()
@@ -229,7 +228,7 @@ def get_chromecasts(
                         timeout=timeout,
                     )
                 )
-            except ChromecastConnectionError:  # noqa
+            except ChromecastConnectionError:  # noqa: F405
                 pass
         return (cc_list, browser)
 
@@ -239,7 +238,7 @@ def get_chromecasts(
 
     known_uuids = set()
 
-    def add_callback(uuid, service):  # pylint: disable=unused-argument
+    def add_callback(uuid, _service):
         """Called when zeroconf has discovered a new chromecast."""
         if uuid in known_uuids:
             return
@@ -254,7 +253,7 @@ def get_chromecasts(
                 )
             )
             known_uuids.add(uuid)
-        except ChromecastConnectionError:  # noqa
+        except ChromecastConnectionError:  # noqa: F405
             pass
 
     zconf = zeroconf_instance or zeroconf.Zeroconf()
@@ -326,7 +325,7 @@ class Chromecast:
             self.device = get_device_status(host, services, zconf)
 
         if not self.device:
-            raise ChromecastConnectionError(  # noqa
+            raise ChromecastConnectionError(  # noqa: F405
                 "Could not connect to {}:{}".format(host, port or 8009)
             )
 

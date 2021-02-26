@@ -5,8 +5,7 @@ Big thanks goes out to Fred Clift <fred@clift.org> who build the first
 version of this code: https://github.com/minektur/chromecast-python-poc.
 Without him this would not have been possible.
 """
-# Pylint does not understand the protobuf objects correctly
-# pylint: disable=no-member, too-many-lines
+# pylint: disable=too-many-lines
 
 import abc
 import errno
@@ -230,7 +229,7 @@ class SocketClient(threading.Thread):
 
     def initialize_connection(
         self,
-    ):  # noqa: E501 pylint:disable=too-many-statements, too-many-branches
+    ):  # pylint:disable=too-many-statements, too-many-branches
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
@@ -264,7 +263,7 @@ class SocketClient(threading.Thread):
 
         while not self.stop.is_set() and (
             tries is None or tries > 0
-        ):  # noqa: E501 pylint:disable=too-many-nested-blocks
+        ):  # pylint:disable=too-many-nested-blocks
             # Prune retries dict
             retries = {
                 key: retries[key]
@@ -833,7 +832,6 @@ class SocketClient(threading.Thread):
         # now read the payload
         payload = self._read_bytes_from_socket(read_len)
 
-        # pylint: disable=no-member
         message = cast_channel_pb2.CastMessage()
         message.ParseFromString(payload)
 
@@ -867,13 +865,14 @@ class SocketClient(threading.Thread):
         if inc_session_id:
             data[SESSION_ID] = self.session_id
 
-        # pylint: disable=no-member
         msg = cast_channel_pb2.CastMessage()
 
-        msg.protocol_version = msg.CASTV2_1_0
+        msg.protocol_version = msg.CASTV2_1_0  # pylint: disable=no-member
         msg.source_id = self.source_id
         msg.destination_id = destination_id
-        msg.payload_type = cast_channel_pb2.CastMessage.STRING
+        msg.payload_type = (
+            cast_channel_pb2.CastMessage.STRING  # pylint: disable=no-member
+        )
         msg.namespace = namespace
         msg.payload_utf8 = _json_to_payload(data)
 
@@ -881,7 +880,7 @@ class SocketClient(threading.Thread):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if msg.namespace != NS_HEARTBEAT:
+        if msg.namespace != NS_HEARTBEAT:  # pylint: disable=no-member
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
@@ -1044,7 +1043,7 @@ class HeartbeatController(BaseController):
         self.last_ping = 0
         self.last_pong = time.time()
 
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, data: dict):
         """
         Called when a heartbeat message is received.
 

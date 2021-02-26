@@ -76,13 +76,12 @@ class SimpleCastListener(AbstractCastListener):
 class ZeroConfListener:
     """Listener for ZeroConf service browser."""
 
-    # pylint: disable=unused-argument
     def __init__(self, cast_listener, devices, host_browser):
         self._cast_listener = cast_listener
         self._devices = devices
         self._host_browser = host_browser
 
-    def remove_service(self, zconf, typ, name):
+    def remove_service(self, _zconf, typ, name):
         """Called by zeroconf when an mDNS service is lost."""
         _LOGGER.debug("remove_service %s, %s", typ, name)
         cast_info = None
@@ -192,7 +191,6 @@ HOSTLISTENER_MAX_FAIL = 5
 class HostBrowser(threading.Thread):
     """"Repeateadly poll a set of known hosts."""
 
-    # pylint: disable=unused-argument
     def __init__(self, cast_listener, devices):
         super().__init__(daemon=True)
         self._cast_listener = cast_listener
@@ -432,8 +430,8 @@ def discover_chromecasts(
 
     :param zeroconf_instance: An existing zeroconf instance.
     """
-    # pylint: disable=unused-argument
-    def add_callback(uuid, service):
+
+    def add_callback(_uuid, _service):
         """Called when zeroconf has discovered a new chromecast."""
         if max_devices is not None and browser.count >= max_devices:
             discover_complete.set()
@@ -474,7 +472,7 @@ def discover_listed_chromecasts(
 
     cc_list = {}
 
-    def add_callback(uuid, service):  # pylint: disable=unused-argument
+    def add_callback(uuid, service):
         _LOGGER.debug("Got cast %s, %s", uuid, service)
         service = browser.devices[uuid]
         friendly_name = service[3]

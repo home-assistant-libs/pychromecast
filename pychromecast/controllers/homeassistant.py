@@ -50,7 +50,7 @@ class HomeAssistantController(BaseController):
         """ Called when a channel is disconnected. """
         self.status = None
 
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, data: dict):
         """Called when a message is received."""
         if data.get("type") == "receiver_status":
             was_connected = self.hass_connected

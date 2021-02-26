@@ -247,8 +247,8 @@ class MultizoneController(BaseController):
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
 
     def receive_message(
-        self, message, data: dict
-    ):  # noqa: E501 pylint: disable=too-many-return-statements
+        self, _message, data: dict
+    ):  # pylint: disable=too-many-return-statements
         """ Called when a multizone message is received. """
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
             uuid = data["device"]["deviceId"]

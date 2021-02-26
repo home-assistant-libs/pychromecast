@@ -77,7 +77,6 @@ _LOGGER = logging.getLogger(__name__)
 class MediaStatus:
     """ Class to hold the media status. """
 
-    # pylint: disable=too-many-instance-attributes,too-many-public-methods
     def __init__(self):
         self.current_time = 0
         self.content_id = None
@@ -318,7 +317,6 @@ class MediaStatusListener(abc.ABC):
         """Updated media status."""
 
 
-# pylint: disable=too-many-public-methods
 class MediaController(BaseController):
     """ Controller to interact with Google media namespace. """
 
@@ -340,7 +338,7 @@ class MediaController(BaseController):
         self.status = MediaStatus()
         self._fire_status_changed()
 
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, data: dict):
         """ Called when a media message is received. """
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)
@@ -491,7 +489,6 @@ class MediaController(BaseController):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
-    # pylint: disable=too-many-arguments
     def play_media(
         self,
         url,

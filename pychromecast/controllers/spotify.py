@@ -20,9 +20,6 @@ TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
 class SpotifyController(BaseController):
     """ Controller to interact with Spotify namespace. """
 
-    # pylint: disable=useless-super-delegation
-    # The pylint rule useless-super-delegation doesn't realize
-    # we are setting default values here.
     def __init__(self, access_token=None, expires=None):
         super().__init__(APP_NAMESPACE, APP_SPOTIFY)
 
@@ -35,10 +32,7 @@ class SpotifyController(BaseController):
         self.credential_error = False
         self.waiting = threading.Event()
 
-    # pylint: enable=useless-super-delegation
-
-    # pylint: disable=unused-argument,no-self-use
-    def receive_message(self, message, data: dict):
+    def receive_message(self, _message, data: dict):
         """
         Handle the auth flow and active player selection.
 
