@@ -162,14 +162,18 @@ class ZeroConfListener:
             return
         uuid = UUID(uuid)
 
-        cast_info = self._devices.setdefault(
-            uuid, CastInfo(set(), uuid, model_name, friendly_name, host, service.port)
-        )
-        # Update stored information
-        cast_info.services.add(ServiceInfo(SERVICE_TYPE_MDNS, name))
-        self._devices[uuid] = CastInfo(
-            cast_info.services, uuid, model_name, friendly_name, host, service.port
-        )
+        service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
+        if uuid not in self._devices:
+            self._devices[uuid] = CastInfo(
+                {service_info}, uuid, model_name, friendly_name, host, service.port
+            )
+        else:
+            # Update stored information
+            services = self._devices[uuid].services
+            services.add(service_info)
+            self._devices[uuid] = CastInfo(
+                services, uuid, model_name, friendly_name, host, service.port
+            )
 
         callback(uuid, name)
 
@@ -201,7 +205,8 @@ class HostBrowser(threading.Thread):
     def add_hosts(self, known_hosts):
         """Add a list of known hosts to the set."""
         for host in known_hosts:
-            self._known_hosts.setdefault(host, HostStatus())
+            if host not in self._known_hosts:
+                self._known_hosts[host] = HostStatus()
 
     def run(self):
         """Start worker thread."""
@@ -283,14 +288,17 @@ class HostBrowser(threading.Thread):
                 # No changes, return
                 return
 
-        cast_info = self._devices.setdefault(
-            uuid, CastInfo(set(), uuid, model_name, friendly_name, host, port)
-        )
-        # Update stored information
-        cast_info.services.add(service_info)
-        self._devices[uuid] = CastInfo(
-            cast_info.services, uuid, model_name, friendly_name, host, port
-        )
+        if uuid not in self._devices:
+            self._devices[uuid] = CastInfo(
+                {service_info}, uuid, model_name, friendly_name, host, port
+            )
+        else:
+            # Update stored information
+            services = self._devices[uuid].services
+            services.add(service_info)
+            self._devices[uuid] = CastInfo(
+                services, uuid, model_name, friendly_name, host, port
+            )
 
         name = f"{host}:{port}"
         _LOGGER.debug(
