@@ -212,7 +212,24 @@ class HostBrowser(threading.Thread):
         """Add a list of known hosts to the set."""
         for host in known_hosts:
             if host not in self._known_hosts:
+                _LOGGER.debug("Addded host %s", host)
                 self._known_hosts[host] = HostStatus()
+
+    def update_hosts(self, known_hosts):
+        """Update the set of known hosts.
+
+        Note: Removed hosts will no longer be polled, but services of any associated
+        cast devices will not be purged.
+        """
+        if known_hosts is None:
+            known_hosts = []
+
+        self.add_hosts(known_hosts)
+
+        for host in list(self._known_hosts.keys()):
+            if host not in known_hosts:
+                _LOGGER.debug("Removied host %s", host)
+                self._known_hosts.pop(host)
 
     def run(self):
         """Start worker thread."""
