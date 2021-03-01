@@ -267,7 +267,7 @@ class SocketClient(threading.Thread):
             # Prune retries dict
             retries = {
                 key: retries[key]
-                for key in self.services
+                for key in self.services.copy()
                 if (key is not None and key in retries)
             }
 
