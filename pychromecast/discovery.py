@@ -1,6 +1,7 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import abc
 from collections import namedtuple
+import functools
 import itertools
 import logging
 import threading
@@ -76,10 +77,11 @@ class SimpleCastListener(AbstractCastListener):
 class ZeroConfListener:
     """Listener for ZeroConf service browser."""
 
-    def __init__(self, cast_listener, devices, host_browser):
+    def __init__(self, cast_listener, devices, host_browser, lock):
         self._cast_listener = cast_listener
         self._devices = devices
         self._host_browser = host_browser
+        self._services_lock = lock
 
     def remove_service(self, _zconf, typ, name):
         """Called by zeroconf when an mDNS service is lost."""
@@ -88,13 +90,15 @@ class ZeroConfListener:
         device_removed = False
         uuid = None
         service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
-        for uuid, info_for_uuid in self._devices.items():
-            if service_info in info_for_uuid.services:
-                cast_info = info_for_uuid
-                info_for_uuid.services.remove(service_info)
-                if len(info_for_uuid.services) == 0:
-                    device_removed = True
-                break
+        # Lock because the HostBrowser may also add or remove items
+        with self._services_lock:
+            for uuid, info_for_uuid in self._devices.items():
+                if service_info in info_for_uuid.services:
+                    cast_info = info_for_uuid
+                    info_for_uuid.services.remove(service_info)
+                    if len(info_for_uuid.services) == 0:
+                        device_removed = True
+                    break
 
         if not cast_info:
             _LOGGER.debug("remove_service unknown %s, %s", typ, name)
@@ -162,17 +166,20 @@ class ZeroConfListener:
         uuid = UUID(uuid)
 
         service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
-        if uuid not in self._devices:
-            self._devices[uuid] = CastInfo(
-                {service_info}, uuid, model_name, friendly_name, host, service.port
-            )
-        else:
-            # Update stored information
-            services = self._devices[uuid].services
-            services.add(service_info)
-            self._devices[uuid] = CastInfo(
-                services, uuid, model_name, friendly_name, host, service.port
-            )
+
+        # Lock because the HostBrowser may also add or remove items
+        with self._services_lock:
+            if uuid not in self._devices:
+                self._devices[uuid] = CastInfo(
+                    {service_info}, uuid, model_name, friendly_name, host, service.port
+                )
+            else:
+                # Update stored information
+                services = self._devices[uuid].services
+                services.add(service_info)
+                self._devices[uuid] = CastInfo(
+                    services, uuid, model_name, friendly_name, host, service.port
+                )
 
         callback(uuid, name)
 
@@ -191,12 +198,13 @@ HOSTLISTENER_MAX_FAIL = 5
 class HostBrowser(threading.Thread):
     """"Repeateadly poll a set of known hosts."""
 
-    def __init__(self, cast_listener, devices):
+    def __init__(self, cast_listener, devices, lock):
         super().__init__(daemon=True)
         self._cast_listener = cast_listener
         self._devices = devices
         self._known_hosts = {}
         self._next_update = time.time()
+        self._services_lock = lock
         self._start_requested = False
         self.stop = threading.Event()
 
@@ -220,8 +228,11 @@ class HostBrowser(threading.Thread):
         _LOGGER.debug("HostBrowser thread done")
 
     def _poll_hosts(self):
+        # Iterate over a copy because other threads may modify the known_hosts list
         known_hosts = list(self._known_hosts.keys())
         for host in known_hosts:
+            devices = []
+            uuids = []
             if self.stop.is_set():
                 break
             device_status = get_device_status(host, timeout=4)
@@ -234,21 +245,23 @@ class HostBrowser(threading.Thread):
             if not device_status:
                 hoststatus.failcount += 1
                 if hoststatus.failcount == HOSTLISTENER_MAX_FAIL:
-                    self._remove_update_host(host)
+                    self._update_devices(host, devices, uuids)
                 hoststatus.failcount = min(
                     hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1
                 )
                 continue
 
-            # We got device_status, try to get multizone status, and update services
+            # We got device_status, try to get multizone status, then update devices
             hoststatus.failcount = 0
-            self._add_update_host(
-                host,
-                8009,
-                device_status.friendly_name,
-                device_status.model_name,
-                device_status.uuid,
+            devices.append(
+                (
+                    8009,
+                    device_status.friendly_name,
+                    device_status.model_name,
+                    device_status.uuid,
+                )
             )
+            uuids.append(device_status.uuid)
 
             multizone_status = get_multizone_status(host)
             if not multizone_status:
@@ -263,15 +276,37 @@ class HostBrowser(threading.Thread):
                     self.add_hosts([group.host])
                 if group.port is None or group.host != host:
                     continue
-                self._add_update_host(
-                    host,
-                    group.port,
-                    group.friendly_name,
-                    "Google Cast Group",
-                    group.uuid,
+                devices.append(
+                    (group.port, group.friendly_name, "Google Cast Group", group.uuid)
+                )
+                uuids.append(group.uuid)
+
+            self._update_devices(host, devices, uuids)
+
+    def _update_devices(self, host, devices, host_uuids):
+        callbacks = []
+
+        # Lock because the ZeroConfListener may also add or remove items
+        with self._services_lock:
+            for (port, friendly_name, model_name, uuid) in devices:
+                self._add_host_service(
+                    host, port, friendly_name, model_name, uuid, callbacks
                 )
 
-    def _add_update_host(self, host, port, friendly_name, model_name, uuid):
+            for uuid in self._devices:
+                for service in self._devices[uuid].services.copy():
+                    if (
+                        service.type == SERVICE_TYPE_HOST
+                        and service.data[0] == host
+                        and uuid not in host_uuids
+                    ):
+                        self._remove_host_service(host, uuid, callbacks)
+
+        # Handle callbacks after releasing the lock
+        for callback in callbacks:
+            callback()
+
+    def _add_host_service(self, host, port, friendly_name, model_name, uuid, callbacks):
         service_info = ServiceInfo(SERVICE_TYPE_HOST, (host, port))
 
         callback = self._cast_listener.add_cast
@@ -303,23 +338,34 @@ class HostBrowser(threading.Thread):
             "Host %s (%s) up, adding or updating host based service", name, uuid
         )
         if callback:
-            callback(uuid, name)
+            callbacks.append(functools.partial(callback, uuid, name))
 
-    def _remove_update_host(self, host):
-        for uuid, info_for_uuid in self._devices.items():
-            for service in info_for_uuid.services:
-                if service.type == SERVICE_TYPE_HOST and service.data[0] == host:
-                    info_for_uuid.services.remove(service)
-                    port = service.data[1]
-                    name = f"{host}:{port}"
-                    _LOGGER.debug(
-                        "Host %s (%s) down, removing host based service", name, uuid
+    def _remove_host_service(self, host, uuid, callbacks):
+        if uuid not in self._devices:
+            return
+
+        info_for_uuid = self._devices[uuid]
+        for service in info_for_uuid.services:
+            if service.type == SERVICE_TYPE_HOST and service.data[0] == host:
+                info_for_uuid.services.remove(service)
+                port = service.data[1]
+                name = f"{host}:{port}"
+                _LOGGER.debug(
+                    "Host %s down or no longer handles uuid %s, removing host based service",
+                    name,
+                    uuid,
+                )
+                if len(info_for_uuid.services) == 0:
+                    callbacks.append(
+                        functools.partial(
+                            self._cast_listener.remove_cast, uuid, name, info_for_uuid
+                        )
                     )
-                    if len(info_for_uuid.services) == 0:
-                        self._cast_listener.remove_cast(uuid, name, info_for_uuid)
-                    else:
-                        self._cast_listener.update_cast(uuid, name)
-                    break
+                else:
+                    callbacks.append(
+                        functools.partial(self._cast_listener.update_cast, uuid, name)
+                    )
+                break
 
 
 class CastBrowser:
@@ -339,9 +385,12 @@ class CastBrowser:
         self._zc_browser = None
         self.devices = {}
         self.services = self.devices  # For backwards compatibility
-        self.host_browser = HostBrowser(self._cast_listener, self.devices)
+        self._services_lock = threading.Lock()
+        self.host_browser = HostBrowser(
+            self._cast_listener, self.devices, self._services_lock
+        )
         self.zeroconf_listener = ZeroConfListener(
-            self._cast_listener, self.devices, self.host_browser
+            self._cast_listener, self.devices, self.host_browser, self._services_lock
         )
         if known_hosts:
             self.host_browser.add_hosts(known_hosts)
