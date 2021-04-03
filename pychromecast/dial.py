@@ -2,13 +2,11 @@
 Implements the DIAL-protocol to communicate with the Chromecast
 """
 from collections import namedtuple
-import json
 import logging
 import socket
-import ssl
-import urllib.request
 from uuid import UUID
 
+import requests
 import zeroconf
 
 from .const import CAST_TYPE_CHROMECAST, CAST_TYPES, SERVICE_TYPE_HOST
@@ -58,7 +56,7 @@ def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
     return (host, port)
 
 
-def _get_status(host, services, zconf, path, secure, timeout):
+def _get_status(host, services, zconf, path, secure, timeout, session=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -75,21 +73,30 @@ def _get_status(host, services, zconf, path, secure, timeout):
 
     headers = {"content-type": "application/json"}
 
-    context = None
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
-        context = ssl.SSLContext()
-        context.verify_mode = ssl.CERT_NONE
     else:
         url = FORMAT_BASE_URL_HTTP.format(host) + path
 
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
-        data = response.read()
-    return json.loads(data.decode("utf-8"))
+    has_session = bool(session)
+    if not has_session:
+        session = get_requests_session()
+
+    try:
+        return session.get(url, headers=headers, timeout=timeout).json()
+    finally:
+        if not has_session:
+            session.close()
 
 
-def get_device_status(host, services=None, zconf=None, timeout=10):
+def get_requests_session():
+    """Create a requests session."""
+    session = requests.Session()
+    session.verify = False
+    return session
+
+
+def get_device_status(host, services=None, zconf=None, timeout=10, session=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -99,7 +106,13 @@ def get_device_status(host, services=None, zconf=None, timeout=10):
 
     try:
         status = _get_status(
-            host, services, zconf, "/setup/eureka_info?options=detail", True, timeout
+            host,
+            services,
+            zconf,
+            "/setup/eureka_info?options=detail",
+            True,
+            timeout,
+            session,
         )
 
         friendly_name = status.get("name", "Unknown Chromecast")
@@ -119,7 +132,12 @@ def get_device_status(host, services=None, zconf=None, timeout=10):
 
         return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
 
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (
+        requests.exceptions.Timeout,
+        requests.exceptions.RequestException,
+        OSError,
+        ValueError,
+    ):
         return None
 
 
@@ -144,7 +162,7 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, services=None, zconf=None, timeout=10):
+def get_multizone_status(host, services=None, zconf=None, timeout=10, session=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -154,7 +172,13 @@ def get_multizone_status(host, services=None, zconf=None, timeout=10):
 
     try:
         status = _get_status(
-            host, services, zconf, "/setup/eureka_info?params=multizone", True, timeout
+            host,
+            services,
+            zconf,
+            "/setup/eureka_info?params=multizone",
+            True,
+            timeout,
+            session,
         )
 
         dynamic_groups = []
@@ -169,7 +193,12 @@ def get_multizone_status(host, services=None, zconf=None, timeout=10):
 
         return MultizoneStatus(dynamic_groups, groups)
 
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (
+        requests.exceptions.Timeout,
+        requests.exceptions.RequestException,
+        OSError,
+        ValueError,
+    ):
         return None
 
 
