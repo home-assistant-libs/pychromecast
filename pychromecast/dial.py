@@ -58,7 +58,7 @@ def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
     return (host, port)
 
 
-def _get_status(host, services, zconf, path, secure, timeout):
+def _get_status(host, services, zconf, path, secure, timeout, context):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -75,13 +75,14 @@ def _get_status(host, services, zconf, path, secure, timeout):
 
     headers = {"content-type": "application/json"}
 
-    context = None
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
-        context = ssl.SSLContext()
-        context.verify_mode = ssl.CERT_NONE
     else:
         url = FORMAT_BASE_URL_HTTP.format(host) + path
+
+    has_context = bool(context)
+    if secure and not has_context:
+        context = get_ssl_context()
 
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
@@ -89,7 +90,14 @@ def _get_status(host, services, zconf, path, secure, timeout):
     return json.loads(data.decode("utf-8"))
 
 
-def get_device_status(host, services=None, zconf=None, timeout=10):
+def get_ssl_context():
+    """Create an SSL context."""
+    context = ssl.SSLContext()
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def get_device_status(host, services=None, zconf=None, timeout=10, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -99,7 +107,13 @@ def get_device_status(host, services=None, zconf=None, timeout=10):
 
     try:
         status = _get_status(
-            host, services, zconf, "/setup/eureka_info?options=detail", True, timeout
+            host,
+            services,
+            zconf,
+            "/setup/eureka_info?options=detail",
+            True,
+            timeout,
+            context,
         )
 
         friendly_name = status.get("name", "Unknown Chromecast")
@@ -144,7 +158,7 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, services=None, zconf=None, timeout=10):
+def get_multizone_status(host, services=None, zconf=None, timeout=10, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -154,7 +168,13 @@ def get_multizone_status(host, services=None, zconf=None, timeout=10):
 
     try:
         status = _get_status(
-            host, services, zconf, "/setup/eureka_info?params=multizone", True, timeout
+            host,
+            services,
+            zconf,
+            "/setup/eureka_info?params=multizone",
+            True,
+            timeout,
+            context,
         )
 
         dynamic_groups = []
