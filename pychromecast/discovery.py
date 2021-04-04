@@ -11,7 +11,7 @@ from uuid import UUID
 import zeroconf
 
 from .const import SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
-from .dial import get_device_status, get_multizone_status
+from .dial import get_device_status, get_multizone_status, get_ssl_context
 
 DISCOVER_TIMEOUT = 5
 
@@ -206,6 +206,7 @@ class HostBrowser(threading.Thread):
         self._next_update = time.time()
         self._services_lock = lock
         self._start_requested = False
+        self._context = None
         self.stop = threading.Event()
 
     def add_hosts(self, known_hosts):
@@ -234,6 +235,7 @@ class HostBrowser(threading.Thread):
     def run(self):
         """Start worker thread."""
         _LOGGER.debug("HostBrowser thread started")
+        self._context = get_ssl_context()
         try:
             while not self.stop.is_set():
                 self._poll_hosts()
@@ -252,7 +254,7 @@ class HostBrowser(threading.Thread):
             uuids = []
             if self.stop.is_set():
                 break
-            device_status = get_device_status(host, timeout=4)
+            device_status = get_device_status(host, timeout=4, context=self._context)
             try:
                 hoststatus = self._known_hosts[host]
             except KeyError:
@@ -280,7 +282,7 @@ class HostBrowser(threading.Thread):
             )
             uuids.append(device_status.uuid)
 
-            multizone_status = get_multizone_status(host)
+            multizone_status = get_multizone_status(host, context=self._context)
             if not multizone_status:
                 return
 
