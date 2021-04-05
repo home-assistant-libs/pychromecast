@@ -167,7 +167,7 @@ class ZeroConfListener:
         # Handle incorrect UUIDs from third-party Chromecast emulators
         try:
             uuid = UUID(uuid)
-        except ValueError as e:
+        except ValueError:
             _LOGGER.debug(
                 "_add_update_service failed due to bad uuid for %s, %s, model %s",
                 typ,
