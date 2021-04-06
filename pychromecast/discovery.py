@@ -164,7 +164,7 @@ class ZeroConfListener:
             )
             return
 
-        # Handle incorrect UUIDs from third-party Chromecast emulators
+        # Ignore incorrect UUIDs from third-party Chromecast emulators
         try:
             uuid = UUID(uuid)
         except ValueError:
