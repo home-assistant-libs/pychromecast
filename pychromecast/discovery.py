@@ -163,7 +163,18 @@ class ZeroConfListener:
                 "_add_update_service failed to get uuid for %s, %s", typ, name
             )
             return
-        uuid = UUID(uuid)
+
+        # Ignore incorrect UUIDs from third-party Chromecast emulators
+        try:
+            uuid = UUID(uuid)
+        except ValueError:
+            _LOGGER.debug(
+                "_add_update_service failed due to bad uuid for %s, %s, model %s",
+                typ,
+                name,
+                model_name,
+            )
+            return
 
         service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
 
