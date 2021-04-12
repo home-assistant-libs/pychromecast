@@ -523,7 +523,7 @@ def discover_chromecasts(
     # Wait for the timeout or the maximum number of devices
     discover_complete.wait(timeout)
 
-    return (browser.devices.values(), browser)
+    return (list(browser.devices.values()), browser)
 
 
 def discover_listed_chromecasts(
@@ -572,4 +572,4 @@ def discover_listed_chromecasts(
 
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
-    return (cc_list.values(), browser)
+    return (list(cc_list.values()), browser)
