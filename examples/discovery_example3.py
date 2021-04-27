@@ -15,12 +15,17 @@ import pychromecast
 parser = argparse.ArgumentParser(
     description="Example that shows how to list chromecasts matching on name or uuid."
 )
+parser.add_argument("--cast", help='Name of wanted cast device")', default=None)
+parser.add_argument("--uuid", help="UUID of wanted cast device", default=None)
+parser.add_argument(
+    "--known-host",
+    help="Add known host (IP), can be used multiple times",
+    action="append",
+)
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument("--cast", help='Name of wanted cast device")', default=None)
-parser.add_argument("--uuid", help="UUID of wanted cast device", default=None)
 args = parser.parse_args()
 
 if args.show_debug:
@@ -42,7 +47,7 @@ if args.uuid:
     uuids.append(UUID(args.uuid))
 
 devices, browser = pychromecast.discovery.discover_listed_chromecasts(
-    friendly_names=friendly_names, uuids=uuids
+    friendly_names=friendly_names, uuids=uuids, known_hosts=args.known_host
 )
 # Shut down discovery
 browser.stop_discovery()
