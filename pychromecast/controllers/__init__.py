@@ -8,7 +8,7 @@ from ..error import UnsupportedNamespace, ControllerNotRegistered
 
 
 class BaseController(abc.ABC):
-    """ ABC for namespace controllers. """
+    """ABC for namespace controllers."""
 
     def __init__(self, namespace, supporting_app_id=None, target_platform=False):
         """
@@ -39,7 +39,7 @@ class BaseController(abc.ABC):
         )
 
     def launch(self, callback_function=None):
-        """ If set, launches app related to the controller. """
+        """If set, launches app related to the controller."""
         self._check_registered()
 
         self._socket_client.receiver_controller.launch_app(
@@ -47,7 +47,7 @@ class BaseController(abc.ABC):
         )
 
     def registered(self, socket_client):
-        """ Called when a controller is registered. """
+        """Called when a controller is registered."""
         self._socket_client = socket_client
 
         if self.target_platform:
@@ -60,7 +60,7 @@ class BaseController(abc.ABC):
         namespace of this controller."""
 
     def channel_disconnected(self):
-        """ Called when a channel is disconnected. """
+        """Called when a channel is disconnected."""
 
     def send_message(self, data, inc_session_id=False, callback_function=None):
         """
@@ -103,12 +103,12 @@ class BaseController(abc.ABC):
         return False
 
     def tear_down(self):
-        """ Called when we are shutting down. """
+        """Called when we are shutting down."""
         self._socket_client = None
         self._message_func = None
 
     def _check_registered(self):
-        """ Helper method to see if we are registered with a Cast object. """
+        """Helper method to see if we are registered with a Cast object."""
         if self._socket_client is None:
             raise ControllerNotRegistered(
                 (

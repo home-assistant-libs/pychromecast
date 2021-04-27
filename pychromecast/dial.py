@@ -42,7 +42,7 @@ def get_host_from_service(service, zconf):
 
 
 def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
-    """ Get hostname or IP + port from zeroconf service_info. """
+    """Get hostname or IP + port from zeroconf service_info."""
     host = None
     port = None
     if (

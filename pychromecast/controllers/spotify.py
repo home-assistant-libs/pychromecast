@@ -18,7 +18,7 @@ TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
 
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
-    """ Controller to interact with Spotify namespace. """
+    """Controller to interact with Spotify namespace."""
 
     def __init__(self, access_token=None, expires=None):
         super().__init__(APP_NAMESPACE, APP_SPOTIFY)

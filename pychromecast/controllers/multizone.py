@@ -28,7 +28,7 @@ TYPE_SESSION_UPDATED = "PLAYBACK_SESSION_UPDATED"
 
 
 class Listener:
-    """ Callback handler. """
+    """Callback handler."""
 
     def __init__(self, group_cast, casts):
         """Initialize the listener."""
@@ -114,7 +114,7 @@ class MultiZoneManagerListener(abc.ABC):
 
 
 class MultizoneManager:
-    """ Manage audio groups. """
+    """Manage audio groups."""
 
     def __init__(self):
         # Protect self._casts because it will be accessed from callbacks from
@@ -123,7 +123,7 @@ class MultizoneManager:
         self._groups = {}
 
     def add_multizone(self, group_cast):
-        """ Start managing a group """
+        """Start managing a group"""
         self._groups[str(group_cast.uuid)] = {
             "chromecast": group_cast,
             "listener": Listener(group_cast, self._casts),
@@ -131,7 +131,7 @@ class MultizoneManager:
         }
 
     def remove_multizone(self, group_uuid):
-        """ Stop managing a group """
+        """Stop managing a group"""
         group_uuid = str(group_uuid)
         group = self._groups.pop(group_uuid, None)
         # Inform all group members that they are no longer members
@@ -158,7 +158,7 @@ class MultizoneManager:
         self._casts[member_uuid]["listeners"].append(listener)
 
     def deregister_listener(self, member_uuid, listener):
-        """ Deregister listener for audio group changes of cast uuid."""
+        """Deregister listener for audio group changes of cast uuid."""
         self._casts[str(member_uuid)]["listeners"].remove(listener)
 
     def get_multizone_memberships(self, member_uuid):
@@ -166,7 +166,7 @@ class MultizoneManager:
         return list(self._casts[str(member_uuid)]["groups"])
 
     def get_multizone_mediacontroller(self, group_uuid):
-        """ Get mediacontroller of a group """
+        """Get mediacontroller of a group"""
         return self._groups[str(group_uuid)]["chromecast"].media_controller
 
 
@@ -187,7 +187,7 @@ class MultiZoneControllerListener(abc.ABC):
 
 
 class MultizoneController(BaseController):
-    """ Controller to monitor audio group members. """
+    """Controller to monitor audio group members."""
 
     def __init__(self, uuid):
         self._members = {}
@@ -230,26 +230,26 @@ class MultizoneController(BaseController):
 
     @property
     def members(self):
-        """ Return a list of audio group members. """
+        """Return a list of audio group members."""
         return list(self._members.keys())
 
     def reset_members(self):
-        """ Reset audio group members. """
+        """Reset audio group members."""
         for uuid in list(self._members):
             self._remove_member(uuid)
 
     def update_members(self):
-        """ Update audio group members. """
+        """Update audio group members."""
         self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS})
 
     def get_casting_groups(self):
-        """ Send GET_CASTING_GROUPS message. """
+        """Send GET_CASTING_GROUPS message."""
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
 
     def receive_message(
         self, _message, data: dict
     ):  # pylint: disable=too-many-return-statements
-        """ Called when a multizone message is received. """
+        """Called when a multizone message is received."""
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
             uuid = data["device"]["deviceId"]
             name = data["device"]["name"]
@@ -300,7 +300,7 @@ class MultizoneController(BaseController):
         return False
 
     def tear_down(self):
-        """ Called when controller is destroyed. """
+        """Called when controller is destroyed."""
         super().tear_down()
 
         self._status_listeners[:] = []

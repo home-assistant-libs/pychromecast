@@ -66,11 +66,11 @@ RETRY_TIME = 5
 
 
 class InterruptLoop(Exception):
-    """ The chromecast has been manually stopped. """
+    """The chromecast has been manually stopped."""
 
 
 def _dict_from_message_payload(message):
-    """ Parses a PB2 message as a JSON dict. """
+    """Parses a PB2 message as a JSON dict."""
     try:
         data = json.loads(message.payload_utf8)
         if not isinstance(data, dict):
@@ -93,7 +93,7 @@ def _dict_from_message_payload(message):
 
 
 def _message_to_string(message, data=None):
-    """ Gives a string representation of a PB2 message. """
+    """Gives a string representation of a PB2 message."""
     if data is None:
         data = _dict_from_message_payload(message)
 
@@ -108,19 +108,19 @@ def _message_to_string(message, data=None):
 if sys.version_info >= (3, 0):
 
     def _json_to_payload(data):
-        """ Encodes a python value into JSON format. """
+        """Encodes a python value into JSON format."""
         return json.dumps(data, ensure_ascii=False).encode("utf8")
 
 
 else:
 
     def _json_to_payload(data):
-        """ Encodes a python value into JSON format. """
+        """Encodes a python value into JSON format."""
         return json.dumps(data, ensure_ascii=False)
 
 
 def _is_ssl_timeout(exc):
-    """ Returns True if the exception is for an SSL timeout """
+    """Returns True if the exception is for an SSL timeout"""
     return exc.message in (
         "The handshake operation timed out",
         "The write operation timed out",
@@ -451,7 +451,7 @@ class SocketClient(threading.Thread):
             return
 
     def disconnect(self):
-        """ Disconnect socket connection to Chromecast device """
+        """Disconnect socket connection to Chromecast device"""
         self.stop.set()
         try:
             # Write to the socket to interrupt the worker thread
@@ -461,13 +461,13 @@ class SocketClient(threading.Thread):
             pass
 
     def register_handler(self, handler: BaseController):
-        """ Register a new namespace handler. """
+        """Register a new namespace handler."""
         self._handlers[handler.namespace] = handler
 
         handler.registered(self)
 
     def new_cast_status(self, cast_status):
-        """ Called when a new cast status has been received. """
+        """Called when a new cast status has been received."""
         new_channel = self.destination_id != cast_status.transport_id
 
         if new_channel:
@@ -486,7 +486,7 @@ class SocketClient(threading.Thread):
                     self._handlers[namespace].channel_connected()
 
     def _gen_request_id(self):
-        """ Generates a unique request id. """
+        """Generates a unique request id."""
         self._request_id += 1
 
         return self._request_id
@@ -508,7 +508,7 @@ class SocketClient(threading.Thread):
         return self.stop.is_set()
 
     def run(self):
-        """ Connect to the cast and start polling the socket. """
+        """Connect to the cast and start polling the socket."""
         try:
             self.initialize_connection()
         except ChromecastConnectionError:
@@ -683,7 +683,7 @@ class SocketClient(threading.Thread):
         return True
 
     def _route_message(self, message, data: dict):
-        """ Route message to any handlers on the message namespace """
+        """Route message to any handlers on the message namespace"""
         # route message to handlers
         if message.namespace in self._handlers:
 
@@ -735,7 +735,7 @@ class SocketClient(threading.Thread):
             )
 
     def _cleanup(self):
-        """ Cleanup open channels and handlers """
+        """Cleanup open channels and handlers"""
         for channel in self._open_channels:
             try:
                 self.disconnect_channel(channel)
@@ -767,7 +767,7 @@ class SocketClient(threading.Thread):
         self.connecting = True
 
     def _report_connection_status(self, status):
-        """ Report a change in the connection status to any listeners """
+        """Report a change in the connection status to any listeners"""
         for listener in self._connection_listeners:
             try:
                 self.logger.debug(
@@ -789,7 +789,7 @@ class SocketClient(threading.Thread):
                 )
 
     def _read_bytes_from_socket(self, msglen):
-        """ Read bytes from the socket. """
+        """Read bytes from the socket."""
         chunks = []
         bytes_recd = 0
         while bytes_recd < msglen:
@@ -824,7 +824,7 @@ class SocketClient(threading.Thread):
         return b"".join(chunks)
 
     def _read_message(self):
-        """ Reads a message from the socket and converts it to a message. """
+        """Reads a message from the socket and converts it to a message."""
         # first 4 bytes is Big-Endian payload length
         payload_info = self._read_bytes_from_socket(4)
         read_len = unpack(">I", payload_info)[0]
@@ -848,7 +848,7 @@ class SocketClient(threading.Thread):
         no_add_request_id=False,
         force=False,
     ):
-        """ Send a message to the Chromecast. """
+        """Send a message to the Chromecast."""
 
         # namespace is a string containing namespace
         # data is a dict that will be converted to json
@@ -917,7 +917,7 @@ class SocketClient(threading.Thread):
     def send_platform_message(
         self, namespace, message, inc_session_id=False, callback_function_param=False
     ):
-        """ Helper method to send a message to the platform. """
+        """Helper method to send a message to the platform."""
         return self.send_message(
             PLATFORM_DESTINATION_ID,
             namespace,
@@ -929,7 +929,7 @@ class SocketClient(threading.Thread):
     def send_app_message(
         self, namespace, message, inc_session_id=False, callback_function_param=False
     ):
-        """ Helper method to send a message to current running app. """
+        """Helper method to send a message to current running app."""
         if namespace not in self.app_namespaces:
             raise UnsupportedNamespace(
                 (
@@ -952,7 +952,7 @@ class SocketClient(threading.Thread):
         self._connection_listeners.append(listener)
 
     def _ensure_channel_connected(self, destination_id):
-        """ Ensure we opened a channel to destination_id. """
+        """Ensure we opened a channel to destination_id."""
         if destination_id not in self._open_channels:
             self._open_channels.append(destination_id)
 
@@ -976,7 +976,7 @@ class SocketClient(threading.Thread):
             )
 
     def disconnect_channel(self, destination_id):
-        """ Disconnect a channel with destination_id. """
+        """Disconnect a channel with destination_id."""
         if destination_id in self._open_channels:
             try:
                 self.send_message(
@@ -998,7 +998,7 @@ class SocketClient(threading.Thread):
             self.handle_channel_disconnected()
 
     def handle_channel_disconnected(self):
-        """ Handles a channel being disconnected. """
+        """Handles a channel being disconnected."""
         for namespace in self.app_namespaces:
             if namespace in self._handlers:
                 self._handlers[namespace].channel_disconnected()
@@ -1009,7 +1009,7 @@ class SocketClient(threading.Thread):
 
 
 class ConnectionController(BaseController):
-    """ Controller to respond to connection messages. """
+    """Controller to respond to connection messages."""
 
     def __init__(self):
         super().__init__(NS_CONNECTION)
@@ -1036,7 +1036,7 @@ class ConnectionController(BaseController):
 
 
 class HeartbeatController(BaseController):
-    """ Controller to respond to heartbeat messages. """
+    """Controller to respond to heartbeat messages."""
 
     def __init__(self):
         super().__init__(NS_HEARTBEAT, target_platform=True)
@@ -1075,7 +1075,7 @@ class HeartbeatController(BaseController):
         return False
 
     def ping(self):
-        """ Send a ping message. """
+        """Send a ping message."""
         self.last_ping = time.time()
         try:
             self.send_message({MESSAGE_TYPE: TYPE_PING})
@@ -1085,11 +1085,11 @@ class HeartbeatController(BaseController):
             )
 
     def reset(self):
-        """ Reset expired counter. """
+        """Reset expired counter."""
         self.last_pong = time.time()
 
     def is_expired(self):
-        """ Indicates if connection has expired. """
+        """Indicates if connection has expired."""
         if time.time() - self.last_ping > HB_PING_TIME:
             self.ping()
 

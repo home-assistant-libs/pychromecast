@@ -4,7 +4,7 @@ Errors to be used by PyChromecast.
 
 
 class PyChromecastError(Exception):
-    """ Base error for PyChromecast. """
+    """Base error for PyChromecast."""
 
 
 class NoChromecastFoundError(PyChromecastError):
@@ -20,11 +20,11 @@ class MultipleChromecastsFoundError(PyChromecastError):
 
 
 class ChromecastConnectionError(PyChromecastError):
-    """ When a connection error occurs within PyChromecast. """
+    """When a connection error occurs within PyChromecast."""
 
 
 class LaunchError(PyChromecastError):
-    """ When an app fails to launch. """
+    """When an app fails to launch."""
 
 
 class PyChromecastStopped(PyChromecastError):

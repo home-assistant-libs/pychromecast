@@ -363,7 +363,7 @@ class Chromecast:
 
     @property
     def ignore_cec(self):
-        """ Returns whether the CEC data should be ignored. """
+        """Returns whether the CEC data should be ignored."""
         return self.device is not None and any(
             fnmatch.fnmatchcase(self.device.friendly_name, pattern)
             for pattern in IGNORE_CEC
@@ -371,7 +371,7 @@ class Chromecast:
 
     @property
     def is_idle(self):
-        """ Returns if there is currently an app running. """
+        """Returns if there is currently an app running."""
         return (
             self.status is None
             or self.app_id in (None, IDLE_APP_ID)
@@ -384,7 +384,7 @@ class Chromecast:
 
     @property
     def uuid(self):
-        """ Returns the unique UUID of the Chromecast device. """
+        """Returns the unique UUID of the Chromecast device."""
         return self.device.uuid
 
     @property
@@ -397,12 +397,12 @@ class Chromecast:
 
     @property
     def uri(self):
-        """ Returns the device URI (ip:port) """
+        """Returns the device URI (ip:port)"""
         return "{}:{}".format(self.socket_client.host, self.socket_client.port)
 
     @property
     def model_name(self):
-        """ Returns the model name of the Chromecast device. """
+        """Returns the model name of the Chromecast device."""
         return self.device.model_name
 
     @property
@@ -420,33 +420,33 @@ class Chromecast:
 
     @property
     def app_id(self):
-        """ Returns the current app_id. """
+        """Returns the current app_id."""
         return self.status.app_id if self.status else None
 
     @property
     def app_display_name(self):
-        """ Returns the name of the current running app. """
+        """Returns the name of the current running app."""
         return self.status.display_name if self.status else None
 
     @property
     def media_controller(self):
-        """ Returns the media controller. """
+        """Returns the media controller."""
         return self.socket_client.media_controller
 
     def new_cast_status(self, status):
-        """ Called when a new status received from the Chromecast. """
+        """Called when a new status received from the Chromecast."""
         self.status = status
         if status:
             self.status_event.set()
 
     def start_app(self, app_id, force_launch=False):
-        """ Start an app on the Chromecast. """
+        """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
 
         self.socket_client.receiver_controller.launch_app(app_id, force_launch)
 
     def quit_app(self):
-        """ Tells the Chromecast to quit current app_id. """
+        """Tells the Chromecast to quit current app_id."""
         self.logger.info("Quiting current app")
 
         self.socket_client.receiver_controller.stop_app()

@@ -9,7 +9,7 @@ APP_NAMESPACE = "urn:x-cast:com.madmod.dashcast"
 
 
 class DashCastController(BaseController):
-    """ Controller to interact with DashCast app namespace. """
+    """Controller to interact with DashCast app namespace."""
 
     def __init__(self, appNamespace=APP_NAMESPACE, appId=APP_DASHCAST):
         super().__init__(appNamespace, appId)
