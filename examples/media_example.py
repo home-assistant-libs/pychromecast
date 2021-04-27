@@ -30,6 +30,11 @@ parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
 parser.add_argument(
+    "--known-host",
+    help="Add known host (IP), can be used multiple times",
+    action="append",
+)
+parser.add_argument(
     "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
 )
 args = parser.parse_args()
@@ -40,7 +45,9 @@ if args.show_zeroconf_debug:
     print("Zeroconf version: " + zeroconf.__version__)
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
-chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(
+    friendly_names=[args.cast], known_hosts=args.known_host
+)
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)

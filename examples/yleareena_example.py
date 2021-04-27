@@ -22,9 +22,17 @@ CAST_NAME = "My Chromecast"
 parser = argparse.ArgumentParser(
     description="Example on how to use the Yle Areena Controller."
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
+)
+parser.add_argument(
+    "--known-host",
+    help="Add known host (IP), can be used multiple times",
+    action="append",
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
 parser.add_argument("--program", help="Areena Program ID", default="1-50097921")
 parser.add_argument("--audio_language", help="audio_language", default="")
@@ -65,7 +73,9 @@ def get_kaltura_id(program_id):
     return info.media_id.split("-")[-1]
 
 
-chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(
+    friendly_names=[args.cast], known_hosts=args.known_host
+)
 if not chromecasts:
     print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)

@@ -53,12 +53,17 @@ parser = argparse.ArgumentParser(
     description="How to play media items, lists, playQueues, "
     "and playlists to a Chromecast device."
 )
+parser.add_argument(
+    "--cast", help='Name of cast device (default: "%(default)s").', default=CAST_NAME
+)
+parser.add_argument(
+    "--known-host",
+    help="Add known host (IP), can be used multiple times",
+    action="append",
+)
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
-parser.add_argument(
-    "--cast", help='Name of cast device (default: "%(default)s").', default=CAST_NAME
 )
 parser.add_argument(
     "--url", help='URL of your Plex Server (default: "%(default)s").', default=PLEX_URL
@@ -102,7 +107,9 @@ def start_item_info(_media):
         print(f"Starting From: {_media}")
 
 
-chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[args.cast])
+chromecasts, browser = pychromecast.get_listed_chromecasts(
+    friendly_names=[args.cast], known_hosts=args.known_host
+)
 cast = next((cc for cc in chromecasts if cc.name == args.cast), None)
 
 if not cast:

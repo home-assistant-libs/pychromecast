@@ -496,7 +496,7 @@ def stop_discovery(cast_browser):
 
 
 def discover_chromecasts(
-    max_devices=None, timeout=DISCOVER_TIMEOUT, zeroconf_instance=None
+    max_devices=None, timeout=DISCOVER_TIMEOUT, zeroconf_instance=None, known_hosts=None
 ):
     """
     Discover chromecasts on the network.
@@ -517,7 +517,7 @@ def discover_chromecasts(
 
     discover_complete = threading.Event()
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
     # Wait for the timeout or the maximum number of devices
@@ -531,6 +531,7 @@ def discover_listed_chromecasts(
     uuids=None,
     discovery_timeout=DISCOVER_TIMEOUT,
     zeroconf_instance=None,
+    known_hosts=None,
 ):
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -567,7 +568,7 @@ def discover_listed_chromecasts(
     discover_complete = threading.Event()
 
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices

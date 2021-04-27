@@ -108,6 +108,7 @@ def get_listed_chromecasts(
     timeout=None,
     discovery_timeout=DISCOVER_TIMEOUT,
     zeroconf_instance=None,
+    known_hosts=None,
 ):
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -166,7 +167,7 @@ def get_listed_chromecasts(
     discover_complete = Event()
 
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
@@ -182,6 +183,7 @@ def get_chromecasts(
     blocking=True,
     callback=None,
     zeroconf_instance=None,
+    known_hosts=None,
 ):
     """
     Searches the network for chromecast devices and creates a Chromecast object
@@ -215,7 +217,7 @@ def get_chromecasts(
     """
     if blocking:
         # Thread blocking chromecast discovery
-        devices, browser = discover_chromecasts()
+        devices, browser = discover_chromecasts(known_hosts=known_hosts)
         cc_list = []
         for device in devices:
             try:
@@ -257,7 +259,7 @@ def get_chromecasts(
             pass
 
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
     return browser
 
