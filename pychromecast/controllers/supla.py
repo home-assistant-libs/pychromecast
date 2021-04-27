@@ -11,7 +11,7 @@ APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 
 # pylint: disable=too-many-instance-attributes
 class SuplaController(BaseController):
-    """ Controller to interact with Supla namespace. """
+    """Controller to interact with Supla namespace."""
 
     def __init__(self):
         super().__init__(APP_NAMESPACE, APP_SUPLA)
@@ -41,5 +41,5 @@ class SuplaController(BaseController):
         self.send_message(msg, inc_session_id=True)
 
     def quick_play(self, media_id=None, is_live=False, **kwargs):
-        """ Quick Play """
+        """Quick Play"""
         self.play_media(media_id, is_live=is_live, **kwargs)

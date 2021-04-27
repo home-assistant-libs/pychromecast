@@ -18,7 +18,7 @@ APP_BUBBLEUPNP = "3927FA74"
 
 
 def get_possible_app_ids():
-    """ Returns all possible app ids. """
+    """Returns all possible app ids."""
 
     try:
         req = requests.get(
@@ -34,7 +34,7 @@ def get_possible_app_ids():
 
 
 def get_app_config(app_id):
-    """ Get specific configuration for 'app_id'. """
+    """Get specific configuration for 'app_id'."""
     try:
         req = requests.get(
             ("https://clients3.google.com/cast/chromecast/device/app?a={}").format(

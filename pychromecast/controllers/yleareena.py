@@ -7,7 +7,7 @@ from .media import MediaController, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYP
 
 
 class YleAreenaController(MediaController):
-    """ Controller to interact with Yle Areena app namespace. """
+    """Controller to interact with Yle Areena app namespace."""
 
     def __init__(self):
         super().__init__()
@@ -54,7 +54,7 @@ class YleAreenaController(MediaController):
         self.send_message(msg, inc_session_id=True)
 
     def quick_play(self, media_id=None, audio_lang="", text_lang="off", **kwargs):
-        """ Quick Play """
+        """Quick Play"""
         self.play_areena_media(
             media_id, audio_language=audio_lang, text_language=text_lang, **kwargs
         )

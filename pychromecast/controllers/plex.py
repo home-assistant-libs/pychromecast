@@ -171,7 +171,7 @@ def episode_title(self):
 
 class PlexController(BaseController):
     # pylint: disable=too-many-public-methods
-    """ Controller to interact with Plex namespace. """
+    """Controller to interact with Plex namespace."""
 
     def __init__(self):
         super().__init__("urn:x-cast:plex", "9AC194DC")

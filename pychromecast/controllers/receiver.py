@@ -89,13 +89,13 @@ class ReceiverController(BaseController):
         self._launch_error_listeners = []
 
     def disconnected(self):
-        """ Called when disconnected. Will erase status. """
+        """Called when disconnected. Will erase status."""
         self.logger.info("Receiver:channel_disconnected")
         self.status = None
 
     @property
     def app_id(self):
-        """ Convenience method to retrieve current app id. """
+        """Convenience method to retrieve current app id."""
         return self.status.app_id if self.status else None
 
     def receive_message(self, _message, data: dict):
@@ -129,7 +129,7 @@ class ReceiverController(BaseController):
         self._launch_error_listeners.append(listener)
 
     def update_status(self, callback_function_param=False):
-        """ Sends a message to the Chromecast to update the status. """
+        """Sends a message to the Chromecast to update the status."""
         self.logger.debug("Receiver:Updating status")
         self.send_message(
             {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
@@ -166,7 +166,7 @@ class ReceiverController(BaseController):
                 callback_function()
 
     def stop_app(self, callback_function_param=False):
-        """ Stops the current running app on the Chromecast. """
+        """Stops the current running app on the Chromecast."""
         self.logger.info("Receiver:Stopping current app '%s'", self.app_id)
         return self.send_message(
             {MESSAGE_TYPE: "STOP"},
@@ -185,7 +185,7 @@ class ReceiverController(BaseController):
         return volume
 
     def set_volume_muted(self, muted):
-        """ Allows to mute volume. """
+        """Allows to mute volume."""
         self.send_message({MESSAGE_TYPE: "SET_VOLUME", "volume": {"muted": muted}})
 
     @staticmethod
@@ -225,7 +225,7 @@ class ReceiverController(BaseController):
         return status
 
     def _process_get_status(self, data):
-        """ Processes a received STATUS message and notifies listeners. """
+        """Processes a received STATUS message and notifies listeners."""
         status = self._parse_status(data, self.cast_type)
         is_new_app = self.app_id != status.app_id and self.app_to_launch
         self.status = status
@@ -242,7 +242,7 @@ class ReceiverController(BaseController):
                 self.app_launch_event_function = None
 
     def _report_status(self):
-        """ Reports the current status to all listeners. """
+        """Reports the current status to all listeners."""
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
@@ -285,7 +285,7 @@ class ReceiverController(BaseController):
                 )
 
     def tear_down(self):
-        """ Called when controller is destroyed. """
+        """Called when controller is destroyed."""
         super().tear_down()
 
         self.status = None

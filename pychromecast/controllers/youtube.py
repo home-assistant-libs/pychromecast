@@ -17,7 +17,7 @@ ATTR_SCREEN_ID = "screenId"
 
 
 class YouTubeController(BaseController):
-    """ Controller to interact with Youtube."""
+    """Controller to interact with Youtube."""
 
     def __init__(self):
         super().__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
@@ -98,12 +98,12 @@ class YouTubeController(BaseController):
         return False
 
     def _process_status(self, status):
-        """ Process latest status update. """
+        """Process latest status update."""
         self._screen_id = status.get(ATTR_SCREEN_ID)
         self.status_update_event.set()
 
     def quick_play(self, media_id=None, playlist_id=None, enqueue=False, **kwargs):
-        """ Quick Play """
+        """Quick Play"""
         if enqueue:
             self.add_to_queue(media_id, **kwargs)
         else:

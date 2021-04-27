@@ -120,7 +120,7 @@ class ZeroConfListener:
         self._add_update_service(zconf, typ, name, self._cast_listener.add_cast)
 
     def _add_update_service(self, zconf, typ, name, callback):
-        """ Add or update a service. """
+        """Add or update a service."""
         service = None
         tries = 0
         if name.endswith("_sub._googlecast._tcp.local."):
@@ -207,7 +207,7 @@ HOSTLISTENER_MAX_FAIL = 5
 
 
 class HostBrowser(threading.Thread):
-    """"Repeateadly poll a set of known hosts."""
+    """Repeateadly poll a set of known hosts."""
 
     def __init__(self, cast_listener, devices, lock):
         super().__init__(daemon=True)

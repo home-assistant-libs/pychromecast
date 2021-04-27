@@ -9,7 +9,7 @@ APP_NAMESPACE = "urn:x-cast:com.nabucasa.hast"
 
 
 class HomeAssistantController(BaseController):
-    """ Controller to interact with Home Assistant. """
+    """Controller to interact with Home Assistant."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ class HomeAssistantController(BaseController):
         self.get_status()
 
     def channel_disconnected(self):
-        """ Called when a channel is disconnected. """
+        """Called when a channel is disconnected."""
         self.status = None
 
     def receive_message(self, _message, data: dict):
