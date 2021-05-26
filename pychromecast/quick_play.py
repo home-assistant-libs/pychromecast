@@ -5,9 +5,11 @@ from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.spotify import SpotifyController
 from .controllers.bubbleupnp import BubbleUPNPController
+from .controllers.bbciplayer import BbcIplayerController
+from .controllers.bbcsounds import BbcSoundsController
 
 
-def quick_play(cast, app_name, data):
+def quick_play(cast, app_name, data, **kwargs):
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
     based on parameters defined in `data`.
@@ -60,8 +62,12 @@ def quick_play(cast, app_name, data):
         controller = SpotifyController()
     elif app_name == "bubbleupnp":
         controller = BubbleUPNPController()
+    elif app_name == "bbciplayer":
+        controller = BbcIplayerController()
+    elif app_name == "bbcsounds":
+        controller = BbcSoundsController()
     else:
         raise NotImplementedError()
 
     cast.register_handler(controller)
-    controller.quick_play(**data)
+    controller.quick_play(**data, **kwargs)
