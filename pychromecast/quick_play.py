@@ -9,7 +9,7 @@ from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
 
 
-def quick_play(cast, app_name, data, **kwargs):
+def quick_play(cast, app_name, data):
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
     based on parameters defined in `data`.
@@ -70,4 +70,4 @@ def quick_play(cast, app_name, data, **kwargs):
         raise NotImplementedError()
 
     cast.register_handler(controller)
-    controller.quick_play(**data, **kwargs)
+    controller.quick_play(**data)

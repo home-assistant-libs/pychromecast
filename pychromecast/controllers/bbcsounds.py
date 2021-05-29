@@ -1,7 +1,9 @@
 """
 Controller to interface with BBC Sounds.
-https://www.bbc.co.uk/sounds
 """
+# Media ID can be found in the URL
+# e.g. https://www.bbc.co.uk/sounds/live:bbc_radio_one
+
 import logging
 
 from . import BaseController
@@ -19,9 +21,7 @@ class BbcSoundsController(BaseController):
         self.logger = logging.getLogger(__name__)
 
     def play_media(self, media_id, is_live=False, **kwargs):
-        """
-        Play BBC Sounds media
-        """
+        """ Play BBC Sounds media """
         streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED 
         metaDataDefault = { "metadataType": 0, "title": "" }
 

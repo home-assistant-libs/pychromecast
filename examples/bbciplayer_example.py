@@ -1,13 +1,14 @@
 """
 Example on how to use the BBC iPlayer Controller
-
 """
 # pylint: disable=invalid-name
 
+import argparse
 import logging
-from time import sleep
 import sys
+from time import sleep
 
+import zeroconf
 import pychromecast
 from pychromecast.controllers.bbciplayer import BbcIplayerController
 
@@ -20,7 +21,7 @@ CAST_NAME = "Lounge Video"
 # "2908kbps | dash (mf_cloudfront_dash_https)
 #  b09w70r2 | 960x540"
 MEDIA_ID = 'b09w70r2'
-metadata = {
+METADATA = {
 	"metadata": {
 		"metadatatype": 0,
 		"title": "Bitz & Bob",
@@ -31,21 +32,56 @@ metadata = {
 	}
 }
 
-logging.basicConfig(level=logging.DEBUG)
+parser = argparse.ArgumentParser(
+    description="Example on how to use the BBC iPlayer Controller to play an media stream."
+)
+parser.add_argument(
+    "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
+)
+parser.add_argument(
+    "--known-host",
+    help="Add known host (IP), can be used multiple times",
+    action="append",
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
+)
+parser.add_argument(
+    "--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID
+)
+parser.add_argument(
+    "--metadata", help='Metadata (default: "%(default)s")', default=METADATA
+)
+args = parser.parse_args()
 
-chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[CAST_NAME])
+if args.show_debug:
+    logging.basicConfig(level=logging.DEBUG)
+if args.show_zeroconf_debug:
+    print("Zeroconf version: " + zeroconf.__version__)
+    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+
+chromecasts, browser = pychromecast.get_listed_chromecasts(
+    friendly_names=[args.cast], known_hosts=args.known_host
+)
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(CAST_NAME))
+    print('No chromecast with name "{}" discovered'.format(args.cast))
     sys.exit(1)
 
 cast = chromecasts[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
+print(
+    'Found chromecast with name "{}", attempting to play "{}"'.format(
+        args.cast, args.url
+    )
+)
 
 bbciplayer = BbcIplayerController()
 cast.register_handler(bbciplayer)
 bbciplayer.launch()
-bbciplayer.quick_play(MEDIA_ID, False, **metadata)
-cast.wait()
+bbciplayer.play_media(MEDIA_ID, False, **METADATA)
 
 sleep(10)
+
+browser.stop_discovery()

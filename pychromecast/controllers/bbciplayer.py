@@ -1,7 +1,12 @@
 """
 Controller to interface with BBC iPlayer.
-https://www.bbc.co.uk/iplayer
 """
+# Note: Media ID is NOT the 8 digit alpha-numeric in the URL
+# it can be found by right clicking the playing video on the web interface
+# e.g. https://www.bbc.co.uk/iplayer/episode/b09w7fd9/bitz-bob-series-1-1-castle-makeover shows: 
+# "2908kbps | dash (mf_cloudfront_dash_https)
+#  b09w70r2 | 960x540"
+
 import logging
 
 from . import BaseController
@@ -19,9 +24,7 @@ class BbcIplayerController(BaseController):
         self.logger = logging.getLogger(__name__)
 
     def play_media(self, media_id, is_live=False, **kwargs):
-        """
-        Play BBC iPlayer media
-        """
+        """ Play BBC iPlayer media """
         streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED 
         metadata = kwargs.get("metadata", { "metadataType": 0, "title": "" })
         subtitle = metadata.pop("subtitle", "")
