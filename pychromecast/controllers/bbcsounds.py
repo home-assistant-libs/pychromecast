@@ -12,6 +12,7 @@ from .media import STREAM_TYPE_BUFFERED, STREAM_TYPE_LIVE
 
 APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 
+
 class BbcSoundsController(BaseController):
     """Controller to interact with BBC Sounds namespace."""
 
@@ -22,17 +23,18 @@ class BbcSoundsController(BaseController):
 
     def play_media(self, media_id, is_live=False, **kwargs):
         """ Play BBC Sounds media """
-        streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED 
-        metaDataDefault = { "metadataType": 0, "title": "" }
+        streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
+        metaDataDefault = {"metadataType": 0, "title": ""}
 
         msg = {
-                "media": {
-                    "contentId": media_id,
-                    "metadata": kwargs.get("metadata", metaDataDefault),
-                    "streamType": streamType
-                },
-                "type": "LOAD"
+            "media": {
+                "contentId": media_id,
+                "metadata": kwargs.get("metadata", metaDataDefault),
+                "streamType": streamType,
+            },
+            "type": "LOAD",
         }
+
         self.send_message(msg, inc_session_id=False)
 
     def quick_play(self, media_id=None, is_live=False, **kwargs):

@@ -19,13 +19,13 @@ CAST_NAME = "Lounge Video"
 # e.g. https://www.bbc.co.uk/sounds/live:bbc_radio_one
 MEDIA_ID = 'bbc_radio_one'
 METADATA = {
-	"metadata": {
-		"metadatatype": 0,
-		"title": "Radio 1",
-		"images": [{
-			"url": "https://sounds.files.bbci.co.uk/2.3.0/networks/bbc_radio_one/background_1280x720.png"
-		}]
-	}
+    "metadata": {
+        "metadatatype": 0,
+        "title": "Radio 1",
+        "images": [{
+            "url": "https://sounds.files.bbci.co.uk/2.3.0/networks/bbc_radio_one/background_1280x720.png"
+        }]
+    }
 }
 
 parser = argparse.ArgumentParser(
