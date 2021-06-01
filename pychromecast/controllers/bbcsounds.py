@@ -22,15 +22,15 @@ class BbcSoundsController(BaseController):
         self.logger = logging.getLogger(__name__)
 
     def play_media(self, media_id, is_live=False, **kwargs):
-        """ Play BBC Sounds media """
-        streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
-        metaDataDefault = {"metadataType": 0, "title": ""}
+        """Play BBC Sounds media"""
+        stream_type = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
+        metadata_default = {"metadataType": 0, "title": ""}
 
         msg = {
             "media": {
                 "contentId": media_id,
-                "metadata": kwargs.get("metadata", metaDataDefault),
-                "streamType": streamType,
+                "metadata": kwargs.get("metadata", metadata_default),
+                "streamType": stream_type,
             },
             "type": "LOAD",
         }

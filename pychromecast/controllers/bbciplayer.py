@@ -25,8 +25,8 @@ class BbcIplayerController(BaseController):
         self.logger = logging.getLogger(__name__)
 
     def play_media(self, media_id, is_live=False, **kwargs):
-        """ Play BBC iPlayer media """
-        streamType = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
+        """Play BBC iPlayer media"""
+        stream_type = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
         metadata = kwargs.get("metadata", {"metadataType": 0, "title": ""})
         subtitle = metadata.pop("subtitle", "")
 
@@ -35,7 +35,7 @@ class BbcIplayerController(BaseController):
                 "contentId": media_id,
                 "customData": {"secondary_title": subtitle},
                 "metadata": metadata,
-                "streamType": streamType,
+                "streamType": stream_type,
             },
             "type": "LOAD",
         }

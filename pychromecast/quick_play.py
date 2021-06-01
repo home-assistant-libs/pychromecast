@@ -70,4 +70,9 @@ def quick_play(cast, app_name, data):
         raise NotImplementedError()
 
     cast.register_handler(controller)
-    controller.quick_play(**data)
+
+    def app_launched_callback():
+        """Plays media after chromecast has switched to requested app."""
+        controller.quick_play(**data)
+
+    controller.launch(callback_function=app_launched_callback)

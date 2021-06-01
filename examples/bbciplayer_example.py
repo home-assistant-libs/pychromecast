@@ -10,7 +10,7 @@ from time import sleep
 
 import zeroconf
 import pychromecast
-from pychromecast.controllers.bbciplayer import BbcIplayerController
+from pychromecast import quick_play
 
 # Change to the name of your Chromecast
 CAST_NAME = "Lounge Video"
@@ -20,16 +20,13 @@ CAST_NAME = "Lounge Video"
 # e.g. https://www.bbc.co.uk/iplayer/episode/b09w7fd9/bitz-bob-series-1-1-castle-makeover shows:
 # "2908kbps | dash (mf_cloudfront_dash_https)
 #  b09w70r2 | 960x540"
-MEDIA_ID = 'b09w70r2'
+MEDIA_ID = "b09w70r2"
+IS_LIVE = False
 METADATA = {
-    "metadata": {
-        "metadatatype": 0,
-        "title": "Bitz & Bob",
-        "subtitle": "Castle Makeover",
-        "images": [{
-            "url": "https://ichef.bbci.co.uk/images/ic/1280x720/p07j4m3r.jpg"
-        }]
-    }
+    "metadatatype": 0,
+    "title": "Bitz & Bob",
+    "subtitle": "Castle Makeover",
+    "images": [{"url": "https://ichef.bbci.co.uk/images/ic/1280x720/p07j4m3r.jpg"}],
 }
 
 parser = argparse.ArgumentParser(
@@ -47,13 +44,20 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument(
-    "--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID
-)
+parser.add_argument("--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID)
 parser.add_argument(
     "--metadata", help='Metadata (default: "%(default)s")', default=METADATA
 )
+parser.add_argument(
+    "--is_live",
+    help="Show 'live' and no current/end timestamps on UI",
+    action="store_true",
+    default=IS_LIVE,
+)
 args = parser.parse_args()
+
+app_name = "bbciplayer"
+app_data = {"media_id": MEDIA_ID, "is_live": args.is_live, "metadata": METADATA}
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
@@ -77,11 +81,7 @@ print(
     )
 )
 
-bbciplayer = BbcIplayerController()
-cast.register_handler(bbciplayer)
-bbciplayer.launch()
-bbciplayer.play_media(MEDIA_ID, False, **METADATA)
-
+quick_play.quick_play(cast, app_name, app_data)
 sleep(10)
 
 browser.stop_discovery()

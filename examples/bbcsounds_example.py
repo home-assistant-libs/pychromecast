@@ -10,22 +10,23 @@ from time import sleep
 
 import zeroconf
 import pychromecast
-from pychromecast.controllers.bbcsounds import BbcSoundsController
+from pychromecast import quick_play
 
 # Change to the name of your Chromecast
 CAST_NAME = "Lounge Video"
 
 # Media ID can be found in the URL
 # e.g. https://www.bbc.co.uk/sounds/live:bbc_radio_one
-MEDIA_ID = 'bbc_radio_one'
+MEDIA_ID = "bbc_radio_one"
+IS_LIVE = True
 METADATA = {
-    "metadata": {
-        "metadatatype": 0,
-        "title": "Radio 1",
-        "images": [{
+    "metadatatype": 0,
+    "title": "Radio 1",
+    "images": [
+        {
             "url": "https://sounds.files.bbci.co.uk/2.3.0/networks/bbc_radio_one/background_1280x720.png"
-        }]
-    }
+        }
+    ],
 }
 
 parser = argparse.ArgumentParser(
@@ -43,13 +44,20 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument(
-    "--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID
-)
+parser.add_argument("--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID)
 parser.add_argument(
     "--metadata", help='Metadata (default: "%(default)s")', default=METADATA
 )
+parser.add_argument(
+    "--is_live",
+    help="Show 'live' and no current/end timestamps on UI",
+    action="store_true",
+    default=IS_LIVE,
+)
 args = parser.parse_args()
+
+app_name = "bbcsounds"
+app_data = {"media_id": MEDIA_ID, "is_live": args.is_live, "metadata": METADATA}
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
@@ -73,10 +81,7 @@ print(
     )
 )
 
-bbcsounds = BbcSoundsController()
-cast.register_handler(bbcsounds)
-bbcsounds.launch()
-bbcsounds.play_media(MEDIA_ID, False, **METADATA)
+quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)
 
