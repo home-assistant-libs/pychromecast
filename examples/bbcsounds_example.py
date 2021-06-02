@@ -7,6 +7,7 @@ import argparse
 import logging
 import sys
 from time import sleep
+import json
 
 import zeroconf
 import pychromecast
@@ -44,9 +45,11 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument("--url", help='MediaID (default: "%(default)s")', default=MEDIA_ID)
 parser.add_argument(
-    "--metadata", help='Metadata (default: "%(default)s")', default=METADATA
+    "--media_id", help='MediaID (default: "%(default)s")', default=MEDIA_ID
+)
+parser.add_argument(
+    "--metadata", help='Metadata (default: "%(default)s")', default=json.dumps(METADATA)
 )
 parser.add_argument(
     "--is_live",
@@ -57,7 +60,11 @@ parser.add_argument(
 args = parser.parse_args()
 
 app_name = "bbcsounds"
-app_data = {"media_id": MEDIA_ID, "is_live": args.is_live, "metadata": METADATA}
+app_data = {
+    "media_id": args.media_id,
+    "is_live": args.is_live,
+    "metadata": json.loads(args.metadata),
+}
 
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
@@ -77,7 +84,7 @@ cast = chromecasts[0]
 cast.wait()
 print(
     'Found chromecast with name "{}", attempting to play "{}"'.format(
-        args.cast, args.url
+        args.cast, args.media_id
     )
 )
 
