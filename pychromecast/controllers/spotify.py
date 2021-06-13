@@ -11,10 +11,9 @@ from ..error import LaunchError
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_GET_INFO = "getInfo"
 TYPE_GET_INFO_RESPONSE = "getInfoResponse"
-TYPE_SET_CREDENTIALS = "setCredentials"
-TYPE_SET_CREDENTIALS_ERROR = "setCredentialsError"
-TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
-
+TYPE_ADD_USER = "addUser"
+TYPE_ADD_USER_ERROR = "addUserError"
+TYPE_ADD_USER_RESPONSE = "addUserResponse"
 
 # pylint: disable=too-many-instance-attributes
 class SpotifyController(BaseController):
@@ -26,7 +25,6 @@ class SpotifyController(BaseController):
         self.logger = logging.getLogger(__name__)
         self.session_started = False
         self.access_token = access_token
-        self.expires = expires
         self.is_launched = False
         self.device = None
         self.credential_error = False
@@ -38,9 +36,9 @@ class SpotifyController(BaseController):
 
         Called when a message is received.
         """
-        if data["type"] == TYPE_SET_CREDENTIALS_RESPONSE:
+        if data["type"] == TYPE_ADD_USER_RESPONSE:
             self.send_message({"type": TYPE_GET_INFO, "payload": {}})
-        if data["type"] == TYPE_SET_CREDENTIALS_ERROR:
+        if data["type"] == TYPE_ADD_USER_ERROR:
             self.device = None
             self.credential_error = True
             self.waiting.set()
@@ -58,16 +56,18 @@ class SpotifyController(BaseController):
         Spotify app within timeout seconds.
         """
 
-        if self.access_token is None or self.expires is None:
-            raise ValueError("access_token and expires cannot be empty")
+        if self.access_token is None:
+            raise ValueError("access_token cannot be empty")
 
         def callback():
             """Callback function"""
             self.send_message(
                 {
-                    "type": TYPE_SET_CREDENTIALS,
-                    "credentials": self.access_token,
-                    "expiresIn": self.expires,
+                    "type": TYPE_ADD_USER,
+                    "payload": {
+                        "blob": self.access_token,
+                        "tokenType": "accesstoken"
+                    }
                 }
             )
 
@@ -95,6 +95,5 @@ class SpotifyController(BaseController):
         To actually play media, another application using spotify connect is required.
         """
         self.access_token = kwargs["access_token"]
-        self.expires = kwargs["expires"]
 
         self.launch_app(timeout=20)
