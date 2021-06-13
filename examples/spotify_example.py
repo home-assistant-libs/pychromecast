@@ -97,6 +97,8 @@ if not sp.is_launched and sp.credential_error:
     print("Failed to launch spotify controller due to credential error")
     sys.exit(1)
 
+# The chromecast device does not show up as part of the public API get devices call
+# The only way to transfer playback to a chromcast devicew is by calling this non public API
 headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
