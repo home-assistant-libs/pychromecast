@@ -38,8 +38,16 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument("--sp-key", help="Spotify cookie", required=True)
-parser.add_argument("--sp-dc", help="Spotify cookie", required=True)
+parser.add_argument(
+    "--sp-key",
+    help="Spotify cookie, as per https://github.com/enriquegh/spotify-webplayer-token#usage",
+    required=True,
+)
+parser.add_argument(
+    "--sp-dc",
+    help="Spotify cookie, as per https://github.com/enriquegh/spotify-webplayer-token#usage",
+    required=True,
+)
 parser.add_argument(
     "--uri",
     help='Spotify uri(s) (default: "%(default)s")',
