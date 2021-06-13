@@ -12,6 +12,7 @@ import argparse
 import logging
 import time
 import sys
+import requests
 
 import zeroconf
 import spotify_token as st  # pylint: disable=import-error
@@ -37,8 +38,8 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument("--user", help="Spotify username", required=True)
-parser.add_argument("--password", help="Spotify password", required=True)
+parser.add_argument("--sp-key", help="Spotify cookie", required=True)
+parser.add_argument("--sp-dc", help="Spotify cookie", required=True)
 parser.add_argument(
     "--uri",
     help='Spotify uri(s) (default: "%(default)s")',
@@ -74,7 +75,7 @@ cast.wait()
 spotify_device_id = None
 
 # Create a spotify token
-data = st.start_session(args.user, args.password)
+data = st.start_session(args.sp_dc, args.sp_key)
 access_token = data[0]
 expires = data[1] - int(time.time())
 
@@ -96,25 +97,22 @@ if not sp.is_launched and sp.credential_error:
     print("Failed to launch spotify controller due to credential error")
     sys.exit(1)
 
-# Query spotify for active devices
-devices_available = client.devices()
+headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + access_token,
+}
+transferResponse = requests.post('https://guc-spclient.spotify.com/connect-state/v1/connect/transfer/from/noop/to/' + sp.device, headers=headers)
 
-# Match active spotify devices with the spotify controller's device id
-for device in devices_available["devices"]:
-    if device["id"] == sp.device:
-        spotify_device_id = device["id"]
-        break
-
-if not spotify_device_id:
-    print('No device with id "{}" known by Spotify'.format(sp.device))
-    print("Known devices: {}".format(devices_available["devices"]))
+if transferResponse.status_code is not 200:
+    print("Failed to transfer playback to chromecast device")
     sys.exit(1)
 
 # Start playback
 if args.uri[0].find("track") > 0:
-    client.start_playback(device_id=spotify_device_id, uris=args.uri)
+    client.start_playback(uris=args.uri)
 else:
-    client.start_playback(device_id=spotify_device_id, context_uri=args.uri[0])
+    client.start_playback(context_uri=args.uri[0])
 
 # Shut down discovery
 browser.stop_discovery()
