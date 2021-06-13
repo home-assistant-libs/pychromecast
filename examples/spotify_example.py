@@ -97,14 +97,19 @@ if not sp.is_launched and sp.credential_error:
     print("Failed to launch spotify controller due to credential error")
     sys.exit(1)
 
-# The chromecast device does not show up as part of the public API get devices call
-# The only way to transfer playback to a chromcast devicew is by calling this non public API
+# The chromecast device does not show up as part of the public API get devices
+# call until it starts playing. The only way to do so is to transfer playback
+# by call this endpoint that's not part of their public API.
 headers = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ' + access_token,
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + access_token,
 }
-transferResponse = requests.post('https://guc-spclient.spotify.com/connect-state/v1/connect/transfer/from/noop/to/' + sp.device, headers=headers)
+transferResponse = requests.post(
+    "https://guc-spclient.spotify.com/connect-state/v1/connect/transfer/from/noop/to/"
+    + sp.device,
+    headers=headers,
+)
 
 if transferResponse.status_code is not 200:
     print("Failed to transfer playback to chromecast device")
