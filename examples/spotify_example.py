@@ -114,8 +114,9 @@ headers = {
     "Authorization": "Bearer " + access_token,
 }
 transferResponse = requests.post(
-    "https://guc-spclient.spotify.com/connect-state/v1/connect/transfer/from/noop/to/"
-    + sp.device,
+    "https://guc-spclient.spotify.com/connect-state/v1/connect/transfer/from/noop/to/{}".format(
+        sp.device
+    ),
     headers=headers,
 )
 
