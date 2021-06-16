@@ -120,7 +120,7 @@ transferResponse = requests.post(
     headers=headers,
 )
 
-if transferResponse.status_code is not 200:
+if transferResponse.status_code != 200:
     print("Failed to transfer playback to chromecast device")
     sys.exit(1)
 
