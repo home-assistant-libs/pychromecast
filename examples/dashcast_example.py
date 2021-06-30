@@ -11,7 +11,7 @@ import time
 import zeroconf
 
 import pychromecast
-import pychromecast.controllers.dashcast as dashcast
+from pychromecast.controllers import dashcast
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
