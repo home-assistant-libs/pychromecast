@@ -38,12 +38,14 @@ class BaseController(abc.ABC):
             and self.namespace in self._socket_client.app_namespaces
         )
 
-    def launch(self, callback_function=None):
+    def launch(self, callback_function=None, force_launch=False):
         """If set, launches app related to the controller."""
         self._check_registered()
 
         self._socket_client.receiver_controller.launch_app(
-            self.supporting_app_id, callback_function=callback_function
+            self.supporting_app_id,
+            force_launch=force_launch,
+            callback_function=callback_function,
         )
 
     def registered(self, socket_client):
