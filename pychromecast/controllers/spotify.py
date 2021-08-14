@@ -11,9 +11,6 @@ from ..error import LaunchError
 APP_NAMESPACE = "urn:x-cast:com.spotify.chromecast.secure.v1"
 TYPE_GET_INFO = "getInfo"
 TYPE_GET_INFO_RESPONSE = "getInfoResponse"
-TYPE_SET_CREDENTIALS = "setCredentials"
-TYPE_SET_CREDENTIALS_ERROR = "setCredentialsError"
-TYPE_SET_CREDENTIALS_RESPONSE = "setCredentialsResponse"
 
 
 # pylint: disable=too-many-instance-attributes
@@ -38,12 +35,6 @@ class SpotifyController(BaseController):
 
         Called when a message is received.
         """
-        if data["type"] == TYPE_SET_CREDENTIALS_RESPONSE:
-            self.send_message({"type": TYPE_GET_INFO, "payload": {}})
-        if data["type"] == TYPE_SET_CREDENTIALS_ERROR:
-            self.device = None
-            self.credential_error = True
-            self.waiting.set()
         if data["type"] == TYPE_GET_INFO_RESPONSE:
             self.device = data["payload"]["deviceID"]
             self.is_launched = True
@@ -63,13 +54,7 @@ class SpotifyController(BaseController):
 
         def callback():
             """Callback function"""
-            self.send_message(
-                {
-                    "type": TYPE_SET_CREDENTIALS,
-                    "credentials": self.access_token,
-                    "expiresIn": self.expires,
-                }
-            )
+            self.send_message({"type": TYPE_GET_INFO, "payload": {}})
 
         self.device = None
         self.credential_error = False
