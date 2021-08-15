@@ -15,6 +15,7 @@ TYPE_GET_INFO = "getInfo"
 TYPE_GET_INFO_RESPONSE = "getInfoResponse"
 TYPE_ADD_USER = "addUser"
 TYPE_ADD_USER_RESPONSE = "addUserResponse"
+TYPE_ADD_USER_ERROR = "addUserError"
 
 
 # pylint: disable=too-many-instance-attributes
@@ -61,6 +62,11 @@ class SpotifyController(BaseController):
             })
         if data["type"] == TYPE_ADD_USER_RESPONSE:
             self.is_launched = True
+            self.waiting.set()
+
+        if data["type"] == TYPE_ADD_USER_ERROR:
+            self.device = None
+            self.credential_error = True
             self.waiting.set()
         return True
 
