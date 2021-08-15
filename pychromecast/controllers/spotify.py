@@ -44,18 +44,8 @@ class SpotifyController(BaseController):
             self.client = data["payload"]["clientID"]
             headers = {
                 'authority': 'spclient.wg.spotify.com',
-                'sec-ch-ua': '"Chromium";v="92", " Not A;Brand";v="99", "Google Chrome";v="92"',
                 'authorization': 'Bearer {}'.format(self.access_token),
-                'sec-ch-ua-mobile': '?0',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36',
-                'content-type': 'text/plain;charset=UTF-8',
-                'accept': '*/*',
-                'origin': 'https://open.spotify.com',
-                'sec-fetch-site': 'same-site',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-dest': 'empty',
-                'referer': 'https://open.spotify.com/',
-                'accept-language': 'en-US,en;q=0.9',
+                'content-type': 'text/plain;charset=UTF-8'
             }
 
             request_body = json.dumps({'clientId': self.client, 'deviceId': self.device})
