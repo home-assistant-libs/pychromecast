@@ -17,6 +17,7 @@ TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
 _LOGGER = logging.getLogger(__name__)
 
+
 class YouTubeController(BaseController):
     """Controller to interact with Youtube."""
 
