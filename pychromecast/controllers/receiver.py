@@ -5,7 +5,6 @@ on the Chromecast.
 import abc
 
 from collections import namedtuple
-import threading
 
 from ..const import (
     CAST_TYPE_AUDIO,
@@ -82,7 +81,6 @@ class ReceiverController(BaseController):
         self.launch_failure = None
         self.app_to_launch = None
         self.cast_type = cast_type
-        self.app_launch_event = threading.Event()
         self.app_launch_event_function = None
 
         self._status_listeners = []
@@ -155,7 +153,6 @@ class ReceiverController(BaseController):
             self.logger.info("Receiver:Launching app %s", app_id)
 
             self.app_to_launch = app_id
-            self.app_launch_event.clear()
             self.app_launch_event_function = callback_function
             self.launch_failure = None
 
@@ -235,7 +232,6 @@ class ReceiverController(BaseController):
 
         if is_new_app and self.app_to_launch == self.app_id:
             self.app_to_launch = None
-            self.app_launch_event.set()
             if self.app_launch_event_function:
                 self.logger.debug("Start app_launch_event_function...")
                 self.app_launch_event_function()
@@ -272,7 +268,6 @@ class ReceiverController(BaseController):
 
         if self.app_to_launch:
             self.app_to_launch = None
-            self.app_launch_event.set()
 
         self.logger.debug("Launch status: %s", launch_failure)
 
@@ -291,6 +286,5 @@ class ReceiverController(BaseController):
         self.status = None
         self.launch_failure = None
         self.app_to_launch = None
-        self.app_launch_event.clear()
 
         self._status_listeners[:] = []
