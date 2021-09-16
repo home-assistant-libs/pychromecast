@@ -2,6 +2,7 @@
 Controller to interface with the YouTube-app.
 Use the media controller to play, pause etc.
 """
+import logging
 import threading
 from casttube import YouTubeSession
 
@@ -14,7 +15,7 @@ YOUTUBE_NAMESPACE = "urn:x-cast:com.google.youtube.mdx"
 TYPE_GET_SCREEN_ID = "getMdxSessionStatus"
 TYPE_STATUS = "mdxSessionStatus"
 ATTR_SCREEN_ID = "screenId"
-
+_LOGGER = logging.getLogger(__name__)
 
 class YouTubeController(BaseController):
     """Controller to interact with Youtube."""
@@ -86,7 +87,9 @@ class YouTubeController(BaseController):
             self.send_message({MESSAGE_TYPE: TYPE_GET_SCREEN_ID})
         except UnsupportedNamespace:
             pass
-        self.status_update_event.wait()
+        status = self.status_update_event.wait(10)
+        if not status:
+            _LOGGER.warning("Failed to update screen_id")
         self.status_update_event.clear()
 
     def receive_message(self, _message, data: dict):
