@@ -5,7 +5,6 @@ on the Chromecast.
 import abc
 
 from collections import namedtuple
-import threading
 
 from ..const import (
     CAST_TYPE_AUDIO,
