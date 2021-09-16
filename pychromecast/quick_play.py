@@ -71,8 +71,4 @@ def quick_play(cast, app_name, data):
 
     cast.register_handler(controller)
 
-    def app_launched_callback():
-        """Plays media after chromecast has switched to requested app."""
-        controller.quick_play(**data)
-
-    controller.launch(callback_function=app_launched_callback)
+    controller.quick_play(**data)
