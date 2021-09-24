@@ -119,6 +119,12 @@ def get_device_status(host, services=None, zconf=None, timeout=10, context=None)
         friendly_name = status.get("name", "Unknown Chromecast")
         model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
+
+        mac_address = status.get("mac_address", None)
+        # Some devices will return an invalid / placeholder mac_address
+        if mac_address == "00:00:00:00:00:00":
+            mac_address = None
+
         if "detail" in status:
             model_name = status["detail"].get("model_name", model_name)
             manufacturer = status["detail"].get("manufacturer", manufacturer)
@@ -131,7 +137,9 @@ def get_device_status(host, services=None, zconf=None, timeout=10, context=None)
         if udn:
             uuid = UUID(udn.replace("-", ""))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
+        return DeviceStatus(
+            friendly_name, model_name, manufacturer, uuid, cast_type, mac_address
+        )
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
@@ -198,5 +206,6 @@ MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid", "host", "p
 MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])
 
 DeviceStatus = namedtuple(
-    "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
+    "DeviceStatus",
+    ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type", "mac_address"],
 )
