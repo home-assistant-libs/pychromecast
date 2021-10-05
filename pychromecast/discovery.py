@@ -15,6 +15,12 @@ from .dial import get_device_status, get_multizone_status, get_ssl_context
 
 DISCOVER_TIMEOUT = 5
 
+# Models matching this list will only be polled once by the HostBrowser
+HOST_BROWSER_BLOCKED_MODEL_PREFIXES = ["JBL"]
+
+# mDNS services matching this list will not be added to the HostBrowser
+HOST_BROWSER_BLOCKED_SERVICE_PREFIXES = ["JBL"]
+
 ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
 CastInfo = namedtuple(
     "CastInfo", ["services", "uuid", "model_name", "friendly_name", "host", "port"]
@@ -51,6 +57,26 @@ class AbstractCastListener(abc.ABC):
         uuid: The cast's uuid
         service: MDNS service name or host:port
         """
+
+
+def _is_blocked_from_host_browser(item, block_list, item_type):
+    for blocked_prefix in block_list:
+        if item.startswith(blocked_prefix):
+            _LOGGER.debug("%s %s is blocked from host based polling", item_type, item)
+            return True
+    return False
+
+
+def _is_model_blocked_from_host_browser(model):
+    return _is_blocked_from_host_browser(
+        model, HOST_BROWSER_BLOCKED_MODEL_PREFIXES, "Model"
+    )
+
+
+def _is_service_blocked_from_host_browser(service):
+    return _is_blocked_from_host_browser(
+        service, HOST_BROWSER_BLOCKED_SERVICE_PREFIXES, "Service"
+    )
 
 
 class SimpleCastListener(AbstractCastListener):
@@ -151,7 +177,7 @@ class ZeroConfListener:
         host = addresses[0] if addresses else service.server
 
         # Store the host, in case mDNS stops working
-        if self._host_browser:
+        if self._host_browser and not _is_service_blocked_from_host_browser(name):
             self._host_browser.add_hosts([host])
 
         model_name = get_value("md")
@@ -240,7 +266,7 @@ class HostBrowser(threading.Thread):
 
         for host in list(self._known_hosts.keys()):
             if host not in known_hosts:
-                _LOGGER.debug("Removied host %s", host)
+                _LOGGER.debug("Removed host %s", host)
                 self._known_hosts.pop(host)
 
     def run(self):
@@ -316,6 +342,13 @@ class HostBrowser(threading.Thread):
                     uuids.append(group.uuid)
 
             self._update_devices(host, devices, uuids)
+
+            if _is_model_blocked_from_host_browser(device_status.model_name):
+                # We should not keep polling this host anymore once it has been up
+                # once.
+                # Note: This will not work well the IP is recycled to another cast
+                # device.
+                self._known_hosts.pop(host)
 
     def _update_devices(self, host, devices, host_uuids):
         callbacks = []
