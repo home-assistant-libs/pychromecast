@@ -306,7 +306,12 @@ class HostBrowser(threading.Thread):
                     if group.port is None or group.host != host:
                         continue
                     devices.append(
-                        (group.port, group.friendly_name, "Google Cast Group", group.uuid)
+                        (
+                            group.port,
+                            group.friendly_name,
+                            "Google Cast Group",
+                            group.uuid,
+                        )
                     )
                     uuids.append(group.uuid)
 
