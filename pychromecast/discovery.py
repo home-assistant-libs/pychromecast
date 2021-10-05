@@ -59,10 +59,10 @@ class AbstractCastListener(abc.ABC):
         """
 
 
-def _is_blocked_from_host_browser(item, block_list, type):
+def _is_blocked_from_host_browser(item, block_list, item_type):
     for blocked_prefix in block_list:
         if item.startswith(blocked_prefix):
-            _LOGGER.debug("%s %s is blocked from host based polling", type, item)
+            _LOGGER.debug("%s %s is blocked from host based polling", item_type, item)
             return True
     return False
 
