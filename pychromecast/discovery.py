@@ -294,22 +294,26 @@ class HostBrowser(threading.Thread):
             uuids.append(device_status.uuid)
 
             multizone_status = get_multizone_status(host, context=self._context)
-            if not multizone_status:
-                return
 
-            for group in itertools.chain(
-                multizone_status.dynamic_groups, multizone_status.groups
-            ):
-                # Note: This is currently (2021-02) not working for dynamic_groups, the
-                # ports of dynamic groups are not present in the eureka_info reply.
-                if group.host and group.host not in self._known_hosts:
-                    self.add_hosts([group.host])
-                if group.port is None or group.host != host:
-                    continue
-                devices.append(
-                    (group.port, group.friendly_name, "Google Cast Group", group.uuid)
-                )
-                uuids.append(group.uuid)
+            if multizone_status:
+                for group in itertools.chain(
+                    multizone_status.dynamic_groups, multizone_status.groups
+                ):
+                    # Note: This is currently (2021-02) not working for dynamic_groups, the
+                    # ports of dynamic groups are not present in the eureka_info reply.
+                    if group.host and group.host not in self._known_hosts:
+                        self.add_hosts([group.host])
+                    if group.port is None or group.host != host:
+                        continue
+                    devices.append(
+                        (
+                            group.port,
+                            group.friendly_name,
+                            "Google Cast Group",
+                            group.uuid,
+                        )
+                    )
+                    uuids.append(group.uuid)
 
             self._update_devices(host, devices, uuids)
 
