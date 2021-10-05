@@ -265,7 +265,7 @@ class HostBrowser(threading.Thread):
             uuids = []
             if self.stop.is_set():
                 break
-            device_status = get_device_status(host, timeout=4, context=self._context)
+            device_status = get_device_status(host, timeout=30, context=self._context)
             try:
                 hoststatus = self._known_hosts[host]
             except KeyError:
