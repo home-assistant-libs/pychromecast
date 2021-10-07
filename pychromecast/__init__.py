@@ -50,6 +50,7 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
         manufacturer=manufacturer,
         uuid=uuid,
         cast_type=cast_type,
+        mac_address=None,
     )
     return Chromecast(
         host=ip_address,
@@ -320,6 +321,7 @@ class Chromecast:
                     manufacturer=(device.manufacturer or dev_status.manufacturer),
                     uuid=(device.uuid or dev_status.uuid),
                     cast_type=(device.cast_type or dev_status.cast_type),
+                    mac_address=(device.mac_address or dev_status.mac_address),
                 )
             else:
                 self.device = device
