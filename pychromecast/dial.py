@@ -97,7 +97,7 @@ def get_ssl_context():
     return context
 
 
-def get_device_status(host, services=None, zconf=None, timeout=10, context=None):
+def get_device_status(host, services=None, zconf=None, timeout=30, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -158,7 +158,7 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, services=None, zconf=None, timeout=10, context=None):
+def get_multizone_status(host, services=None, zconf=None, timeout=30, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
