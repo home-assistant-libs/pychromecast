@@ -52,17 +52,13 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(args.cast))
+    print(f'No chromecast with name "{args.cast}" discovered')
     sys.exit(1)
 
 cast = list(chromecasts)[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
-print(
-    'Found chromecast with name "{}", attempting to play "{}"'.format(
-        args.cast, args.url
-    )
-)
+print(f'Found chromecast with name "{args.cast}", attempting to play "{args.url}"')
 bubbleupnp = BubbleUPNPController()
 cast.register_handler(bubbleupnp)
 bubbleupnp.launch()

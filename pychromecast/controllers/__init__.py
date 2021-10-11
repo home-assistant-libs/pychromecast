@@ -85,9 +85,7 @@ class BaseController(abc.ABC):
                 return
 
             raise UnsupportedNamespace(
-                ("Namespace {} is not supported by running application.").format(
-                    self.namespace
-                )
+                f"Namespace {self.namespace} is not supported by running application."
             )
 
         self.send_message_nocheck(data, inc_session_id, callback_function)

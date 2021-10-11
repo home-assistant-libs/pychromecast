@@ -116,9 +116,9 @@ class MediaStatus:
     @property
     def player_is_playing(self):
         """Return True if player is PLAYING."""
-        return (
-            self.player_state == MEDIA_PLAYER_STATE_PLAYING
-            or self.player_state == MEDIA_PLAYER_STATE_BUFFERING
+        return self.player_state in (
+            MEDIA_PLAYER_STATE_PLAYING,
+            MEDIA_PLAYER_STATE_BUFFERING,
         )
 
     @property
@@ -306,7 +306,7 @@ class MediaStatus:
             "supports_skip_backward": self.supports_skip_backward,
         }
         info.update(self.__dict__)
-        return "<MediaStatus {}>".format(info)
+        return f"<MediaStatus {info}>"
 
 
 class MediaStatusListener(abc.ABC):
@@ -604,7 +604,7 @@ class MediaController(BaseController):
                     "subtype": "SUBTITLES",
                     "type": "TEXT",
                     "trackContentType": subtitles_mime,
-                    "name": "{} - {} Subtitle".format(subtitles_lang, subtitle_id),
+                    "name": f"{subtitles_lang} - {subtitle_id} Subtitle",
                 }
             ]
             media["tracks"] = sub_msg

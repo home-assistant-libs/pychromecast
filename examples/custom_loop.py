@@ -52,7 +52,7 @@ def your_main_loop():
             if t > 50:
                 break
         else:
-            print("=> Waiting for discovery of cast '{}'...".format(args.cast))
+            print(f"=> Waiting for discovery of cast '{args.cast}'...")
         time.sleep(1)
 
     print("All done, shutting down discovery")

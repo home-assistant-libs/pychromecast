@@ -56,7 +56,7 @@ def media_to_chromecast_command(
     playQueueID=None,
     startItem=None,
     version="1.10.1.4602",
-    **kwargs
+    **kwargs,
 ):  # pylint: disable=invalid-name, too-many-locals, protected-access
     """Create the message that chromecast requires. Use pass of plexapi media object or
        set all the needed kwargs manually. See the code for what to set.
@@ -149,7 +149,7 @@ def media_to_chromecast_command(
                     "accessToken": token,
                     "user": {"username": username},
                 },
-                "containerKey": "/playQueues/%s?own=1&window=200" % playQueueID,
+                "containerKey": f"/playQueues/{playQueueID}?own=1&window=200",
             },
             "autoplay": autoplay,
             "currentTime": currentTime,
@@ -311,9 +311,7 @@ class PlexController(BaseController):
         Returns the new volume.
         """
         if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+            raise ValueError(f"volume delta must be greater than zero, not {delta}")
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
@@ -321,9 +319,7 @@ class PlexController(BaseController):
         Returns the new volume.
         """
         if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+            raise ValueError(f"volume delta must be greater than zero, not {delta}")
         return self.set_volume(self.status.volume_level - delta)
 
     def mute(self, status=None):

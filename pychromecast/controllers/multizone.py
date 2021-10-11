@@ -65,9 +65,9 @@ class Listener:
         """Handle reception of a new ConnectionStatus."""
         if conn_status.status == CONNECTION_STATUS_CONNECTED:
             self._mz.update_members()
-        if (
-            conn_status.status == CONNECTION_STATUS_DISCONNECTED
-            or conn_status.status == CONNECTION_STATUS_LOST
+        if conn_status.status in (
+            CONNECTION_STATUS_DISCONNECTED,
+            CONNECTION_STATUS_LOST,
         ):
             self._mz.reset_members()
 

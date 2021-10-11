@@ -63,7 +63,7 @@ def get_kaltura_id(program_id):
     httpclient = HttpClient(None)
     stream_filters = StreamFilters()
 
-    url = "https://areena.yle.fi/{}".format(program_id)
+    url = f"https://areena.yle.fi/{program_id}"
 
     extractor = extractor_factory(url, stream_filters, language_chooser, httpclient)
     pid = extractor.program_id_from_url(url)
@@ -77,7 +77,7 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(args.cast))
+    print(f'No chromecast with name "{args.cast}" discovered')
     sys.exit(1)
 
 cast = chromecasts[0]

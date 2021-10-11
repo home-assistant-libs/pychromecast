@@ -328,7 +328,7 @@ class Chromecast:
 
         if not self.device:
             raise ChromecastConnectionError(  # noqa: F405
-                "Could not connect to {}:{}".format(host, port or 8009)
+                f"Could not connect to {host}:{port or 8009}"
             )
 
         self.status = None
@@ -398,7 +398,7 @@ class Chromecast:
     @property
     def uri(self):
         """Returns the device URI (ip:port)"""
-        return "{}:{}".format(self.socket_client.host, self.socket_client.port)
+        return f"{self.socket_client.host}:{self.socket_client.port}"
 
     @property
     def model_name(self):
@@ -457,9 +457,7 @@ class Chromecast:
 
         """
         if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+            raise ValueError(f"volume delta must be greater than zero, not {delta}")
         return self.set_volume(self.status.volume_level + delta)
 
     def volume_down(self, delta=0.1):
@@ -467,9 +465,7 @@ class Chromecast:
         Returns the new volume.
         """
         if delta <= 0:
-            raise ValueError(
-                "volume delta must be greater than zero, not {}".format(delta)
-            )
+            raise ValueError(f"volume delta must be greater than zero, not {delta}")
         return self.set_volume(self.status.volume_level - delta)
 
     def wait(self, timeout=None):
@@ -535,16 +531,14 @@ class Chromecast:
             pass
 
     def __repr__(self):
-        txt = "Chromecast({!r}, port={!r}, device={!r})".format(
-            self.socket_client.host, self.socket_client.port, self.device
+        return (
+            f"Chromecast({self.socket_client.host!r}, port={self.socket_client.port!r}, "
+            f"device={self.device!r})"
         )
-        return txt
 
     def __unicode__(self):
-        return "Chromecast({}, {}, {}, {}, {})".format(
-            self.socket_client.host,
-            self.socket_client.port,
-            self.device.friendly_name,
-            self.device.model_name,
-            self.device.manufacturer,
+        return (
+            f"Chromecast({self.socket_client.host}, {self.socket_client.port}, "
+            f"{self.device.friendly_name}, {self.device.model_name}, "
+            f"{self.device.manufacturer})"
         )
