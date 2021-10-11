@@ -23,7 +23,7 @@ CAST_NAME = "Kitchen Speaker"
 PROGRAM = "aamulypsy"
 
 
-result = requests.get("https://www.supla.fi/ohjelmat/{}".format(PROGRAM))
+result = requests.get(f"https://www.supla.fi/ohjelmat/{PROGRAM}")
 soup = BeautifulSoup(result.content)
 MEDIA_ID = soup.select('a[title*="Koko Shitti"]')[0]["href"].split("/")[-1]
 print(MEDIA_ID)
@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=[CAST_NAME])
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(CAST_NAME))
+    print(f'No chromecast with name "{CAST_NAME}" discovered')
     sys.exit(1)
 
 cast = chromecasts[0]

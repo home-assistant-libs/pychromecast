@@ -97,11 +97,9 @@ def _message_to_string(message, data=None):
     if data is None:
         data = _dict_from_message_payload(message)
 
-    return "Message {} from {} to {}: {}".format(
-        message.namespace,
-        message.source_id,
-        message.destination_id,
-        data or message.payload_utf8,
+    return (
+        f"Message {message.namespace} from {message.source_id} to "
+        f"{message.destination_id}: {data or message.payload_utf8}"
     )
 
 
@@ -910,9 +908,7 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
         else:
-            raise NotConnected(
-                "Chromecast {}:{} is connecting...".format(self.host, self.port)
-            )
+            raise NotConnected("Chromecast {self.host}:{self.port} is connecting...")
 
     def send_platform_message(
         self, namespace, message, inc_session_id=False, callback_function_param=False
@@ -932,9 +928,8 @@ class SocketClient(threading.Thread):
         """Helper method to send a message to current running app."""
         if namespace not in self.app_namespaces:
             raise UnsupportedNamespace(
-                (
-                    "Namespace {} is not supported by current app. Supported are {}"
-                ).format(namespace, ", ".join(self.app_namespaces))
+                f"Namespace {namespace} is not supported by current app. "
+                f"Supported are {', '.join(self.app_namespaces)}"
             )
 
         return self.send_message(

@@ -51,14 +51,14 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(args.cast))
+    print(f'No chromecast with name "{args.cast}" discovered')
     sys.exit(1)
 
 cast = chromecasts[0]
 
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
-print('Found chromecast with name "{}"'.format(args.cast))
+print(f'Found chromecast with name "{args.cast}"')
 
 cast.media_controller.play_media(MEDIA_URLS[0], "audio/mp3")
 

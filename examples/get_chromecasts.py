@@ -41,7 +41,5 @@ if len(casts) == 0:
 print("Found cast devices:")
 for cast in casts:
     print(
-        '  "{}" on mDNS service {} with UUID:{}'.format(
-            cast.name, cast._services, cast.uuid  # pylint: disable=protected-access
-        )
+        f'  "{cast.name}" on mDNS service {cast._services} with UUID:{cast.uuid}'  # pylint: disable=protected-access
     )

@@ -60,20 +60,20 @@ class MyMultiZoneControllerListener(MultiZoneControllerListener):
     """MultiZoneControllerListener"""
 
     def multizone_member_added(self, group_uuid):
-        print("New member: {}".format(group_uuid))
+        print(f"New member: {group_uuid}")
 
     def multizone_member_removed(self, group_uuid):
-        print("Removed member: {}".format(group_uuid))
+        print(f"Removed member: {group_uuid}")
 
     def multizone_status_received(self):
-        print("Members: {}".format(mz.members))
+        print(f"Members: {mz.members}")
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(args.cast))
+    print(f'No chromecast with name "{args.cast}" discovered')
     sys.exit(1)
 
 cast = chromecasts[0]

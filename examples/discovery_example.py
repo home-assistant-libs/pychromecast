@@ -41,7 +41,7 @@ def list_devices():
     """Print a list of known devices."""
     print("Currently known cast devices:")
     for uuid, service in browser.services.items():
-        print("  {} {}".format(uuid, service))
+        print(f"  {uuid} {service}")
 
 
 class MyCastListener(pychromecast.discovery.AbstractCastListener):
@@ -49,17 +49,17 @@ class MyCastListener(pychromecast.discovery.AbstractCastListener):
 
     def add_cast(self, uuid, _service):
         """Called when a new cast has beeen discovered."""
-        print("Found cast device with UUID {}".format(uuid))
+        print(f"Found cast device with UUID {uuid}")
         list_devices()
 
     def remove_cast(self, uuid, _service, cast_info):
         """Called when a cast has beeen lost (MDNS info expired or host down)."""
-        print("Lost cast device with UUID {} {}".format(uuid, cast_info))
+        print(f"Lost cast device with UUID {uuid} {cast_info}")
         list_devices()
 
     def update_cast(self, uuid, _service):
         """Called when a cast has beeen updated (MDNS info renewed or changed)."""
-        print("Updated cast device with UUID {}".format(uuid))
+        print(f"Updated cast device with UUID {uuid}")
         list_devices()
 
 

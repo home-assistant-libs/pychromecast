@@ -69,7 +69,7 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
 if not chromecasts:
-    print('No chromecast with name "{}" discovered'.format(args.cast))
+    print(f'No chromecast with name "{args.cast}" discovered')
     sys.exit(1)
 
 chromecast = chromecasts[0]
