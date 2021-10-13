@@ -73,12 +73,6 @@ def _is_model_blocked_from_host_browser(model):
     )
 
 
-def _is_service_blocked_from_host_browser(service):
-    return _is_blocked_from_host_browser(
-        service, HOST_BROWSER_BLOCKED_SERVICE_PREFIXES, "Service"
-    )
-
-
 class SimpleCastListener(AbstractCastListener):
     """Helper for backwards compatibility."""
 
@@ -177,8 +171,7 @@ class ZeroConfListener:
         host = addresses[0] if addresses else service.server
 
         # Store the host, in case mDNS stops working
-        if self._host_browser and not _is_service_blocked_from_host_browser(name):
-            self._host_browser.add_hosts([host])
+        self._host_browser.add_hosts([host])
 
         model_name = get_value("md")
         uuid = get_value("id")
@@ -226,6 +219,7 @@ class HostStatus:
 
     def __init__(self):
         self.failcount = 0
+        self.no_polling = False
 
 
 HOSTLISTENER_CYCLE_TIME = 5
@@ -291,12 +285,17 @@ class HostBrowser(threading.Thread):
             uuids = []
             if self.stop.is_set():
                 break
-            device_status = get_device_status(host, timeout=30, context=self._context)
             try:
                 hoststatus = self._known_hosts[host]
             except KeyError:
                 # The host has been removed by another thread
                 continue
+
+            if hoststatus.no_polling:
+                # This host should not be polled
+                continue
+
+            device_status = get_device_status(host, timeout=30, context=self._context)
 
             if not device_status:
                 hoststatus.failcount += 1
@@ -306,6 +305,13 @@ class HostBrowser(threading.Thread):
                     hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1
                 )
                 continue
+
+            if _is_model_blocked_from_host_browser(device_status.model_name):
+                # We should not keep polling this host anymore once it has been up
+                # once.
+                # Note: This will not work well the IP is recycled to another cast
+                # device.
+                hoststatus.no_polling = True
 
             # We got device_status, try to get multizone status, then update devices
             hoststatus.failcount = 0
@@ -342,13 +348,6 @@ class HostBrowser(threading.Thread):
                     uuids.append(group.uuid)
 
             self._update_devices(host, devices, uuids)
-
-            if _is_model_blocked_from_host_browser(device_status.model_name):
-                # We should not keep polling this host anymore once it has been up
-                # once.
-                # Note: This will not work well the IP is recycled to another cast
-                # device.
-                self._known_hosts.pop(host)
 
     def _update_devices(self, host, devices, host_uuids):
         callbacks = []
