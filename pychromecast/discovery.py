@@ -16,10 +16,7 @@ from .dial import get_device_status, get_multizone_status, get_ssl_context
 DISCOVER_TIMEOUT = 5
 
 # Models matching this list will only be polled once by the HostBrowser
-HOST_BROWSER_BLOCKED_MODEL_PREFIXES = ["JBL"]
-
-# mDNS services matching this list will not be added to the HostBrowser
-HOST_BROWSER_BLOCKED_SERVICE_PREFIXES = ["JBL"]
+HOST_BROWSER_BLOCKED_MODEL_PREFIXES = ["BRAVIA", "JBL"]
 
 ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
 CastInfo = namedtuple(
