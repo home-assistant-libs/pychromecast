@@ -333,7 +333,11 @@ class HostBrowser(threading.Thread):
             )
             uuids.append(device_status.uuid)
 
-            multizone_status = get_multizone_status(host, context=self._context)
+            multizone_status = (
+                get_multizone_status(host, context=self._context)
+                if device_status.multizone_supported
+                else None
+            )
 
             if multizone_status:
                 for group in itertools.chain(
