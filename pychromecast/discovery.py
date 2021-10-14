@@ -10,13 +10,16 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
+from .const import CAST_TYPE_AUDIO, SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
 from .dial import get_device_status, get_multizone_status, get_ssl_context
 
 DISCOVER_TIMEOUT = 5
 
 # Models matching this list will only be polled once by the HostBrowser
-HOST_BROWSER_BLOCKED_MODEL_PREFIXES = ["BRAVIA", "JBL"]
+HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
+    "HK",  # Harman Kardon speakers crash if polled: https://github.com/home-assistant/core/issues/52020
+    "JBL",  # JBL speakers crash if polled: https://github.com/home-assistant/core/issues/52020
+]
 
 ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
 CastInfo = namedtuple(
@@ -303,9 +306,14 @@ class HostBrowser(threading.Thread):
                 )
                 continue
 
-            if _is_model_blocked_from_host_browser(device_status.model_name):
-                # We should not keep polling this host anymore once it has been up
-                # once.
+            if (
+                device_status.cast_type != CAST_TYPE_AUDIO
+                or _is_model_blocked_from_host_browser(device_status.model_name)
+            ):
+                # Polling causes frame drops on some Android TVs,
+                # https://github.com/home-assistant/core/issues/55435
+                # Keep polling audio chromecasts to detect new speaker groups, but
+                # exclude some devices which crash when polled
                 # Note: This will not work well the IP is recycled to another cast
                 # device.
                 hoststatus.no_polling = True
