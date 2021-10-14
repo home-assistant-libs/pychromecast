@@ -11,7 +11,7 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_CHROMECAST, CAST_TYPES, SERVICE_TYPE_HOST
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP, CAST_TYPES, SERVICE_TYPE_HOST
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -110,22 +110,33 @@ def get_device_status(host, services=None, zconf=None, timeout=30, context=None)
             host,
             services,
             zconf,
-            "/setup/eureka_info?options=detail",
+            "/setup/eureka_info?params=device_info,name",
             True,
             timeout,
             context,
         )
 
+        cast_type = CAST_TYPE_CHROMECAST
+        display_supported = True
         friendly_name = status.get("name", "Unknown Chromecast")
         model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
-        if "detail" in status:
-            model_name = status["detail"].get("model_name", model_name)
-            manufacturer = status["detail"].get("manufacturer", manufacturer)
+        udn = None
 
-        udn = status.get("ssdp_udn", None)
+        if "device_info" in status:
+            device_info = status["device_info"]
 
-        cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
+            capabilities = device_info.get("capabilities", {})
+            display_supported = capabilities.get("display_supported", True)
+            friendly_name = device_info.get("name", friendly_name)
+            model_name = device_info.get("model_name", model_name)
+            manufacturer = device_info.get("manufacturer", manufacturer)
+            udn = device_info.get("ssdp_udn", None)
+
+        if not display_supported:
+            cast_type = CAST_TYPE_AUDIO
+        if model_name.lower() == "google cast group":
+            cast_type = CAST_TYPE_GROUP
 
         uuid = None
         if udn:
