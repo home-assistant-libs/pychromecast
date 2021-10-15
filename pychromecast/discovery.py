@@ -293,9 +293,7 @@ class HostBrowser(threading.Thread):
 
             if hoststatus.no_polling:
                 # This host should not be polled
-                _LOGGER.debug("no_polling flag set for %s", host)
                 continue
-            _LOGGER.debug("no_polling flag not set for %s", host)
 
             device_status = get_device_status(host, timeout=30, context=self._context)
 
@@ -308,7 +306,6 @@ class HostBrowser(threading.Thread):
                 )
                 continue
 
-            _LOGGER.debug("got device_status %s", device_status)
             if (
                 device_status.cast_type != CAST_TYPE_AUDIO
                 or _is_model_blocked_from_host_browser(device_status.model_name)
