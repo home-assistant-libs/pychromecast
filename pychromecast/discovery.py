@@ -10,10 +10,16 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
+from .const import CAST_TYPE_AUDIO, SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
 from .dial import get_device_status, get_multizone_status, get_ssl_context
 
 DISCOVER_TIMEOUT = 5
+
+# Models matching this list will only be polled once by the HostBrowser
+HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
+    "HK",  # Harman Kardon speakers crash if polled: https://github.com/home-assistant/core/issues/52020
+    "JBL",  # JBL speakers crash if polled: https://github.com/home-assistant/core/issues/52020
+]
 
 ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
 CastInfo = namedtuple(
@@ -51,6 +57,20 @@ class AbstractCastListener(abc.ABC):
         uuid: The cast's uuid
         service: MDNS service name or host:port
         """
+
+
+def _is_blocked_from_host_browser(item, block_list, item_type):
+    for blocked_prefix in block_list:
+        if item.startswith(blocked_prefix):
+            _LOGGER.debug("%s %s is blocked from host based polling", item_type, item)
+            return True
+    return False
+
+
+def _is_model_blocked_from_host_browser(model):
+    return _is_blocked_from_host_browser(
+        model, HOST_BROWSER_BLOCKED_MODEL_PREFIXES, "Model"
+    )
 
 
 class SimpleCastListener(AbstractCastListener):
@@ -151,8 +171,7 @@ class ZeroConfListener:
         host = addresses[0] if addresses else service.server
 
         # Store the host, in case mDNS stops working
-        if self._host_browser:
-            self._host_browser.add_hosts([host])
+        self._host_browser.add_hosts([host])
 
         model_name = get_value("md")
         uuid = get_value("id")
@@ -200,9 +219,10 @@ class HostStatus:
 
     def __init__(self):
         self.failcount = 0
+        self.no_polling = False
 
 
-HOSTLISTENER_CYCLE_TIME = 5
+HOSTLISTENER_CYCLE_TIME = 30
 HOSTLISTENER_MAX_FAIL = 5
 
 
@@ -240,7 +260,7 @@ class HostBrowser(threading.Thread):
 
         for host in list(self._known_hosts.keys()):
             if host not in known_hosts:
-                _LOGGER.debug("Removied host %s", host)
+                _LOGGER.debug("Removed host %s", host)
                 self._known_hosts.pop(host)
 
     def run(self):
@@ -265,12 +285,17 @@ class HostBrowser(threading.Thread):
             uuids = []
             if self.stop.is_set():
                 break
-            device_status = get_device_status(host, timeout=30, context=self._context)
             try:
                 hoststatus = self._known_hosts[host]
             except KeyError:
                 # The host has been removed by another thread
                 continue
+
+            if hoststatus.no_polling:
+                # This host should not be polled
+                continue
+
+            device_status = get_device_status(host, timeout=30, context=self._context)
 
             if not device_status:
                 hoststatus.failcount += 1
@@ -280,6 +305,18 @@ class HostBrowser(threading.Thread):
                     hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1
                 )
                 continue
+
+            if (
+                device_status.cast_type != CAST_TYPE_AUDIO
+                or _is_model_blocked_from_host_browser(device_status.model_name)
+            ):
+                # Polling causes frame drops on some Android TVs,
+                # https://github.com/home-assistant/core/issues/55435
+                # Keep polling audio chromecasts to detect new speaker groups, but
+                # exclude some devices which crash when polled
+                # Note: This will not work well the IP is recycled to another cast
+                # device.
+                hoststatus.no_polling = True
 
             # We got device_status, try to get multizone status, then update devices
             hoststatus.failcount = 0
@@ -293,7 +330,11 @@ class HostBrowser(threading.Thread):
             )
             uuids.append(device_status.uuid)
 
-            multizone_status = get_multizone_status(host, context=self._context)
+            multizone_status = (
+                get_multizone_status(host, context=self._context)
+                if device_status.multizone_supported
+                else None
+            )
 
             if multizone_status:
                 for group in itertools.chain(

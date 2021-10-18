@@ -11,7 +11,12 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_CHROMECAST, CAST_TYPES, SERVICE_TYPE_HOST
+from .const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_CHROMECAST,
+    CAST_TYPE_GROUP,
+    SERVICE_TYPE_HOST,
+)
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -97,7 +102,9 @@ def get_ssl_context():
     return context
 
 
-def get_device_status(host, services=None, zconf=None, timeout=30, context=None):
+def get_device_status(  # pylint: disable=too-many-locals
+    host, services=None, zconf=None, timeout=30, context=None
+):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -110,28 +117,48 @@ def get_device_status(host, services=None, zconf=None, timeout=30, context=None)
             host,
             services,
             zconf,
-            "/setup/eureka_info?options=detail",
+            "/setup/eureka_info?params=device_info,name",
             True,
             timeout,
             context,
         )
 
+        cast_type = CAST_TYPE_CHROMECAST
+        display_supported = True
         friendly_name = status.get("name", "Unknown Chromecast")
-        model_name = "Unknown model name"
         manufacturer = "Unknown manufacturer"
-        if "detail" in status:
-            model_name = status["detail"].get("model_name", model_name)
-            manufacturer = status["detail"].get("manufacturer", manufacturer)
+        model_name = "Unknown model name"
+        multizone_supported = False
+        udn = None
 
-        udn = status.get("ssdp_udn", None)
+        if "device_info" in status:
+            device_info = status["device_info"]
 
-        cast_type = CAST_TYPES.get(model_name.lower(), CAST_TYPE_CHROMECAST)
+            capabilities = device_info.get("capabilities", {})
+            display_supported = capabilities.get("display_supported", True)
+            multizone_supported = capabilities.get("multizone_supported", True)
+            friendly_name = device_info.get("name", friendly_name)
+            model_name = device_info.get("model_name", model_name)
+            manufacturer = device_info.get("manufacturer", manufacturer)
+            udn = device_info.get("ssdp_udn", None)
+
+        if not display_supported:
+            cast_type = CAST_TYPE_AUDIO
+        if model_name.lower() == "google cast group":
+            cast_type = CAST_TYPE_GROUP
 
         uuid = None
         if udn:
             uuid = UUID(udn.replace("-", ""))
 
-        return DeviceStatus(friendly_name, model_name, manufacturer, uuid, cast_type)
+        return DeviceStatus(
+            friendly_name,
+            model_name,
+            manufacturer,
+            uuid,
+            cast_type,
+            multizone_supported,
+        )
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return None
@@ -198,5 +225,13 @@ MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid", "host", "p
 MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])
 
 DeviceStatus = namedtuple(
-    "DeviceStatus", ["friendly_name", "model_name", "manufacturer", "uuid", "cast_type"]
+    "DeviceStatus",
+    [
+        "friendly_name",
+        "model_name",
+        "manufacturer",
+        "uuid",
+        "cast_type",
+        "multizone_supported",
+    ],
 )
