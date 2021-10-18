@@ -222,7 +222,7 @@ class HostStatus:
         self.no_polling = False
 
 
-HOSTLISTENER_CYCLE_TIME = 5
+HOSTLISTENER_CYCLE_TIME = 30
 HOSTLISTENER_MAX_FAIL = 5
 
 
