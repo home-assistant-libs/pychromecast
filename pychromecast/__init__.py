@@ -22,7 +22,12 @@ from .discovery import (  # noqa: F401
     stop_discovery,
 )
 from .dial import get_device_status, DeviceStatus
-from .const import CAST_MANUFACTURERS, CAST_TYPE_GROUP, CAST_TYPES, CAST_TYPE_CHROMECAST  # noqa: F401
+from .const import (  # noqa: F401
+    CAST_MANUFACTURERS,
+    CAST_TYPE_GROUP,
+    CAST_TYPES,
+    CAST_TYPE_CHROMECAST,
+)
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
 
 __all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
