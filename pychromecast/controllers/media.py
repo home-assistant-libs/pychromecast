@@ -489,7 +489,7 @@ class MediaController(BaseController):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
-    def play_media(
+    def play_media(  # pylint: disable=too-many-locals
         self,
         url,
         content_type,
@@ -535,7 +535,7 @@ class MediaController(BaseController):
         https://developers.google.com/cast/docs/reference/messages#MediaData
         https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
         """
-        # pylint: disable=too-many-locals
+
         def app_launched_callback():
             """Plays media after chromecast has switched to requested app."""
             self._send_start_play_media(
@@ -558,7 +558,7 @@ class MediaController(BaseController):
         receiver_ctrl = self._socket_client.receiver_controller
         receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
 
-    def _send_start_play_media(
+    def _send_start_play_media(  # pylint: disable=too-many-locals
         self,
         url,
         content_type,
@@ -575,7 +575,6 @@ class MediaController(BaseController):
         enqueue=False,
         media_info=None,
     ):
-        # pylint: disable=too-many-locals
         media_info = media_info or {}
         media = {
             "contentId": url,

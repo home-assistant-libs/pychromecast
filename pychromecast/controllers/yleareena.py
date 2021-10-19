@@ -14,7 +14,7 @@ class YleAreenaController(MediaController):
         self.app_id = APP_YLEAREENA
         self.supporting_app_id = APP_YLEAREENA
 
-    def play_areena_media(
+    def play_areena_media(  # pylint: disable=too-many-locals
         self,
         kaltura_id,
         audio_language="",
@@ -29,7 +29,6 @@ class YleAreenaController(MediaController):
         And finding the kaltura player which has an id of yle-kaltura-player3430579305188-29-0_whwjqpry
         In this case the kaltura id is 0_whwjqpry
         """
-        # pylint: disable=too-many-locals
         msg = {
             "media": {
                 "streamType": stream_type,
