@@ -22,7 +22,7 @@ from .discovery import (  # noqa: F401
     stop_discovery,
 )
 from .dial import get_device_status, DeviceStatus
-from .const import CAST_MANUFACTURERS, CAST_TYPES, CAST_TYPE_CHROMECAST  # noqa: F401
+from .const import CAST_MANUFACTURERS, CAST_TYPE_GROUP, CAST_TYPES, CAST_TYPE_CHROMECAST  # noqa: F401
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
 
 __all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
@@ -40,9 +40,23 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
     # later on.
-    ip_address, port, _uuid, _model_name, _friendly_name = host
+    ip_address, port, uuid, model_name, friendly_name = host
     _LOGGER.debug("get_chromecast_from_host %s", host)
-    device = get_device_status(host)
+    cast_type = None
+    manufacturer = None
+    multizone_supported = None
+    if model_name.lower() == "google cast group":
+        cast_type = CAST_TYPE_GROUP
+        manufacturer = "Google Inc."
+        multizone_supported = False
+    device = DeviceStatus(
+        friendly_name=friendly_name,
+        model_name=model_name,
+        manufacturer=manufacturer,
+        uuid=uuid,
+        cast_type=cast_type,
+        multizone_supported=multizone_supported,
+    )
     return Chromecast(
         host=ip_address,
         port=port,
@@ -66,7 +80,21 @@ def get_chromecast_from_cast_info(
     # fetched later on.
     services = cast_info.services
     _LOGGER.debug("get_chromecast_from_cast_info %s", services)
-    device = get_device_status(None, services, zconf)
+    cast_type = None
+    manufacturer = None
+    multizone_supported = None
+    if cast_info.model_name.lower() == "google cast group":
+        cast_type = CAST_TYPE_GROUP
+        manufacturer = "Google Inc."
+        multizone_supported = False
+    device = DeviceStatus(
+        friendly_name=cast_info.friendly_name,
+        model_name=cast_info.model_name,
+        manufacturer=manufacturer,
+        uuid=cast_info.uuid,
+        cast_type=cast_type,
+        multizone_supported=multizone_supported,
+    )
     return Chromecast(
         host=None,
         device=device,
