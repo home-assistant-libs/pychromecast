@@ -159,8 +159,7 @@ def get_listed_chromecasts(
     return (list(cc_list.values()), browser)
 
 
-# pylint: disable=too-many-locals
-def get_chromecasts(
+def get_chromecasts(# pylint: disable=too-many-locals
     tries=None,
     retry_wait=None,
     timeout=None,
