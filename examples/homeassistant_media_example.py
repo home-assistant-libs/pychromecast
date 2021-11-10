@@ -19,7 +19,9 @@ from pychromecast import quick_play
 CAST_NAME = "Kitchen speaker"
 
 # Change to an audio or video url
-MEDIA_URL = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+MEDIA_URL = (
+    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+)
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the Home Asssitant Media Controller to play an URL."
