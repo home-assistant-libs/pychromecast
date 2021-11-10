@@ -6,6 +6,7 @@ from .controllers.yleareena import YleAreenaController
 from .controllers.bubbleupnp import BubbleUPNPController
 from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
+from .controllers.homeassistant_media import HomeAssistantMediaController
 
 
 def quick_play(cast, app_name, data):
@@ -63,6 +64,8 @@ def quick_play(cast, app_name, data):
         controller = BbcIplayerController()
     elif app_name == "bbcsounds":
         controller = BbcSoundsController()
+    elif app_name == "homeassistant_media":
+        controller = HomeAssistantMediaController()
     else:
         raise NotImplementedError()
 
