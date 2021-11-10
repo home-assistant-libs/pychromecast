@@ -1,7 +1,7 @@
 """
 Controller to interface with Home Assistant
 """
-from ..config import APP_HOME_ASSISTANT
+from ..config import APP_HOMEASSISTANT_LOVELACE
 from . import BaseController
 
 
@@ -17,7 +17,7 @@ class HomeAssistantController(BaseController):
         client_id,
         refresh_token,
         app_namespace=APP_NAMESPACE,
-        app_id=APP_HOME_ASSISTANT,
+        app_id=APP_HOMEASSISTANT_LOVELACE,
     ):
         super().__init__(app_namespace, app_id)
         self.hass_url = hass_url
