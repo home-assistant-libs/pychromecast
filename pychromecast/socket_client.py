@@ -24,7 +24,7 @@ from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .controllers.receiver import ReceiverController
-from .const import CAST_TYPE_CHROMECAST, MESSAGE_TYPE, REQUEST_ID, SESSION_ID
+from .const import MESSAGE_TYPE, REQUEST_ID, SESSION_ID
 from .dial import get_host_from_service
 from .error import (
     ChromecastConnectionError,
