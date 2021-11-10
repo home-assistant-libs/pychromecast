@@ -169,7 +169,15 @@ class SocketClient(threading.Thread):
     """
 
     # pylint: disable-next=too-many-arguments
-    def __init__(self, cast_type=CAST_TYPE_CHROMECAST, tries=None, timeout=None, retry_wait=None, services=None, zconf=None):
+    def __init__(
+        self,
+        cast_type=CAST_TYPE_CHROMECAST,
+        tries=None,
+        timeout=None,
+        retry_wait=None,
+        services=None,
+        zconf=None,
+    ):
         super().__init__()
 
         self.daemon = True
@@ -290,9 +298,7 @@ class SocketClient(threading.Thread):
                     if host and port:
                         if service_info:
                             try:
-                                self.fn = service_info.properties[b"fn"].decode(
-                                    "utf-8"
-                                )
+                                self.fn = service_info.properties[b"fn"].decode("utf-8")
                             except (AttributeError, KeyError, UnicodeError):
                                 pass
                         self.logger.debug(

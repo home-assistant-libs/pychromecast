@@ -9,7 +9,12 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
+from .const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_GROUP,
+    SERVICE_TYPE_HOST,
+    SERVICE_TYPE_MDNS,
+)
 from .dial import get_device_info, get_multizone_status, get_ssl_context
 from .models import CastInfo, ServiceInfo
 
@@ -199,14 +204,28 @@ class ZeroConfListener:
             manufacturer = "Google Inc." if service.port != 8009 else None
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
-                    {service_info}, uuid, model_name, friendly_name, host, service.port, cast_type, manufacturer,
+                    {service_info},
+                    uuid,
+                    model_name,
+                    friendly_name,
+                    host,
+                    service.port,
+                    cast_type,
+                    manufacturer,
                 )
             else:
                 # Update stored information
                 services = self._devices[uuid].services
                 services.add(service_info)
                 self._devices[uuid] = CastInfo(
-                    services, uuid, model_name, friendly_name, host, service.port, cast_type, manufacturer
+                    services,
+                    uuid,
+                    model_name,
+                    friendly_name,
+                    host,
+                    service.port,
+                    cast_type,
+                    manufacturer,
                 )
 
         callback(uuid, name)
@@ -353,7 +372,7 @@ class HostBrowser(threading.Thread):
                             "Google Cast Group",
                             group.uuid,
                             CAST_TYPE_GROUP,
-                            "Google Inc."
+                            "Google Inc.",
                         )
                     )
                     uuids.append(group.uuid)
@@ -365,9 +384,23 @@ class HostBrowser(threading.Thread):
 
         # Lock because the ZeroConfListener may also add or remove items
         with self._services_lock:
-            for (port, friendly_name, model_name, uuid, cast_type, manufacturer) in devices:
+            for (
+                port,
+                friendly_name,
+                model_name,
+                uuid,
+                cast_type,
+                manufacturer,
+            ) in devices:
                 self._add_host_service(
-                    host, port, friendly_name, model_name, uuid, callbacks, cast_type, manufacturer
+                    host,
+                    port,
+                    friendly_name,
+                    model_name,
+                    uuid,
+                    callbacks,
+                    cast_type,
+                    manufacturer,
                 )
 
             for uuid in self._devices:
@@ -383,7 +416,17 @@ class HostBrowser(threading.Thread):
         for callback in callbacks:
             callback()
 
-    def _add_host_service(self, host, port, friendly_name, model_name, uuid, callbacks, cast_type, manufacturer):
+    def _add_host_service(
+        self,
+        host,
+        port,
+        friendly_name,
+        model_name,
+        uuid,
+        callbacks,
+        cast_type,
+        manufacturer,
+    ):
         service_info = ServiceInfo(SERVICE_TYPE_HOST, (host, port))
 
         callback = self._cast_listener.add_cast
@@ -400,14 +443,28 @@ class HostBrowser(threading.Thread):
 
         if uuid not in self._devices:
             self._devices[uuid] = CastInfo(
-                {service_info}, uuid, model_name, friendly_name, host, port, cast_type, manufacturer
+                {service_info},
+                uuid,
+                model_name,
+                friendly_name,
+                host,
+                port,
+                cast_type,
+                manufacturer,
             )
         else:
             # Update stored information
             services = self._devices[uuid].services
             services.add(service_info)
             self._devices[uuid] = CastInfo(
-                services, uuid, model_name, friendly_name, host, port, cast_type, manufacturer
+                services,
+                uuid,
+                model_name,
+                friendly_name,
+                host,
+                port,
+                cast_type,
+                manufacturer,
             )
 
         name = f"{host}:{port}"

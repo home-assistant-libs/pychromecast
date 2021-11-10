@@ -46,7 +46,9 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     _LOGGER.debug("get_chromecast_from_host %s", host)
     port = port or 8009
     services = [ServiceInfo(SERVICE_TYPE_HOST, (ip_address, port))]
-    cast_info = CastInfo(services, uuid, model_name, friendly_name, ip_address, port, None, None)
+    cast_info = CastInfo(
+        services, uuid, model_name, friendly_name, ip_address, port, None, None
+    )
     return Chromecast(
         cast_info=cast_info,
         tries=tries,
@@ -260,7 +262,9 @@ class Chromecast:
                   pychromecast.start_discovery().
     """
 
-    def __init__(self, *, cast_info=None, tries=None, timeout=None, retry_wait=None, zconf=None):
+    def __init__(
+        self, *, cast_info=None, tries=None, timeout=None, retry_wait=None, zconf=None
+    ):
         self.logger = logging.getLogger(__name__)
 
         if not cast_info.cast_type:

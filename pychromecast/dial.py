@@ -97,9 +97,7 @@ def get_ssl_context():
     return context
 
 
-def get_cast_type(
-    cast_info, zconf=None, timeout=30, context=None
-):
+def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
     """
     :param cast_info: cast_info
     :return: An updated cast_info with filled cast_type
@@ -136,7 +134,17 @@ def get_cast_type(
             _LOGGER.warning("Failed to determine cast type")
             cast_type = CAST_TYPE_CHROMECAST
 
-    return CastInfo(cast_info.services, cast_info.uuid, cast_info.model_name, cast_info.friendly_name, cast_info.host, cast_info.port, cast_type, manufacturer)
+    return CastInfo(
+        cast_info.services,
+        cast_info.uuid,
+        cast_info.model_name,
+        cast_info.friendly_name,
+        cast_info.host,
+        cast_info.port,
+        cast_type,
+        manufacturer,
+    )
+
 
 def get_device_info(  # pylint: disable=too-many-locals
     host, zconf=None, timeout=30, context=None
