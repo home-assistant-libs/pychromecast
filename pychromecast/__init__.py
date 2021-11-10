@@ -257,13 +257,14 @@ class Chromecast:
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
-    :param zconf: A zeroconf instance, needed if a list of services is passed.
+    :param zconf: A zeroconf instance, needed if a the services if cast info includes
+                  mDNS services.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
     """
 
     def __init__(
-        self, *, cast_info=None, tries=None, timeout=None, retry_wait=None, zconf=None
+        self, cast_info, *, tries=None, timeout=None, retry_wait=None, zconf=None
     ):
         self.logger = logging.getLogger(__name__)
 

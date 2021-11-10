@@ -171,12 +171,13 @@ class SocketClient(threading.Thread):
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        cast_type=CAST_TYPE_CHROMECAST,
-        tries=None,
-        timeout=None,
-        retry_wait=None,
-        services=None,
-        zconf=None,
+        *,
+        cast_type,
+        tries,
+        timeout,
+        retry_wait,
+        services,
+        zconf,
     ):
         super().__init__()
 
