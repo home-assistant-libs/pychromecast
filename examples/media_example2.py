@@ -65,7 +65,7 @@ cast = chromecasts[0]
 cast.wait()
 
 print()
-print(cast.device)
+print(cast.cast_info)
 time.sleep(1)
 print()
 print(cast.status)

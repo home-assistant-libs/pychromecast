@@ -1,6 +1,5 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 import abc
-from collections import namedtuple
 import functools
 import itertools
 import logging
@@ -10,8 +9,9 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
-from .dial import get_device_status, get_multizone_status, get_ssl_context
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, SERVICE_TYPE_HOST, SERVICE_TYPE_MDNS
+from .dial import get_device_info, get_multizone_status, get_ssl_context
+from .models import CastInfo, ServiceInfo
 
 DISCOVER_TIMEOUT = 5
 
@@ -20,11 +20,6 @@ HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
     "HK",  # Harman Kardon speakers crash if polled: https://github.com/home-assistant/core/issues/52020
     "JBL",  # JBL speakers crash if polled: https://github.com/home-assistant/core/issues/52020
 ]
-
-ServiceInfo = namedtuple("ServiceInfo", ["type", "data"])
-CastInfo = namedtuple(
-    "CastInfo", ["services", "uuid", "model_name", "friendly_name", "host", "port"]
-)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -139,6 +134,7 @@ class ZeroConfListener:
         _LOGGER.debug("add_service %s, %s", typ, name)
         self._add_update_service(zconf, typ, name, self._cast_listener.add_cast)
 
+    # pylint: disable-next=too-many-locals
     def _add_update_service(self, zconf, typ, name, callback):
         """Add or update a service."""
         service = None
@@ -173,9 +169,9 @@ class ZeroConfListener:
         # Store the host, in case mDNS stops working
         self._host_browser.add_hosts([host])
 
+        friendly_name = get_value("fn")
         model_name = get_value("md")
         uuid = get_value("id")
-        friendly_name = get_value("fn")
 
         if not uuid:
             _LOGGER.debug(
@@ -199,16 +195,18 @@ class ZeroConfListener:
 
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
+            cast_type = CAST_TYPE_GROUP if service.port != 8009 else None
+            manufacturer = "Google Inc." if service.port != 8009 else None
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
-                    {service_info}, uuid, model_name, friendly_name, host, service.port
+                    {service_info}, uuid, model_name, friendly_name, host, service.port, cast_type, manufacturer,
                 )
             else:
                 # Update stored information
                 services = self._devices[uuid].services
                 services.add(service_info)
                 self._devices[uuid] = CastInfo(
-                    services, uuid, model_name, friendly_name, host, service.port
+                    services, uuid, model_name, friendly_name, host, service.port, cast_type, manufacturer
                 )
 
         callback(uuid, name)
@@ -295,7 +293,7 @@ class HostBrowser(threading.Thread):
                 # This host should not be polled
                 continue
 
-            device_status = get_device_status(host, timeout=30, context=self._context)
+            device_status = get_device_info(host, timeout=30, context=self._context)
 
             if not device_status:
                 hoststatus.failcount += 1
@@ -326,6 +324,8 @@ class HostBrowser(threading.Thread):
                     device_status.friendly_name,
                     device_status.model_name,
                     device_status.uuid,
+                    device_status.cast_type,
+                    device_status.manufacturer,
                 )
             )
             uuids.append(device_status.uuid)
@@ -352,6 +352,8 @@ class HostBrowser(threading.Thread):
                             group.friendly_name,
                             "Google Cast Group",
                             group.uuid,
+                            CAST_TYPE_GROUP,
+                            "Google Inc."
                         )
                     )
                     uuids.append(group.uuid)
@@ -363,9 +365,9 @@ class HostBrowser(threading.Thread):
 
         # Lock because the ZeroConfListener may also add or remove items
         with self._services_lock:
-            for (port, friendly_name, model_name, uuid) in devices:
+            for (port, friendly_name, model_name, uuid, cast_type, manufacturer) in devices:
                 self._add_host_service(
-                    host, port, friendly_name, model_name, uuid, callbacks
+                    host, port, friendly_name, model_name, uuid, callbacks, cast_type, manufacturer
                 )
 
             for uuid in self._devices:
@@ -381,7 +383,7 @@ class HostBrowser(threading.Thread):
         for callback in callbacks:
             callback()
 
-    def _add_host_service(self, host, port, friendly_name, model_name, uuid, callbacks):
+    def _add_host_service(self, host, port, friendly_name, model_name, uuid, callbacks, cast_type, manufacturer):
         service_info = ServiceInfo(SERVICE_TYPE_HOST, (host, port))
 
         callback = self._cast_listener.add_cast
@@ -398,14 +400,14 @@ class HostBrowser(threading.Thread):
 
         if uuid not in self._devices:
             self._devices[uuid] = CastInfo(
-                {service_info}, uuid, model_name, friendly_name, host, port
+                {service_info}, uuid, model_name, friendly_name, host, port, cast_type, manufacturer
             )
         else:
             # Update stored information
             services = self._devices[uuid].services
             services.add(service_info)
             self._devices[uuid] = CastInfo(
-                services, uuid, model_name, friendly_name, host, port
+                services, uuid, model_name, friendly_name, host, port, cast_type, manufacturer
             )
 
         name = f"{host}:{port}"

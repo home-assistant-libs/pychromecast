@@ -16,19 +16,16 @@ from .discovery import (  # noqa: F401
     DISCOVER_TIMEOUT,
     CastBrowser,
     CastListener,  # Deprecated
+    ServiceInfo,
     SimpleCastListener,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
 )
-from .dial import get_device_status, DeviceStatus
-from .const import (  # noqa: F401
-    CAST_MANUFACTURERS,
-    CAST_TYPE_GROUP,
-    CAST_TYPES,
-    CAST_TYPE_CHROMECAST,
-)
+from .dial import get_cast_type
+from .const import CAST_TYPE_CHROMECAST, SERVICE_TYPE_HOST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
+from .models import CastInfo
 
 __all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
 __version_info__ = ("0", "7", "6")
@@ -47,25 +44,11 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     # later on.
     ip_address, port, uuid, model_name, friendly_name = host
     _LOGGER.debug("get_chromecast_from_host %s", host)
-    cast_type = None
-    manufacturer = None
-    multizone_supported = None
-    if model_name.lower() == "google cast group":
-        cast_type = CAST_TYPE_GROUP
-        manufacturer = "Google Inc."
-        multizone_supported = False
-    device = DeviceStatus(
-        friendly_name=friendly_name,
-        model_name=model_name,
-        manufacturer=manufacturer,
-        uuid=uuid,
-        cast_type=cast_type,
-        multizone_supported=multizone_supported,
-    )
+    port = port or 8009
+    services = [ServiceInfo(SERVICE_TYPE_HOST, (ip_address, port))]
+    cast_info = CastInfo(services, uuid, model_name, friendly_name, ip_address, port, None, None)
     return Chromecast(
-        host=ip_address,
-        port=port,
-        device=device,
+        cast_info=cast_info,
         tries=tries,
         timeout=timeout,
         retry_wait=retry_wait,
@@ -80,33 +63,12 @@ def get_chromecast_from_cast_info(
     cast_info, zconf, tries=None, retry_wait=None, timeout=None
 ):
     """Creates a Chromecast object from a zeroconf service."""
-    # Build device status from the CastInfo, this
-    # information is the primary source and the remaining will be
-    # fetched later on.
-    services = cast_info.services
-    _LOGGER.debug("get_chromecast_from_cast_info %s", services)
-    cast_type = None
-    manufacturer = None
-    multizone_supported = None
-    if cast_info.model_name.lower() == "google cast group":
-        cast_type = CAST_TYPE_GROUP
-        manufacturer = "Google Inc."
-        multizone_supported = False
-    device = DeviceStatus(
-        friendly_name=cast_info.friendly_name,
-        model_name=cast_info.model_name,
-        manufacturer=manufacturer,
-        uuid=cast_info.uuid,
-        cast_type=cast_type,
-        multizone_supported=multizone_supported,
-    )
+    _LOGGER.debug("get_chromecast_from_cast_info %s", cast_info)
     return Chromecast(
-        host=None,
-        device=device,
+        cast_info=cast_info,
         tries=tries,
         timeout=timeout,
         retry_wait=retry_wait,
-        services=services,
         zconf=zconf,
     )
 
@@ -285,12 +247,7 @@ class Chromecast:
     """
     Class to interface with a ChromeCast.
 
-    :param host: The host to connect to.
-    :param port: The port to use when connecting to the device, set to None to
-                 use the default of 8009. Special devices such as Cast Groups
-                 may return a different port number so we need to use that.
-    :param device: DeviceStatus with initial information for the device.
-    :type device: pychromecast.dial.DeviceStatus
+    :param cast_info: CastInfo with information for the device.
     :param tries: Number of retries to perform if the connection fails.
                   None for infinite retries.
     :param timeout: A floating point number specifying the socket timeout in
@@ -298,69 +255,27 @@ class Chromecast:
     :param retry_wait: A floating point number specifying how many seconds to
                        wait between each retry. None means to use the default
                        which is 5 seconds.
-    :param services: A set of mDNS or host services to try to connect to. If present,
-                     parameters host and port are ignored and host and port are
-                     instead resolved through mDNS. The list of services may be
-                     modified, for example if speaker group leadership is handed
-                     over. SocketClient will catch modifications to the list when
-                     attempting reconnect.
     :param zconf: A zeroconf instance, needed if a list of services is passed.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
     """
 
-    def __init__(self, host, port=None, device=None, **kwargs):
-        tries = kwargs.pop("tries", None)
-        timeout = kwargs.pop("timeout", None)
-        retry_wait = kwargs.pop("retry_wait", None)
-        services = kwargs.pop("services", None)
-        zconf = kwargs.pop("zconf", None)
-
+    def __init__(self, *, cast_info=None, tries=None, timeout=None, retry_wait=None, zconf=None):
         self.logger = logging.getLogger(__name__)
 
-        # Resolve host to IP address
-        self._services = services
-
-        self.logger.info("Querying device status")
-        self.device = device
-        if device:
-            dev_status = get_device_status(host, services, zconf)
-            if dev_status:
-                # Values from `device` have priority over `dev_status`
-                # as they come from the dial information.
-                # `dev_status` may add extra information such as `manufacturer`
-                # which dial does not supply
-                self.device = DeviceStatus(
-                    friendly_name=(device.friendly_name or dev_status.friendly_name),
-                    model_name=(device.model_name or dev_status.model_name),
-                    manufacturer=(device.manufacturer or dev_status.manufacturer),
-                    uuid=(device.uuid or dev_status.uuid),
-                    cast_type=(device.cast_type or dev_status.cast_type),
-                    multizone_supported=(
-                        device.multizone_supported or dev_status.multizone_supported
-                    ),
-                )
-            else:
-                self.device = device
-        else:
-            self.device = get_device_status(host, services, zconf)
-
-        if not self.device:
-            raise ChromecastConnectionError(  # noqa: F405
-                f"Could not connect to {host}:{port or 8009}"
-            )
+        if not cast_info.cast_type:
+            cast_info = get_cast_type(cast_info, zconf)
+        self.cast_info = cast_info
 
         self.status = None
         self.status_event = threading.Event()
 
         self.socket_client = socket_client.SocketClient(
-            host,
-            port=port,
-            cast_type=self.device.cast_type,
+            cast_type=cast_info.cast_type,
             tries=tries,
             timeout=timeout,
             retry_wait=retry_wait,
-            services=services,
+            services=cast_info.services,
             zconf=zconf,
         )
 
@@ -383,8 +298,8 @@ class Chromecast:
     @property
     def ignore_cec(self):
         """Returns whether the CEC data should be ignored."""
-        return self.device is not None and any(
-            fnmatch.fnmatchcase(self.device.friendly_name, pattern)
+        return self.cast_info.friendly_name is not None and any(
+            fnmatch.fnmatchcase(self.cast_info.friendly_name, pattern)
             for pattern in IGNORE_CEC
         )
 
@@ -404,7 +319,7 @@ class Chromecast:
     @property
     def uuid(self):
         """Returns the unique UUID of the Chromecast device."""
-        return self.device.uuid
+        return self.cast_info.uuid
 
     @property
     def name(self):
@@ -412,7 +327,7 @@ class Chromecast:
         Returns the friendly name set for the Chromecast device.
         This is the name that the end-user chooses for the cast device.
         """
-        return self.device.friendly_name
+        return self.cast_info.friendly_name
 
     @property
     def uri(self):
@@ -422,7 +337,7 @@ class Chromecast:
     @property
     def model_name(self):
         """Returns the model name of the Chromecast device."""
-        return self.device.model_name
+        return self.cast_info.model_name
 
     @property
     def cast_type(self):
@@ -435,7 +350,7 @@ class Chromecast:
 
         :rtype: str
         """
-        return self.device.cast_type
+        return self.cast_info.cast_type
 
     @property
     def app_id(self):
@@ -552,12 +467,12 @@ class Chromecast:
     def __repr__(self):
         return (
             f"Chromecast({self.socket_client.host!r}, port={self.socket_client.port!r}, "
-            f"device={self.device!r})"
+            f"cast_info={self.cast_info!r})"
         )
 
     def __unicode__(self):
         return (
             f"Chromecast({self.socket_client.host}, {self.socket_client.port}, "
-            f"{self.device.friendly_name}, {self.device.model_name}, "
-            f"{self.device.manufacturer})"
+            f"{self.cast_info.friendly_name}, {self.cast_info.model_name}, "
+            f"{self.cast_info.manufacturer})"
         )
