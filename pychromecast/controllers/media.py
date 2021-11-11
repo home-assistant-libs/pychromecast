@@ -615,7 +615,7 @@ class MediaController(BaseController):
 
         # if user has specified metadata but not specified metadataType
         # https://developers.google.com/cast/docs/reference/messages#MediaInformation
-        if media["metadata"].keys() and "metadataType" not in media["metadata"]:
+        if media["metadata"] and "metadataType" not in media["metadata"]:
             media["metadata"]["metadataType"] = METADATA_TYPE_GENERIC
 
         if enqueue:
