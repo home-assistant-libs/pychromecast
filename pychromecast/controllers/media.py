@@ -594,6 +594,12 @@ class MediaController(BaseController):
                 media["metadata"]["images"] = []
 
             media["metadata"]["images"].append({"url": thumb})
+
+        # Need to set metadataType if not specified
+        # https://developers.google.com/cast/docs/reference/messages#MediaInformation
+        if media["metadata"] and "metadataType" not in media["metadata"]:
+            media["metadata"]["metadataType"] = METADATA_TYPE_GENERIC
+
         if subtitles:
             sub_msg = [
                 {
