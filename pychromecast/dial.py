@@ -17,6 +17,7 @@ from .const import (
     CAST_TYPE_GROUP,
     SERVICE_TYPE_HOST,
 )
+from .models import CastInfo, ServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -63,20 +64,14 @@ def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
     return (host, port)
 
 
-def _get_status(host, services, zconf, path, secure, timeout, context):
-    """
-    :param host: Hostname or ip to fetch status from
-    :type host: str
-    :return: The device status as a named tuple.
-    :rtype: pychromecast.dial.DeviceStatus or None
-    """
+def _get_status(services, zconf, path, secure, timeout, context):
+    """Query a cast device via http(s)."""
 
-    if not host:
-        for service in services.copy():
-            host, _, _ = get_host_from_service(service, zconf)
-            if host:
-                _LOGGER.debug("Resolved service %s to %s", service, host)
-                break
+    for service in services.copy():
+        host, _, _ = get_host_from_service(service, zconf)
+        if host:
+            _LOGGER.debug("Resolved service %s to %s", service, host)
+            break
 
     headers = {"content-type": "application/json"}
 
@@ -102,8 +97,57 @@ def get_ssl_context():
     return context
 
 
-def get_device_status(  # pylint: disable=too-many-locals
-    host, services=None, zconf=None, timeout=30, context=None
+def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
+    """
+    :param cast_info: cast_info
+    :return: An updated cast_info with filled cast_type
+    :rtype: pychromecast.models.CastInfo
+    """
+    cast_type = CAST_TYPE_CHROMECAST
+    manufacturer = "Unknown manufacturer"
+    if cast_info.port != 8009:
+        cast_type = CAST_TYPE_GROUP
+        manufacturer = "Google Inc."
+    else:
+        try:
+            display_supported = True
+            status = _get_status(
+                cast_info.services,
+                zconf,
+                "/setup/eureka_info?params=device_info,name",
+                True,
+                timeout,
+                context,
+            )
+            if "device_info" in status:
+                device_info = status["device_info"]
+
+                capabilities = device_info.get("capabilities", {})
+                display_supported = capabilities.get("display_supported", True)
+                manufacturer = device_info.get("manufacturer", manufacturer)
+
+            if not display_supported:
+                cast_type = CAST_TYPE_AUDIO
+            _LOGGER.debug("cast type: %s, manufacturer: %s", cast_type, manufacturer)
+
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+            _LOGGER.warning("Failed to determine cast type")
+            cast_type = CAST_TYPE_CHROMECAST
+
+    return CastInfo(
+        cast_info.services,
+        cast_info.uuid,
+        cast_info.model_name,
+        cast_info.friendly_name,
+        cast_info.host,
+        cast_info.port,
+        cast_type,
+        manufacturer,
+    )
+
+
+def get_device_info(  # pylint: disable=too-many-locals
+    host, zconf=None, timeout=30, context=None
 ):
     """
     :param host: Hostname or ip to fetch status from
@@ -113,8 +157,8 @@ def get_device_status(  # pylint: disable=too-many-locals
     """
 
     try:
+        services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
         status = _get_status(
-            host,
             services,
             zconf,
             "/setup/eureka_info?params=device_info,name",
@@ -144,8 +188,6 @@ def get_device_status(  # pylint: disable=too-many-locals
 
         if not display_supported:
             cast_type = CAST_TYPE_AUDIO
-        if model_name.lower() == "google cast group":
-            cast_type = CAST_TYPE_GROUP
 
         uuid = None
         if udn:
@@ -185,7 +227,7 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, services=None, zconf=None, timeout=30, context=None):
+def get_multizone_status(host, zconf=None, timeout=30, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -194,8 +236,8 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
     """
 
     try:
+        services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
         status = _get_status(
-            host,
             services,
             zconf,
             "/setup/eureka_info?params=multizone",
