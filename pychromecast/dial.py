@@ -147,7 +147,7 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
 
 
 def get_device_info(  # pylint: disable=too-many-locals
-    host, zconf=None, timeout=30, context=None
+    host, services=None, zconf=None, timeout=30, context=None
 ):
     """
     :param host: Hostname or ip to fetch status from
@@ -157,7 +157,8 @@ def get_device_info(  # pylint: disable=too-many-locals
     """
 
     try:
-        services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
+        if services is None:
+            services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
         status = _get_status(
             services,
             zconf,
@@ -227,7 +228,7 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, zconf=None, timeout=30, context=None):
+def get_multizone_status(host, services=None, zconf=None, timeout=30, context=None):
     """
     :param host: Hostname or ip to fetch status from
     :type host: str
@@ -236,7 +237,8 @@ def get_multizone_status(host, zconf=None, timeout=30, context=None):
     """
 
     try:
-        services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
+        if services is None:
+            services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
         status = _get_status(
             services,
             zconf,
