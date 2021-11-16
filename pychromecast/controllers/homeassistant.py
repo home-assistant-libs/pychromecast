@@ -79,14 +79,18 @@ class HomeAssistantController(BaseController):
             return
 
         self._connecting = True
-        self.send_message(
-            {
-                "type": "connect",
-                "refreshToken": self.refresh_token,
-                "clientId": self.client_id,
-                "hassUrl": self.hass_url,
-            }
-        )
+        try:
+            self.send_message(
+                {
+                    "type": "connect",
+                    "refreshToken": self.refresh_token,
+                    "clientId": self.client_id,
+                    "hassUrl": self.hass_url,
+                }
+            )
+        except Exception:  # pylint: disable=broad-except
+            self._connecting = False
+            raise
 
     def show_demo(self):
         """Show the demo."""
