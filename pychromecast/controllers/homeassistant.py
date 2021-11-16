@@ -74,7 +74,8 @@ class HomeAssistantController(BaseController):
     def connect_hass(self, callback_function=None):
         """Connect to Home Assistant."""
         if self.hass_connected:
-            callback_function()
+            if callback_function:
+                callback_function()
             return
 
         self._on_connect.append(callback_function)
