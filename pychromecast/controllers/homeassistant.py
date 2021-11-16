@@ -28,8 +28,10 @@ class HomeAssistantController(BaseController):
         #   showDemo: boolean;
         #   hassUrl?: string;
         #   lovelacePath?: string | number | null;
+        #   urlPath?: string | null;
         # }
         self.status = None
+        self.connecting = False
         self._on_connect = []
 
     @property
@@ -49,6 +51,7 @@ class HomeAssistantController(BaseController):
     def channel_disconnected(self):
         """Called when a channel is disconnected."""
         self.status = None
+        self.connecting = False
 
     def receive_message(self, _message, data: dict):
         """Called when a message is received."""
@@ -60,6 +63,7 @@ class HomeAssistantController(BaseController):
                 return True
 
             # We just got connected, call the callbacks.
+            self.connecting = False
             while self._on_connect:
                 self._on_connect.pop()()
 
@@ -69,7 +73,16 @@ class HomeAssistantController(BaseController):
 
     def connect_hass(self, callback_function=None):
         """Connect to Home Assistant."""
+        if self.hass_connected:
+            callback_function()
+            return
+
         self._on_connect.append(callback_function)
+
+        if self.connecting:
+            return
+
+        self.connecting = True
         self.send_message(
             {
                 "type": "connect",
