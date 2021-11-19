@@ -1,7 +1,10 @@
 """
 Controller to interface with Home Assistant
 """
+import threading
+
 from ..config import APP_HOMEASSISTANT_LOVELACE
+from ..error import PyChromecastError
 from . import BaseController
 
 
@@ -31,7 +34,8 @@ class HomeAssistantController(BaseController):
         #   urlPath?: string | null;
         # }
         self.status = None
-        self._connecting = False
+        self._hass_connecting_event = threading.Event()
+        self._hass_connecting_event.set()
         self._on_connect = []
 
     @property
@@ -51,7 +55,7 @@ class HomeAssistantController(BaseController):
     def channel_disconnected(self):
         """Called when a channel is disconnected."""
         self.status = None
-        self._connecting = False
+        self._hass_connecting_event.set()
 
     def receive_message(self, _message, data: dict):
         """Called when a message is received."""
@@ -63,7 +67,7 @@ class HomeAssistantController(BaseController):
                 return True
 
             # We just got connected, call the callbacks.
-            self._connecting = False
+            self._hass_connecting_event.set()
             while self._on_connect:
                 self._on_connect.pop()()
 
@@ -75,10 +79,10 @@ class HomeAssistantController(BaseController):
         """Connect to Home Assistant."""
         self._on_connect.append(callback_function)
 
-        if self._connecting:
+        if not self._hass_connecting_event.is_set():
             return
 
-        self._connecting = True
+        self._hass_connecting_event.clear()
         try:
             self.send_message(
                 {
@@ -89,8 +93,15 @@ class HomeAssistantController(BaseController):
                 }
             )
         except Exception:  # pylint: disable=broad-except
-            self._connecting = False
+            self._hass_connecting_event.set()
             raise
+
+        self._hass_connecting_event.wait(1)
+        try:
+            if not self._hass_connecting_event.is_set():
+                raise PyChromecastError()
+        finally:
+            self._hass_connecting_event.set()
 
     def show_demo(self):
         """Show the demo."""
