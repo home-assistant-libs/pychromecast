@@ -16,7 +16,7 @@ from .const import (
     SERVICE_TYPE_MDNS,
 )
 from .dial import get_device_info, get_multizone_status, get_ssl_context
-from .models import CastInfo, ServiceInfo
+from .models import ZEROCONF_ERRORS, CastInfo, ServiceInfo
 
 DISCOVER_TIMEOUT = 5
 
@@ -150,9 +150,15 @@ class ZeroConfListener:
         while service is None and tries < 4:
             try:
                 service = zconf.get_service_info(typ, name)
-            except IOError:
+            except ZEROCONF_ERRORS:
                 # If the zeroconf fails to receive the necessary data we abort
                 # adding the service
+                # We do not catch zeroconf.NotRunningException as it's
+                # an unrecoverable error.
+                _LOGGER.debug(
+                    "get_info_from_service failed to resolve service %s",
+                    service,
+                )
                 break
             tries += 1
 

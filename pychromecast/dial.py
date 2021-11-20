@@ -17,7 +17,7 @@ from .const import (
     CAST_TYPE_GROUP,
     SERVICE_TYPE_HOST,
 )
-from .models import CastInfo, ServiceInfo
+from .models import ZEROCONF_ERRORS, CastInfo, ServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -42,8 +42,15 @@ def get_host_from_service(service, zconf):
                 service,
                 service_info,
             )
-    except IOError:
-        pass
+        else:
+            _LOGGER.debug(
+                "get_info_from_service failed to resolve service %s",
+                service,
+            )
+    except ZEROCONF_ERRORS:
+        # We do not catch zeroconf.NotRunningException as it's
+        # an unrecoverable error.
+        _LOGGER.debug("get_info_from_service raised:", exc_info=True)
     return _get_host_from_zc_service_info(service_info) + (service_info,)
 
 
