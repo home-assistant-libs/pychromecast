@@ -1,7 +1,10 @@
 """
 Controller to interface with Home Assistant
 """
+import threading
+
 from ..config import APP_HOMEASSISTANT_LOVELACE
+from ..error import PyChromecastError
 from . import BaseController
 
 
@@ -28,8 +31,11 @@ class HomeAssistantController(BaseController):
         #   showDemo: boolean;
         #   hassUrl?: string;
         #   lovelacePath?: string | number | null;
+        #   urlPath?: string | null;
         # }
         self.status = None
+        self._hass_connecting_event = threading.Event()
+        self._hass_connecting_event.set()
         self._on_connect = []
 
     @property
@@ -49,6 +55,7 @@ class HomeAssistantController(BaseController):
     def channel_disconnected(self):
         """Called when a channel is disconnected."""
         self.status = None
+        self._hass_connecting_event.set()
 
     def receive_message(self, _message, data: dict):
         """Called when a message is received."""
@@ -60,6 +67,7 @@ class HomeAssistantController(BaseController):
                 return True
 
             # We just got connected, call the callbacks.
+            self._hass_connecting_event.set()
             while self._on_connect:
                 self._on_connect.pop()()
 
@@ -67,17 +75,33 @@ class HomeAssistantController(BaseController):
 
         return False
 
-    def connect_hass(self, callback_function=None):
+    def _connect_hass(self, callback_function=None):
         """Connect to Home Assistant."""
         self._on_connect.append(callback_function)
-        self.send_message(
-            {
-                "type": "connect",
-                "refreshToken": self.refresh_token,
-                "clientId": self.client_id,
-                "hassUrl": self.hass_url,
-            }
-        )
+
+        if not self._hass_connecting_event.is_set():
+            return
+
+        self._hass_connecting_event.clear()
+        try:
+            self.send_message(
+                {
+                    "type": "connect",
+                    "refreshToken": self.refresh_token,
+                    "clientId": self.client_id,
+                    "hassUrl": self.hass_url,
+                }
+            )
+        except Exception:  # pylint: disable=broad-except
+            self._hass_connecting_event.set()
+            raise
+
+        self._hass_connecting_event.wait(10)
+        try:
+            if not self._hass_connecting_event.is_set():
+                raise PyChromecastError()
+        finally:
+            self._hass_connecting_event.set()
 
     def show_demo(self):
         """Show the demo."""
@@ -85,23 +109,23 @@ class HomeAssistantController(BaseController):
 
     def get_status(self, callback_function=None):
         """Get status of Home Assistant Cast."""
-        self.send_connected_message(
+        self._send_connected_message(
             {"type": "get_status"}, callback_function=callback_function
         )
 
     def show_lovelace_view(self, view_path, url_path=None, callback_function=None):
         """Show a Lovelace UI."""
-        self.send_connected_message(
+        self._send_connected_message(
             {"type": "show_lovelace_view", "viewPath": view_path, "urlPath": url_path},
             callback_function=callback_function,
         )
 
-    def send_connected_message(self, data, callback_function=None):
+    def _send_connected_message(self, data, callback_function=None):
         """Send a message to a connected Home Assistant Cast"""
         if self.hass_connected:
             self.send_message_nocheck(data, callback_function=callback_function)
             return
 
-        self.connect_hass(
+        self._connect_hass(
             lambda: self.send_message_nocheck(data, callback_function=callback_function)
         )
