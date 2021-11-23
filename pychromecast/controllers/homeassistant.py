@@ -96,7 +96,7 @@ class HomeAssistantController(BaseController):
             self._hass_connecting_event.set()
             raise
 
-        self._hass_connecting_event.wait(1)
+        self._hass_connecting_event.wait(10)
         try:
             if not self._hass_connecting_event.is_set():
                 raise PyChromecastError()
