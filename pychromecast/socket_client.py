@@ -109,7 +109,6 @@ if sys.version_info >= (3, 0):
         """Encodes a python value into JSON format."""
         return json.dumps(data, ensure_ascii=False).encode("utf8")
 
-
 else:
 
     def _json_to_payload(data):
