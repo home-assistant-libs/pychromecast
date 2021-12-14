@@ -1,12 +1,13 @@
 """ Choose a controller and quick play """
 
-from .controllers.youtube import YouTubeController
-from .controllers.supla import SuplaController
-from .controllers.yleareena import YleAreenaController
-from .controllers.bubbleupnp import BubbleUPNPController
 from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
+from .controllers.bubbleupnp import BubbleUPNPController
 from .controllers.homeassistant_media import HomeAssistantMediaController
+from .controllers.media import MediaController
+from .controllers.supla import SuplaController
+from .controllers.yleareena import YleAreenaController
+from .controllers.youtube import YouTubeController
 
 
 def quick_play(cast, app_name, data):
@@ -66,6 +67,8 @@ def quick_play(cast, app_name, data):
         controller = BbcSoundsController()
     elif app_name == "homeassistant_media":
         controller = HomeAssistantMediaController()
+    elif app_name == "default_media_receiver":
+        controller = MediaController()
     else:
         raise NotImplementedError()
 
