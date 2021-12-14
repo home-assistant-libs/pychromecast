@@ -652,3 +652,7 @@ class MediaController(BaseController):
         super().tear_down()
 
         self._status_listeners[:] = []
+
+    def quick_play(self, media_id=None, media_type="video/mp4", **kwargs):
+        """Quick Play"""
+        self.play_media(media_id, media_type, **kwargs)
