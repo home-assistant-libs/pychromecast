@@ -52,6 +52,7 @@ class YleAreenaController(MediaController):
 
         self.send_message(msg, inc_session_id=True)
 
+    # pylint: disable=arguments-differ
     def quick_play(self, media_id=None, audio_lang="", text_lang="off", **kwargs):
         """Quick Play"""
         self.play_areena_media(
