@@ -465,7 +465,10 @@ class SocketClient(threading.Thread):
 
     def unregister_handler(self, handler: BaseController):
         """Register a new namespace handler."""
-        if handler.namespace in self._handlers and handler in self._handlers[handler.namespace]:
+        if (
+            handler.namespace in self._handlers
+            and handler in self._handlers[handler.namespace]
+        ):
             self._handlers[handler.namespace].remove(handler)
 
         handler.unregistered()
@@ -705,9 +708,7 @@ class SocketClient(threading.Thread):
             # message handlers
             for handler in self._handlers[message.namespace]:
                 try:
-                    handled = handler.receive_message(
-                        message, data
-                    )
+                    handled = handler.receive_message(message, data)
 
                     if not handled:
                         if data.get(REQUEST_ID) not in self._request_callbacks:
