@@ -57,6 +57,10 @@ class BaseController(abc.ABC):
         else:
             self._message_func = self._socket_client.send_app_message
 
+    def unregistered(self):
+        """Called when a controller is unregistered."""
+        self._message_func = None
+
     def channel_connected(self):
         """Called when a channel has been openend that supports the
         namespace of this controller."""
