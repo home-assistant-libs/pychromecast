@@ -17,7 +17,7 @@ import ssl
 import sys
 import threading
 import time
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from struct import pack, unpack
 
 from . import cast_channel_pb2
@@ -215,7 +215,7 @@ class SocketClient(threading.Thread):
         self.socket = None
 
         # dict mapping namespace on Controller objects
-        self._handlers = {}
+        self._handlers = defaultdict(set)
         self._connection_listeners = []
 
         self.receiver_controller = ReceiverController(cast_type)
@@ -459,9 +459,19 @@ class SocketClient(threading.Thread):
 
     def register_handler(self, handler: BaseController):
         """Register a new namespace handler."""
-        self._handlers[handler.namespace] = handler
+        self._handlers[handler.namespace].add(handler)
 
         handler.registered(self)
+
+    def unregister_handler(self, handler: BaseController):
+        """Register a new namespace handler."""
+        if (
+            handler.namespace in self._handlers
+            and handler in self._handlers[handler.namespace]
+        ):
+            self._handlers[handler.namespace].remove(handler)
+
+        handler.unregistered()
 
     def new_cast_status(self, cast_status):
         """Called when a new cast status has been received."""
@@ -480,7 +490,8 @@ class SocketClient(threading.Thread):
             for namespace in self.app_namespaces:
                 if namespace in self._handlers:
                     self._ensure_channel_connected(self.destination_id)
-                    self._handlers[namespace].channel_connected()
+                    for handler in self._handlers[namespace]:
+                        handler.channel_connected()
 
     def _gen_request_id(self):
         """Generates a unique request id."""
@@ -695,32 +706,31 @@ class SocketClient(threading.Thread):
                 )
 
             # message handlers
-            try:
-                handled = self._handlers[message.namespace].receive_message(
-                    message, data
-                )
+            for handler in self._handlers[message.namespace]:
+                try:
+                    handled = handler.receive_message(message, data)
 
-                if not handled:
-                    if data.get(REQUEST_ID) not in self._request_callbacks:
-                        self.logger.debug(
-                            "[%s(%s):%s] Message unhandled: %s",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                            _message_to_string(message, data),
-                        )
-            except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    (
-                        "[%s(%s):%s] Exception caught while sending message to "
-                        "controller %s: %s"
-                    ),
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                    type(self._handlers[message.namespace]).__name__,
-                    _message_to_string(message, data),
-                )
+                    if not handled:
+                        if data.get(REQUEST_ID) not in self._request_callbacks:
+                            self.logger.debug(
+                                "[%s(%s):%s] Message unhandled: %s",
+                                self.fn or "",
+                                self.host,
+                                self.port,
+                                _message_to_string(message, data),
+                            )
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception(
+                        (
+                            "[%s(%s):%s] Exception caught while sending message to "
+                            "controller %s: %s"
+                        ),
+                        self.fn or "",
+                        self.host,
+                        self.port,
+                        type(handler).__name__,
+                        _message_to_string(message, data),
+                    )
 
         else:
             self.logger.debug(
@@ -739,11 +749,12 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 pass
 
-        for handler in self._handlers.values():
-            try:
-                handler.tear_down()
-            except Exception:  # pylint: disable=broad-except
-                pass
+        for namespace in self._handlers.values():
+            for handler in namespace:
+                try:
+                    handler.tear_down()
+                except Exception:  # pylint: disable=broad-except
+                    pass
 
         if self.socket is not None:
             try:
@@ -995,7 +1006,8 @@ class SocketClient(threading.Thread):
         """Handles a channel being disconnected."""
         for namespace in self.app_namespaces:
             if namespace in self._handlers:
-                self._handlers[namespace].channel_disconnected()
+                for handler in self._handlers[namespace]:
+                    handler.channel_disconnected()
 
         self.app_namespaces = []
         self.destination_id = None

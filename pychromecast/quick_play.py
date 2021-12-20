@@ -75,3 +75,5 @@ def quick_play(cast, app_name, data):
     cast.register_handler(controller)
 
     controller.quick_play(**data)
+
+    cast.unregister_handler(controller)

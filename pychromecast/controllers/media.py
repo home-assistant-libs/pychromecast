@@ -11,6 +11,7 @@ import threading
 
 from ..config import APP_MEDIA_RECEIVER
 from ..const import MESSAGE_TYPE
+from ..error import PyChromecastError
 from . import BaseController
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
@@ -326,6 +327,7 @@ class MediaController(BaseController):
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
+        self._start_play_media_sent = threading.Event()
         self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
@@ -554,9 +556,14 @@ class MediaController(BaseController):
                 enqueue,
                 media_info,
             )
+            self._start_play_media_sent.set()
 
+        self._start_play_media_sent.clear()
         receiver_ctrl = self._socket_client.receiver_controller
         receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
+        self._start_play_media_sent.wait(10)
+        if not self._start_play_media_sent.is_set():
+            raise PyChromecastError()
 
     def _send_start_play_media(  # pylint: disable=too-many-locals
         self,
