@@ -8,7 +8,6 @@ Without him this would not have been possible.
 # pylint: disable=too-many-lines
 
 import abc
-from collections import defaultdict
 import errno
 import json
 import logging
@@ -18,7 +17,7 @@ import ssl
 import sys
 import threading
 import time
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from struct import pack, unpack
 
 from . import cast_channel_pb2
