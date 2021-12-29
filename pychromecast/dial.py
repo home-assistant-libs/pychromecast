@@ -138,7 +138,7 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
             _LOGGER.debug("cast type: %s, manufacturer: %s", cast_type, manufacturer)
 
         except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-            _LOGGER.warning("Failed to determine cast type")
+            _LOGGER.debug("Failed to determine cast type")
             cast_type = CAST_TYPE_CHROMECAST
 
     return CastInfo(
