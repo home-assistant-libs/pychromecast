@@ -370,7 +370,11 @@ class SocketClient(threading.Thread):
                             self.port,
                         )
                     return
-                except OSError as err:
+
+                # OSError raised if connecting to the socket fails, NotConnected raised
+                # if another thread tries - and fails - to send a message before the
+                # calls to receiver_controller and heartbeat_controller.
+                except (OSError, NotConnected) as err:
                     self.connecting = True
                     if self.stop.is_set():
                         self.logger.error(
