@@ -528,20 +528,19 @@ class SocketClient(threading.Thread):
             return
 
         self.heartbeat_controller.reset()
-        self._force_recon = False
         self.logger.debug("Thread started...")
-        try:
-            while not self.stop.is_set():
+        while not self.stop.is_set():
+            try:
                 if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
                     break
-        except Exception:  # pylint: disable=broad-except
-            self.logger.exception(
-                ("[%s(%s):%s] Unhandled exception in worker thread"),
-                self.fn or "",
-                self.host,
-                self.port,
-            )
-            raise
+            except Exception:  # pylint: disable=broad-except
+                self._force_recon = True
+                self.logger.exception(
+                    ("[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect"),
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
 
         self.logger.debug("Thread done...")
         # Clean up
