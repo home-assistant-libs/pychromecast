@@ -536,7 +536,7 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
                 self.logger.exception(
-                    ("[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect"),
+                    "[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect",
                     self.fn or "",
                     self.host,
                     self.port,
