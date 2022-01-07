@@ -507,6 +507,7 @@ class MediaController(BaseController):
         subtitle_id=1,
         enqueue=False,
         media_info=None,
+        custom_info = None,
     ):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -555,6 +556,7 @@ class MediaController(BaseController):
                 subtitle_id,
                 enqueue,
                 media_info,
+                custom_info
             )
             self._start_play_media_sent.set()
 
@@ -581,6 +583,7 @@ class MediaController(BaseController):
         subtitle_id=1,
         enqueue=False,
         media_info=None,
+        custom_info = None
     ):
         media_info = media_info or {}
         media = {
@@ -647,7 +650,10 @@ class MediaController(BaseController):
         if current_time is not None:
             msg["currentTime"] = current_time
         msg["autoplay"] = autoplay
-        msg["customData"] = {}
+        if custom_info == None:
+            msg["media"]["customData"] = {}
+        else:
+            msg["media"]["customData"] = custom_info
 
         if subtitles:
             msg["activeTrackIds"] = [subtitle_id]
