@@ -137,8 +137,8 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
                 cast_type = CAST_TYPE_AUDIO
             _LOGGER.debug("cast type: %s, manufacturer: %s", cast_type, manufacturer)
 
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-            _LOGGER.warning("Failed to determine cast type")
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
+            _LOGGER.warning("Failed to determine cast type (%s)", err)
             cast_type = CAST_TYPE_CHROMECAST
 
     return CastInfo(
