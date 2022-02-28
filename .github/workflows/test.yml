@@ -31,4 +31,4 @@ jobs:
           pylint examples pychromecast
       - name: Check formatting with black
         run: |
-          black examples pychromecast --check
+          black examples pychromecast --check --diff
