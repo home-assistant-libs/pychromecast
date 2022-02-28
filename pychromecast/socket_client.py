@@ -921,7 +921,7 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
         else:
-            raise NotConnected("Chromecast {self.host}:{self.port} is connecting...")
+            raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
 
     def send_platform_message(
         self, namespace, message, inc_session_id=False, callback_function_param=False
