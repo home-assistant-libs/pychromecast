@@ -135,6 +135,7 @@ def media_to_chromecast_command(
                 "directStream": directStream,
                 "subtitleSize": subtitleSize,
                 "audioBoost": audioBoost,
+                "providerIdentifier": "com.plexapp.plugins.library",
                 "server": {
                     "machineIdentifier": machineIdentifier,
                     "transcoderVideo": transcoderVideo,
@@ -283,6 +284,14 @@ class PlexController(BaseController):
         """Send next command."""
         self._send_cmd({MESSAGE_TYPE: TYPE_NEXT})
 
+    def queue_next(self):
+        """Send QUEUE_NEXT as NEXT command."""
+        self.next()
+
+    def queue_prev(self):
+        """Send QUEUE_PREV as NEXT command."""
+        self.previous()
+
     def seek(self, position, resume_state="PLAYBACK_START"):
         """Send seek command.
 
@@ -355,9 +364,13 @@ class PlexController(BaseController):
         Returns:
             pychromecast.controllers.media.MediaStatus: Slightly modified status with patched
                                                         method for episode_title.
+                                                        Overwrite supported_media_commands 
+                                                        when set to MEDIA_BASIC
         """
         status = self._socket_client.media_controller.status
         status.episode_title = episode_title
+        if status.supported_media_commands == 12303: 
+            status.supported_media_commands = 12543
         return status
 
     def _reset_playback(self, offset=None):
