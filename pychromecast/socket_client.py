@@ -904,12 +904,15 @@ class SocketClient(threading.Thread):
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
-                if not no_add_request_id and callback_function:
-                    self._request_callbacks[request_id] = {
-                        "event": threading.Event(),
-                        "response": None,
-                        "function": callback_function,
-                    }
+                if callback_function:
+                    if not no_add_request_id:
+                        self._request_callbacks[request_id] = {
+                            "event": threading.Event(),
+                            "response": None,
+                            "function": callback_function,
+                        }
+                    else:
+                        callback_function(None)
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error:
                 self._request_callbacks.pop(request_id, None)
@@ -924,7 +927,12 @@ class SocketClient(threading.Thread):
             raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
 
     def send_platform_message(
-        self, namespace, message, inc_session_id=False, callback_function_param=False
+        self,
+        namespace,
+        message,
+        inc_session_id=False,
+        callback_function_param=False,
+        no_add_request_id=False,
     ):
         """Helper method to send a message to the platform."""
         return self.send_message(
@@ -933,10 +941,16 @@ class SocketClient(threading.Thread):
             message,
             inc_session_id,
             callback_function_param,
+            no_add_request_id=no_add_request_id,
         )
 
     def send_app_message(
-        self, namespace, message, inc_session_id=False, callback_function_param=False
+        self,
+        namespace,
+        message,
+        inc_session_id=False,
+        callback_function_param=False,
+        no_add_request_id=False,
     ):
         """Helper method to send a message to current running app."""
         if namespace not in self.app_namespaces:
@@ -951,6 +965,7 @@ class SocketClient(threading.Thread):
             message,
             inc_session_id,
             callback_function_param,
+            no_add_request_id=no_add_request_id,
         )
 
     def register_connection_listener(self, listener: ConnectionStatusListener):

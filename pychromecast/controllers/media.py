@@ -318,17 +318,18 @@ class MediaStatusListener(abc.ABC):
         """Updated media status."""
 
 
-class MediaController(BaseController):
+class MediaController(BaseMediaPlayer):
     """Controller to interact with Google media namespace."""
 
     def __init__(self):
-        super().__init__("urn:x-cast:com.google.cast.media")
+        super().__init__(
+            supporting_app_id=APP_MEDIA_RECEIVER,
+            app_must_match=False,
+        )
 
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
-        self._start_play_media_sent = threading.Event()
-        self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
     def channel_connected(self):
@@ -491,6 +492,23 @@ class MediaController(BaseController):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
+    def tear_down(self):
+        """Called when controller is destroyed."""
+        super().tear_down()
+
+        self._status_listeners[:] = []
+
+
+class BaseMediaPlayer(BaseController):
+    """Mixin class for apps which can play media using the default media namespace."""
+
+    def __init__(self, supporting_app_id, app_must_match=True):
+        super().__init__(
+            "urn:x-cast:com.google.cast.media",
+            supporting_app_id=supporting_app_id,
+            app_must_match=app_must_match,
+        )
+
     def play_media(  # pylint: disable=too-many-locals
         self,
         url,
@@ -507,6 +525,7 @@ class MediaController(BaseController):
         subtitle_id=1,
         enqueue=False,
         media_info=None,
+        callback_function=None,
     ):
         """
         Plays media on the Chromecast. Start default media receiver if not
@@ -538,32 +557,23 @@ class MediaController(BaseController):
         https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
         """
 
-        def app_launched_callback():
-            """Plays media after chromecast has switched to requested app."""
-            self._send_start_play_media(
-                url,
-                content_type,
-                title,
-                thumb,
-                current_time,
-                autoplay,
-                stream_type,
-                metadata,
-                subtitles,
-                subtitles_lang,
-                subtitles_mime,
-                subtitle_id,
-                enqueue,
-                media_info,
-            )
-            self._start_play_media_sent.set()
-
-        self._start_play_media_sent.clear()
-        receiver_ctrl = self._socket_client.receiver_controller
-        receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
-        self._start_play_media_sent.wait(10)
-        if not self._start_play_media_sent.is_set():
-            raise PyChromecastError()
+        self._send_start_play_media(
+            url,
+            content_type,
+            title,
+            thumb,
+            current_time,
+            autoplay,
+            stream_type,
+            metadata,
+            subtitles,
+            subtitles_lang,
+            subtitles_mime,
+            subtitle_id,
+            enqueue,
+            media_info,
+            callback_function=callback_function,
+        )
 
     def _send_start_play_media(  # pylint: disable=too-many-locals
         self,
@@ -581,6 +591,7 @@ class MediaController(BaseController):
         subtitle_id=1,
         enqueue=False,
         media_info=None,
+        callback_function=None,
     ):
         media_info = media_info or {}
         media = {
@@ -627,8 +638,9 @@ class MediaController(BaseController):
             }
 
         if enqueue:
+            status = self._socket_client.media_controller.status
             msg = {
-                "mediaSessionId": self.status.media_session_id,
+                "mediaSessionId": status.media_session_id,
                 "items": [
                     {
                         "media": media,
@@ -652,14 +664,29 @@ class MediaController(BaseController):
         if subtitles:
             msg["activeTrackIds"] = [subtitle_id]
 
-        self.send_message(msg, inc_session_id=True)
-
-    def tear_down(self):
-        """Called when controller is destroyed."""
-        super().tear_down()
-
-        self._status_listeners[:] = []
+        self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
     def quick_play(self, media_id=None, media_type="video/mp4", **kwargs):
         """Quick Play"""
-        self.play_media(media_id, media_type, **kwargs)
+
+        def start_play_media_sent_callback(_):
+            """Set event when playback request has been sent."""
+            start_play_media_sent.set()
+
+        start_play_media_sent = threading.Event()
+        self.play_media(
+            media_id,
+            media_type,
+            **kwargs,
+            callback_function=start_play_media_sent_callback,
+        )
+        start_play_media_sent.wait(10)
+        if not start_play_media_sent.is_set():
+            raise PyChromecastError()
+
+
+class DefaultMediaReceiverController(BaseMediaPlayer):
+    """Controller to force media to play with the default media receiver."""
+
+    def __init__(self):
+        super().__init__(supporting_app_id=APP_MEDIA_RECEIVER)

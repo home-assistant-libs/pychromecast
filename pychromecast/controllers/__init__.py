@@ -1,16 +1,28 @@
 """
 Provides controllers to handle specific namespaces in Chromecast communication.
 """
+from __future__ import annotations
+
 import abc
 import logging
+from typing import TYPE_CHECKING
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
+
+if TYPE_CHECKING:
+    from ..socket_client import SocketClient
 
 
 class BaseController(abc.ABC):
     """ABC for namespace controllers."""
 
-    def __init__(self, namespace, supporting_app_id=None, target_platform=False):
+    def __init__(
+        self,
+        namespace,
+        supporting_app_id=None,
+        target_platform=False,
+        app_must_match=False,
+    ):
         """
         Initialize the controller.
 
@@ -19,12 +31,15 @@ class BaseController(abc.ABC):
                            unsupported namespace.
         target_platform:   set to True if you target the platform instead of
                            current app.
+        app_must_match:    set to True if the app should be launched even if the
+                           namespace is supported by another app.
         """
+        self.app_must_match = app_must_match
         self.namespace = namespace
         self.supporting_app_id = supporting_app_id
         self.target_platform = target_platform
 
-        self._socket_client = None
+        self._socket_client: SocketClient | None = None
         self._message_func = None
 
         self.logger = logging.getLogger(__name__)
@@ -68,7 +83,13 @@ class BaseController(abc.ABC):
     def channel_disconnected(self):
         """Called when a channel is disconnected."""
 
-    def send_message(self, data, inc_session_id=False, callback_function=None):
+    def send_message(
+        self,
+        data,
+        inc_session_id=False,
+        callback_function=None,
+        no_add_request_id=False,
+    ):
         """
         Send a message on this namespace to the Chromecast. Ensures app is loaded.
 
@@ -76,14 +97,19 @@ class BaseController(abc.ABC):
         """
         self._check_registered()
 
-        if (
-            not self.target_platform
-            and self.namespace not in self._socket_client.app_namespaces
+        receiver_ctrl = self._socket_client.receiver_controller
+
+        if not self.target_platform and (
+            self.namespace not in self._socket_client.app_namespaces
+            or (self.app_must_match and receiver_ctrl.app_id != self.supporting_app_id)
         ):
             if self.supporting_app_id is not None:
                 self.launch(
                     callback_function=lambda: self.send_message_nocheck(
-                        data, inc_session_id, callback_function
+                        data,
+                        inc_session_id,
+                        callback_function,
+                        no_add_request_id=no_add_request_id,
                     )
                 )
                 return
@@ -92,11 +118,25 @@ class BaseController(abc.ABC):
                 f"Namespace {self.namespace} is not supported by running application."
             )
 
-        self.send_message_nocheck(data, inc_session_id, callback_function)
+        self.send_message_nocheck(
+            data, inc_session_id, callback_function, no_add_request_id=no_add_request_id
+        )
 
-    def send_message_nocheck(self, data, inc_session_id=False, callback_function=None):
+    def send_message_nocheck(
+        self,
+        data,
+        inc_session_id=False,
+        callback_function=None,
+        no_add_request_id=False,
+    ):
         """Send a message."""
-        self._message_func(self.namespace, data, inc_session_id, callback_function)
+        self._message_func(
+            self.namespace,
+            data,
+            inc_session_id,
+            callback_function,
+            no_add_request_id=no_add_request_id,
+        )
 
     def receive_message(self, _message, _data: dict):  # pylint: disable=no-self-use
         """

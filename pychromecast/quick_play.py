@@ -4,7 +4,7 @@ from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
 from .controllers.bubbleupnp import BubbleUPNPController
 from .controllers.homeassistant_media import HomeAssistantMediaController
-from .controllers.media import MediaController
+from .controllers.media import DefaultMediaReceiverController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.youtube import YouTubeController
@@ -53,22 +53,22 @@ def quick_play(cast, app_name, data):
             "BUFFERED" or "LIVE"
     """
 
-    if app_name == "youtube":
-        controller = YouTubeController()
+    if app_name == "bbciplayer":
+        controller = BbcIplayerController()
+    elif app_name == "bbcsounds":
+        controller = BbcSoundsController()
+    elif app_name == "bubbleupnp":
+        controller = BubbleUPNPController()
+    elif app_name == "default_media_receiver":
+        controller = DefaultMediaReceiverController()
+    elif app_name == "homeassistant_media":
+        controller = HomeAssistantMediaController()
     elif app_name == "supla":
         controller = SuplaController()
     elif app_name == "yleareena":
         controller = YleAreenaController()
-    elif app_name == "bubbleupnp":
-        controller = BubbleUPNPController()
-    elif app_name == "bbciplayer":
-        controller = BbcIplayerController()
-    elif app_name == "bbcsounds":
-        controller = BbcSoundsController()
-    elif app_name == "homeassistant_media":
-        controller = HomeAssistantMediaController()
-    elif app_name == "default_media_receiver":
-        controller = MediaController()
+    elif app_name == "youtube":
+        controller = YouTubeController()
     else:
         raise NotImplementedError()
 
