@@ -59,13 +59,6 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-app_name = "bbciplayer"
-app_data = {
-    "media_id": args.media_id,
-    "is_live": args.is_live,
-    "metadata": json.loads(args.metadata),
-}
-
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 if args.show_zeroconf_debug:
@@ -84,6 +77,12 @@ cast = chromecasts[0]
 cast.wait()
 print(f'Found chromecast with name "{args.cast}", attempting to play "{args.media_id}"')
 
+app_name = "bbciplayer"
+app_data = {
+    "media_id": args.media_id,
+    "is_live": args.is_live,
+    "metadata": json.loads(args.metadata),
+}
 quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)

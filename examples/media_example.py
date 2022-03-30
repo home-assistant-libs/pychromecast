@@ -17,7 +17,7 @@ import pychromecast
 CAST_NAME = "Living Room"
 
 # Change to an audio or video url
-MEDIA_URL = "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/llnws/bbc_radio_fourfm.mpd"
+MEDIA_URL = "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/ak/bbc_radio_fourfm.mpd"
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the Media Controller to play an URL."

@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup  # pylint: disable=import-error
 
 import pychromecast
-from pychromecast.controllers.supla import SuplaController
+from pychromecast import quick_play
 
 
 # Change to the name of your Chromecast
@@ -40,10 +40,10 @@ cast = chromecasts[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
 
-supla = SuplaController()
-cast.register_handler(supla)
-supla.launch()
-supla.play_media(MEDIA_ID)
-cast.wait()
+app_name = "supla"
+app_data = {
+    "media_id": MEDIA_ID,
+}
+quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)

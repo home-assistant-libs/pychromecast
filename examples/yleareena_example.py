@@ -11,7 +11,7 @@ from time import sleep
 import zeroconf
 
 import pychromecast
-from pychromecast.controllers.yleareena import YleAreenaController
+from pychromecast import quick_play
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
-parser.add_argument("--program", help="Areena Program ID", default="1-50097921")
+parser.add_argument("--program", help="Areena Program ID", default="1-50649659")
 parser.add_argument("--audio_language", help="audio_language", default="")
 parser.add_argument("--text_language", help="text_language", default="off")
 args = parser.parse_args()
@@ -84,13 +84,13 @@ cast = chromecasts[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
 
-yt = YleAreenaController()
-cast.register_handler(yt)
-yt.play_areena_media(
-    get_kaltura_id(args.program),
-    audio_language=args.audio_language,
-    text_language=args.text_language,
-)
+app_name = "yleareena"
+app_data = {
+    "media_id": get_kaltura_id(args.program),
+    "audio_lang": args.audio_language,
+    "text_lang": args.text_language,
+}
+quick_play.quick_play(cast, app_name, app_data)
 sleep(10)
 
 # Shut down discovery
