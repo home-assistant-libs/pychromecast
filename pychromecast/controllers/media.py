@@ -318,17 +318,204 @@ class MediaStatusListener(abc.ABC):
         """Updated media status."""
 
 
-class MediaController(BaseController):
+class BaseMediaPlayer(BaseController):
+    """Mixin class for apps which can play media using the default media namespace."""
+
+    def __init__(self, supporting_app_id, app_must_match=True):
+        super().__init__(
+            "urn:x-cast:com.google.cast.media",
+            supporting_app_id=supporting_app_id,
+            app_must_match=app_must_match,
+        )
+
+    def play_media(  # pylint: disable=too-many-locals
+        self,
+        url,
+        content_type,
+        title=None,
+        thumb=None,
+        current_time=None,
+        autoplay=True,
+        stream_type=STREAM_TYPE_BUFFERED,
+        metadata=None,
+        subtitles=None,
+        subtitles_lang="en-US",
+        subtitles_mime="text/vtt",
+        subtitle_id=1,
+        enqueue=False,
+        media_info=None,
+        callback_function=None,
+    ):
+        """
+        Plays media on the Chromecast. Start default media receiver if not
+        already started.
+
+        Parameters:
+        url: str - url of the media.
+        content_type: str - mime type. Example: 'video/mp4'.
+        title: str - title of the media.
+        thumb: str - thumbnail image url.
+        current_time: float - Seconds since beginning of content. If the content is
+            live content, and position is not specifed, the stream will start at the
+            live position
+        autoplay: bool - whether the media will automatically play.
+        stream_type: str - describes the type of media artifact as one of the
+            following: "NONE", "BUFFERED", "LIVE".
+        subtitles: str - url of subtitle file to be shown on chromecast.
+        subtitles_lang: str - language for subtitles.
+        subtitles_mime: str - mimetype of subtitles.
+        subtitle_id: int - id of subtitle to be loaded.
+        enqueue: bool - if True, enqueue the media instead of play it.
+        media_info: dict - additional MediaInformation attributes not explicitly listed.
+        metadata: dict - media metadata object, one of the following:
+            GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
+            MusicTrackMediaMetadata, PhotoMediaMetadata.
+
+        Docs:
+        https://developers.google.com/cast/docs/reference/messages#MediaData
+        https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
+        """
+
+        self._send_start_play_media(
+            url,
+            content_type,
+            title,
+            thumb,
+            current_time,
+            autoplay,
+            stream_type,
+            metadata,
+            subtitles,
+            subtitles_lang,
+            subtitles_mime,
+            subtitle_id,
+            enqueue,
+            media_info,
+            callback_function=callback_function,
+        )
+
+    def _send_start_play_media(  # pylint: disable=too-many-locals
+        self,
+        url,
+        content_type,
+        title=None,
+        thumb=None,
+        current_time=None,
+        autoplay=True,
+        stream_type=STREAM_TYPE_BUFFERED,
+        metadata=None,
+        subtitles=None,
+        subtitles_lang="en-US",
+        subtitles_mime="text/vtt",
+        subtitle_id=1,
+        enqueue=False,
+        media_info=None,
+        callback_function=None,
+    ):
+        media_info = media_info or {}
+        media = {
+            "contentId": url,
+            "streamType": stream_type,
+            "contentType": content_type,
+            "metadata": metadata or {},
+            **media_info,
+        }
+
+        if title:
+            media["metadata"]["title"] = title
+
+        if thumb:
+            media["metadata"]["thumb"] = thumb
+
+            if "images" not in media["metadata"]:
+                media["metadata"]["images"] = []
+
+            media["metadata"]["images"].append({"url": thumb})
+
+        # Need to set metadataType if not specified
+        # https://developers.google.com/cast/docs/reference/messages#MediaInformation
+        if media["metadata"] and "metadataType" not in media["metadata"]:
+            media["metadata"]["metadataType"] = METADATA_TYPE_GENERIC
+
+        if subtitles:
+            sub_msg = [
+                {
+                    "trackId": subtitle_id,
+                    "trackContentId": subtitles,
+                    "language": subtitles_lang,
+                    "subtype": "SUBTITLES",
+                    "type": "TEXT",
+                    "trackContentType": subtitles_mime,
+                    "name": f"{subtitles_lang} - {subtitle_id} Subtitle",
+                }
+            ]
+            media["tracks"] = sub_msg
+            media["textTrackStyle"] = {
+                "backgroundColor": "#FFFFFF00",
+                "edgeType": "OUTLINE",
+                "edgeColor": "#000000FF",
+            }
+
+        if enqueue:
+            status = self._socket_client.media_controller.status
+            msg = {
+                "mediaSessionId": status.media_session_id,
+                "items": [
+                    {
+                        "media": media,
+                        "autoplay": True,
+                        "startTime": 0,
+                        "preloadTime": 0,
+                    }
+                ],
+                MESSAGE_TYPE: TYPE_QUEUE_INSERT,
+            }
+        else:
+            msg = {
+                "media": media,
+                MESSAGE_TYPE: TYPE_LOAD,
+            }
+        if current_time is not None:
+            msg["currentTime"] = current_time
+        msg["autoplay"] = autoplay
+        msg["customData"] = {}
+
+        if subtitles:
+            msg["activeTrackIds"] = [subtitle_id]
+
+        self.send_message(msg, inc_session_id=True, callback_function=callback_function)
+
+    def quick_play(self, media_id=None, media_type="video/mp4", **kwargs):
+        """Quick Play"""
+
+        def start_play_media_sent_callback(_):
+            """Set event when playback request has been sent."""
+            start_play_media_sent.set()
+
+        start_play_media_sent = threading.Event()
+        self.play_media(
+            media_id,
+            media_type,
+            **kwargs,
+            callback_function=start_play_media_sent_callback,
+        )
+        start_play_media_sent.wait(10)
+        if not start_play_media_sent.is_set():
+            raise PyChromecastError()
+
+
+class MediaController(BaseMediaPlayer):
     """Controller to interact with Google media namespace."""
 
     def __init__(self):
-        super().__init__("urn:x-cast:com.google.cast.media")
+        super().__init__(
+            supporting_app_id=APP_MEDIA_RECEIVER,
+            app_must_match=False,
+        )
 
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
-        self._start_play_media_sent = threading.Event()
-        self.app_id = APP_MEDIA_RECEIVER
         self._status_listeners = []
 
     def channel_connected(self):
@@ -491,175 +678,15 @@ class MediaController(BaseController):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
-    def play_media(  # pylint: disable=too-many-locals
-        self,
-        url,
-        content_type,
-        title=None,
-        thumb=None,
-        current_time=None,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-        enqueue=False,
-        media_info=None,
-    ):
-        """
-        Plays media on the Chromecast. Start default media receiver if not
-        already started.
-
-        Parameters:
-        url: str - url of the media.
-        content_type: str - mime type. Example: 'video/mp4'.
-        title: str - title of the media.
-        thumb: str - thumbnail image url.
-        current_time: float - Seconds since beginning of content. If the content is
-            live content, and position is not specifed, the stream will start at the
-            live position
-        autoplay: bool - whether the media will automatically play.
-        stream_type: str - describes the type of media artifact as one of the
-            following: "NONE", "BUFFERED", "LIVE".
-        subtitles: str - url of subtitle file to be shown on chromecast.
-        subtitles_lang: str - language for subtitles.
-        subtitles_mime: str - mimetype of subtitles.
-        subtitle_id: int - id of subtitle to be loaded.
-        enqueue: bool - if True, enqueue the media instead of play it.
-        media_info: dict - additional MediaInformation attributes not explicitly listed.
-        metadata: dict - media metadata object, one of the following:
-            GenericMediaMetadata, MovieMediaMetadata, TvShowMediaMetadata,
-            MusicTrackMediaMetadata, PhotoMediaMetadata.
-
-        Docs:
-        https://developers.google.com/cast/docs/reference/messages#MediaData
-        https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaInformation
-        """
-
-        def app_launched_callback():
-            """Plays media after chromecast has switched to requested app."""
-            self._send_start_play_media(
-                url,
-                content_type,
-                title,
-                thumb,
-                current_time,
-                autoplay,
-                stream_type,
-                metadata,
-                subtitles,
-                subtitles_lang,
-                subtitles_mime,
-                subtitle_id,
-                enqueue,
-                media_info,
-            )
-            self._start_play_media_sent.set()
-
-        self._start_play_media_sent.clear()
-        receiver_ctrl = self._socket_client.receiver_controller
-        receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
-        self._start_play_media_sent.wait(10)
-        if not self._start_play_media_sent.is_set():
-            raise PyChromecastError()
-
-    def _send_start_play_media(  # pylint: disable=too-many-locals
-        self,
-        url,
-        content_type,
-        title=None,
-        thumb=None,
-        current_time=None,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-        enqueue=False,
-        media_info=None,
-    ):
-        media_info = media_info or {}
-        media = {
-            "contentId": url,
-            "streamType": stream_type,
-            "contentType": content_type,
-            "metadata": metadata or {},
-            **media_info,
-        }
-
-        if title:
-            media["metadata"]["title"] = title
-
-        if thumb:
-            media["metadata"]["thumb"] = thumb
-
-            if "images" not in media["metadata"]:
-                media["metadata"]["images"] = []
-
-            media["metadata"]["images"].append({"url": thumb})
-
-        # Need to set metadataType if not specified
-        # https://developers.google.com/cast/docs/reference/messages#MediaInformation
-        if media["metadata"] and "metadataType" not in media["metadata"]:
-            media["metadata"]["metadataType"] = METADATA_TYPE_GENERIC
-
-        if subtitles:
-            sub_msg = [
-                {
-                    "trackId": subtitle_id,
-                    "trackContentId": subtitles,
-                    "language": subtitles_lang,
-                    "subtype": "SUBTITLES",
-                    "type": "TEXT",
-                    "trackContentType": subtitles_mime,
-                    "name": f"{subtitles_lang} - {subtitle_id} Subtitle",
-                }
-            ]
-            media["tracks"] = sub_msg
-            media["textTrackStyle"] = {
-                "backgroundColor": "#FFFFFF00",
-                "edgeType": "OUTLINE",
-                "edgeColor": "#000000FF",
-            }
-
-        if enqueue:
-            msg = {
-                "mediaSessionId": self.status.media_session_id,
-                "items": [
-                    {
-                        "media": media,
-                        "autoplay": True,
-                        "startTime": 0,
-                        "preloadTime": 0,
-                    }
-                ],
-                MESSAGE_TYPE: TYPE_QUEUE_INSERT,
-            }
-        else:
-            msg = {
-                "media": media,
-                MESSAGE_TYPE: TYPE_LOAD,
-            }
-        if current_time is not None:
-            msg["currentTime"] = current_time
-        msg["autoplay"] = autoplay
-        msg["customData"] = {}
-
-        if subtitles:
-            msg["activeTrackIds"] = [subtitle_id]
-
-        self.send_message(msg, inc_session_id=True)
-
     def tear_down(self):
         """Called when controller is destroyed."""
         super().tear_down()
 
         self._status_listeners[:] = []
 
-    def quick_play(self, media_id=None, media_type="video/mp4", **kwargs):
-        """Quick Play"""
-        self.play_media(media_id, media_type, **kwargs)
+
+class DefaultMediaReceiverController(BaseMediaPlayer):
+    """Controller to force media to play with the default media receiver."""
+
+    def __init__(self):
+        super().__init__(supporting_app_id=APP_MEDIA_RECEIVER)
