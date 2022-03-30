@@ -318,187 +318,6 @@ class MediaStatusListener(abc.ABC):
         """Updated media status."""
 
 
-class MediaController(BaseMediaPlayer):
-    """Controller to interact with Google media namespace."""
-
-    def __init__(self):
-        super().__init__(
-            supporting_app_id=APP_MEDIA_RECEIVER,
-            app_must_match=False,
-        )
-
-        self.media_session_id = 0
-        self.status = MediaStatus()
-        self.session_active_event = threading.Event()
-        self._status_listeners = []
-
-    def channel_connected(self):
-        """Called when media channel is connected. Will update status."""
-        self.update_status()
-
-    def channel_disconnected(self):
-        """Called when a media channel is disconnected. Will erase status."""
-        self.status = MediaStatus()
-        self._fire_status_changed()
-
-    def receive_message(self, _message, data: dict):
-        """Called when a media message is received."""
-        if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
-            self._process_media_status(data)
-
-            return True
-
-        return False
-
-    def register_status_listener(self, listener: MediaStatusListener):
-        """Register a listener for new media statuses. A new status will
-        call listener.new_media_status(status)"""
-        self._status_listeners.append(listener)
-
-    def update_status(self, callback_function_param=False):
-        """Send message to update the status."""
-        self.send_message(
-            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
-        )
-
-    def _send_command(self, command):
-        """Send a command to the Chromecast on media channel."""
-        if self.status is None or self.status.media_session_id is None:
-            self.logger.warning(
-                "%s command requested but no session is active.", command[MESSAGE_TYPE]
-            )
-            return
-
-        command["mediaSessionId"] = self.status.media_session_id
-
-        self.send_message(command, inc_session_id=True)
-
-    @property
-    def is_playing(self):
-        """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
-        Returns if the Chromecast is playing."""
-        return self.status is not None and self.status.player_is_playing
-
-    @property
-    def is_paused(self):
-        """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
-        Returns if the Chromecast is paused."""
-        return self.status is not None and self.status.player_is_paused
-
-    @property
-    def is_idle(self):
-        """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
-        Returns if the Chromecast is idle on a media supported app."""
-        return self.status is not None and self.status.player_is_idle
-
-    @property
-    def title(self):
-        """Deprecated as of June 8, 2015. Use self.status.title.
-        Return title of the current playing item."""
-        return None if not self.status else self.status.title
-
-    @property
-    def thumbnail(self):
-        """Deprecated as of June 8, 2015. Use self.status.images.
-        Return thumbnail url of current playing item."""
-        if not self.status:
-            return None
-
-        images = self.status.images
-
-        return images[0].url if images else None
-
-    def play(self):
-        """Send the PLAY command."""
-        self._send_command({MESSAGE_TYPE: TYPE_PLAY})
-
-    def pause(self):
-        """Send the PAUSE command."""
-        self._send_command({MESSAGE_TYPE: TYPE_PAUSE})
-
-    def stop(self):
-        """Send the STOP command."""
-        self._send_command({MESSAGE_TYPE: TYPE_STOP})
-
-    def rewind(self):
-        """Starts playing the media from the beginning."""
-        self.seek(0)
-
-    def skip(self):
-        """Skips rest of the media. Values less then -5 behaved flaky."""
-        self.seek(int(self.status.duration) - 5)
-
-    def seek(self, position):
-        """Seek the media to a specific location."""
-        self._send_command(
-            {
-                MESSAGE_TYPE: TYPE_SEEK,
-                "currentTime": position,
-                "resumeState": "PLAYBACK_START",
-            }
-        )
-
-    def queue_next(self):
-        """Send the QUEUE_NEXT command."""
-        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1})
-
-    def queue_prev(self):
-        """Send the QUEUE_PREV command."""
-        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1})
-
-    def enable_subtitle(self, track_id):
-        """Enable specific text track."""
-        self._send_command(
-            {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]}
-        )
-
-    def disable_subtitle(self):
-        """Disable subtitle."""
-        self._send_command({MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []})
-
-    def block_until_active(self, timeout=None):
-        """
-        Blocks thread until the media controller session is active on the
-        chromecast. The media controller only accepts playback control
-        commands when a media session is active.
-
-        If a session is already active then the method returns immediately.
-
-        :param timeout: a floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        """
-        self.session_active_event.wait(timeout=timeout)
-
-    def _process_media_status(self, data):
-        """Processes a STATUS message."""
-        self.status.update(data)
-
-        self.logger.debug("Media:Received status %s", data)
-
-        # Update session active threading event
-        if self.status.media_session_id is None:
-            self.session_active_event.clear()
-        else:
-            self.session_active_event.set()
-
-        self._fire_status_changed()
-
-    def _fire_status_changed(self):
-        """Tells listeners of a changed status."""
-        for listener in self._status_listeners:
-            try:
-                listener.new_media_status(self.status)
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Exception thrown when calling media status callback")
-
-    def tear_down(self):
-        """Called when controller is destroyed."""
-        super().tear_down()
-
-        self._status_listeners[:] = []
-
-
 class BaseMediaPlayer(BaseController):
     """Mixin class for apps which can play media using the default media namespace."""
 
@@ -683,6 +502,187 @@ class BaseMediaPlayer(BaseController):
         start_play_media_sent.wait(10)
         if not start_play_media_sent.is_set():
             raise PyChromecastError()
+
+
+class MediaController(BaseMediaPlayer):
+    """Controller to interact with Google media namespace."""
+
+    def __init__(self):
+        super().__init__(
+            supporting_app_id=APP_MEDIA_RECEIVER,
+            app_must_match=False,
+        )
+
+        self.media_session_id = 0
+        self.status = MediaStatus()
+        self.session_active_event = threading.Event()
+        self._status_listeners = []
+
+    def channel_connected(self):
+        """Called when media channel is connected. Will update status."""
+        self.update_status()
+
+    def channel_disconnected(self):
+        """Called when a media channel is disconnected. Will erase status."""
+        self.status = MediaStatus()
+        self._fire_status_changed()
+
+    def receive_message(self, _message, data: dict):
+        """Called when a media message is received."""
+        if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
+            self._process_media_status(data)
+
+            return True
+
+        return False
+
+    def register_status_listener(self, listener: MediaStatusListener):
+        """Register a listener for new media statuses. A new status will
+        call listener.new_media_status(status)"""
+        self._status_listeners.append(listener)
+
+    def update_status(self, callback_function_param=False):
+        """Send message to update the status."""
+        self.send_message(
+            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
+        )
+
+    def _send_command(self, command):
+        """Send a command to the Chromecast on media channel."""
+        if self.status is None or self.status.media_session_id is None:
+            self.logger.warning(
+                "%s command requested but no session is active.", command[MESSAGE_TYPE]
+            )
+            return
+
+        command["mediaSessionId"] = self.status.media_session_id
+
+        self.send_message(command, inc_session_id=True)
+
+    @property
+    def is_playing(self):
+        """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
+        Returns if the Chromecast is playing."""
+        return self.status is not None and self.status.player_is_playing
+
+    @property
+    def is_paused(self):
+        """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
+        Returns if the Chromecast is paused."""
+        return self.status is not None and self.status.player_is_paused
+
+    @property
+    def is_idle(self):
+        """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
+        Returns if the Chromecast is idle on a media supported app."""
+        return self.status is not None and self.status.player_is_idle
+
+    @property
+    def title(self):
+        """Deprecated as of June 8, 2015. Use self.status.title.
+        Return title of the current playing item."""
+        return None if not self.status else self.status.title
+
+    @property
+    def thumbnail(self):
+        """Deprecated as of June 8, 2015. Use self.status.images.
+        Return thumbnail url of current playing item."""
+        if not self.status:
+            return None
+
+        images = self.status.images
+
+        return images[0].url if images else None
+
+    def play(self):
+        """Send the PLAY command."""
+        self._send_command({MESSAGE_TYPE: TYPE_PLAY})
+
+    def pause(self):
+        """Send the PAUSE command."""
+        self._send_command({MESSAGE_TYPE: TYPE_PAUSE})
+
+    def stop(self):
+        """Send the STOP command."""
+        self._send_command({MESSAGE_TYPE: TYPE_STOP})
+
+    def rewind(self):
+        """Starts playing the media from the beginning."""
+        self.seek(0)
+
+    def skip(self):
+        """Skips rest of the media. Values less then -5 behaved flaky."""
+        self.seek(int(self.status.duration) - 5)
+
+    def seek(self, position):
+        """Seek the media to a specific location."""
+        self._send_command(
+            {
+                MESSAGE_TYPE: TYPE_SEEK,
+                "currentTime": position,
+                "resumeState": "PLAYBACK_START",
+            }
+        )
+
+    def queue_next(self):
+        """Send the QUEUE_NEXT command."""
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1})
+
+    def queue_prev(self):
+        """Send the QUEUE_PREV command."""
+        self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1})
+
+    def enable_subtitle(self, track_id):
+        """Enable specific text track."""
+        self._send_command(
+            {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]}
+        )
+
+    def disable_subtitle(self):
+        """Disable subtitle."""
+        self._send_command({MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []})
+
+    def block_until_active(self, timeout=None):
+        """
+        Blocks thread until the media controller session is active on the
+        chromecast. The media controller only accepts playback control
+        commands when a media session is active.
+
+        If a session is already active then the method returns immediately.
+
+        :param timeout: a floating point number specifying a timeout for the
+                        operation in seconds (or fractions thereof). Or None
+                        to block forever.
+        """
+        self.session_active_event.wait(timeout=timeout)
+
+    def _process_media_status(self, data):
+        """Processes a STATUS message."""
+        self.status.update(data)
+
+        self.logger.debug("Media:Received status %s", data)
+
+        # Update session active threading event
+        if self.status.media_session_id is None:
+            self.session_active_event.clear()
+        else:
+            self.session_active_event.set()
+
+        self._fire_status_changed()
+
+    def _fire_status_changed(self):
+        """Tells listeners of a changed status."""
+        for listener in self._status_listeners:
+            try:
+                listener.new_media_status(self.status)
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Exception thrown when calling media status callback")
+
+    def tear_down(self):
+        """Called when controller is destroyed."""
+        super().tear_down()
+
+        self._status_listeners[:] = []
 
 
 class DefaultMediaReceiverController(BaseMediaPlayer):
