@@ -12,14 +12,16 @@ from time import sleep
 import zeroconf
 
 import pychromecast
-from pychromecast.controllers.bubbleupnp import BubbleUPNPController
+from pychromecast import quick_play
 
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Kitchen speaker"
 
 # Change to an audio or video url
-MEDIA_URL = "https://c3.toivon.net/toivon/toivon_3?mp=/stream"
+MEDIA_URL = (
+    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+)
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the BubbleUPNP Controller to play an URL."
@@ -59,10 +61,14 @@ cast = list(chromecasts)[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
 print(f'Found chromecast with name "{args.cast}", attempting to play "{args.url}"')
-bubbleupnp = BubbleUPNPController()
-cast.register_handler(bubbleupnp)
-bubbleupnp.launch()
-bubbleupnp.play_media(args.url, "audio/mp3", stream_type="LIVE")
+
+app_name = "bubbleupnp"
+app_data = {
+    "media_id": args.url,
+    "media_type": "audio/mp3",
+    "stream_type": "LIVE",
+}
+quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)
 
