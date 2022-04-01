@@ -485,8 +485,10 @@ class BaseMediaPlayer(BaseController):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(self, media_id=None, media_type="video/mp4", **kwargs):
+    def quick_play(self, media_id=None, **kwargs):
         """Quick Play"""
+
+        media_type = kwargs.pop("media_type", "video/mp4")
 
         def start_play_media_sent_callback(_):
             """Set event when playback request has been sent."""

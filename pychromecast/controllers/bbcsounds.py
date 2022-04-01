@@ -28,7 +28,7 @@ class BbcSoundsController(BaseMediaPlayer):
             metadata = metadata_default
         super().quick_play(
             media_id,
-            None,
+            media_type=None,
             stream_type=stream_type,
             metadata=metadata,
             **kwargs,
