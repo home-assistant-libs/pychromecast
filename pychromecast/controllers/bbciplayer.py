@@ -33,7 +33,7 @@ class BbcIplayerController(BaseMediaPlayer):
 
         super().quick_play(
             media_id,
-            None,
+            media_type=None,
             stream_type=stream_type,
             metadata=metadata,
             media_info={"customData": {"secondary_title": subtitle}},
