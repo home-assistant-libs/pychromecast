@@ -262,6 +262,8 @@ class MediaStatus:
 
         status_data = data["status"][0]
         media_data = status_data.get("media") or {}
+        if not media_data and "extendedStatus" in status_data:
+            media_data = status_data["extendedStatus"].get("media") or {}
         volume_data = status_data.get("volume", {})
 
         self.current_time = status_data.get("currentTime", self.current_time)
@@ -269,7 +271,8 @@ class MediaStatus:
         self.content_type = media_data.get("contentType", self.content_type)
         self.duration = media_data.get("duration", self.duration)
         self.stream_type = media_data.get("streamType", self.stream_type)
-        self.idle_reason = status_data.get("idleReason", self.idle_reason)
+        # Clear idle reason if not set in the message
+        self.idle_reason = status_data.get("idleReason", None)
         self.media_session_id = status_data.get("mediaSessionId", self.media_session_id)
         self.playback_rate = status_data.get("playbackRate", self.playback_rate)
         self.player_state = status_data.get("playerState", self.player_state)
@@ -660,7 +663,7 @@ class MediaController(BaseMediaPlayer):
         """Processes a STATUS message."""
         self.status.update(data)
 
-        self.logger.debug("Media:Received status %s", data)
+        self.logger.debug("Media:Updated status %s", self.status)
 
         # Update session active threading event
         if self.status.media_session_id is None:
