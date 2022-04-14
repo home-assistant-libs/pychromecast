@@ -41,6 +41,18 @@ class MyMediaStatusListener(MediaStatusListener):
         print("[", time.ctime(), " - ", self.name, "] status media change:")
         print(status)
 
+    def load_media_failed(self, item, error_code):
+        print(
+            "[",
+            time.ctime(),
+            " - ",
+            self.name,
+            "] load media filed for item: ",
+            item,
+            " with code: ",
+            error_code,
+        )
+
 
 parser = argparse.ArgumentParser(
     description="Example on how to create a simple Chromecast event listener."
