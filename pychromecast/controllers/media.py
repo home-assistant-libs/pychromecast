@@ -27,6 +27,7 @@ MEDIA_PLAYER_STATE_UNKNOWN = "UNKNOWN"
 TYPE_EDIT_TRACKS_INFO = "EDIT_TRACKS_INFO"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_LOAD = "LOAD"
+TYPE_LOAD_FAILED = "LOAD_FAILED"
 TYPE_QUEUE_INSERT = "QUEUE_INSERT"
 TYPE_MEDIA_STATUS = "MEDIA_STATUS"
 TYPE_PAUSE = "PAUSE"
@@ -68,6 +69,36 @@ CMD_SUPPORT_STREAM_TRANSFER = 262144
 # Legacy?
 CMD_SUPPORT_SKIP_FORWARD = 16
 CMD_SUPPORT_SKIP_BACKWARD = 32
+
+# From https://developers.google.com/cast/docs/web_receiver/error_codes
+MEDIA_PLAYER_ERROR_CODES = {
+    100: "MEDIA_UNKNOWN",
+    101: "MEDIA_ABORTED",
+    102: "MEDIA_DECODE",
+    103: "MEDIA_NETWORK",
+    104: "MEDIA_SRC_NOT_SUPPORTED",
+    110: "SOURCE_BUFFER_FAILURE",
+    201: "MEDIAKEYS_NETWORK",
+    202: "MEDIAKEYS_UNSUPPORTED",
+    203: "MEDIAKEYS_WEBCRYPTO",
+    301: "SEGMENT_NETWORK",
+    311: "HLS_NETWORK_MASTER_PLAYLIST",
+    312: "HLS_NETWORK_PLAYLIST",
+    313: "HLS_NETWORK_NO_KEY_RESPONSE",
+    314: "HLS_NETWORK_KEY_LOAD",
+    315: "HLS_NETWORK_INVALID_SEGMENT",
+    316: "HLS_SEGMENT_PARSING",
+    321: "DASH_NETWORK",
+    322: "DASH_NO_INIT",
+    331: "SMOOTH_NETWORK",
+    332: "SMOOTH_NO_MEDIA_DATA",
+    411: "HLS_MANIFEST_MASTER",
+    412: "HLS_MANIFEST_PLAYLIST",
+    421: "DASH_MANIFEST_NO_PERIODS",
+    422: "DASH_MANIFEST_NO_MIMETYPE",
+    423: "DASH_INVALID_SEGMENT_INFO",
+    431: "SMOOTH_MANIFEST",
+}
 
 
 MediaImage = namedtuple("MediaImage", "url height width")
@@ -320,6 +351,10 @@ class MediaStatusListener(abc.ABC):
     def new_media_status(self, status: MediaStatus):
         """Updated media status."""
 
+    @abc.abstractmethod
+    def load_media_failed(self, item: int, error_code: int):
+        """Called when load media failed."""
+
 
 class BaseMediaPlayer(BaseController):
     """Mixin class for apps which can play media using the default media namespace."""
@@ -536,6 +571,9 @@ class MediaController(BaseMediaPlayer):
         """Called when a media message is received."""
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)
+            return True
+        if data[MESSAGE_TYPE] == TYPE_LOAD_FAILED:
+            self._process_load_failed(data)
 
             return True
 
@@ -675,6 +713,20 @@ class MediaController(BaseMediaPlayer):
 
         self._fire_status_changed()
 
+    def _process_load_failed(self, data):
+        """Processes a LOAD_FAILED message."""
+        item = data.get("itemId")
+        error_code = data.get("detailedErrorCode")
+
+        self.logger.debug(
+            "Media:Load failed with code %s(%s) for item %s",
+            error_code,
+            MEDIA_PLAYER_ERROR_CODES.get(error_code, "unknown code"),
+            item,
+        )
+
+        self._fire_load_failed(item, error_code)
+
     def _fire_status_changed(self):
         """Tells listeners of a changed status."""
         for listener in self._status_listeners:
@@ -683,11 +735,19 @@ class MediaController(BaseMediaPlayer):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
+    def _fire_load_failed(self, item, error_code):
+        """Tells listeners of a changed status."""
+        for listener in self._status_listeners:
+            try:
+                listener.load_media_failed(item, error_code)
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Exception thrown when calling load failed callback")
+
     def tear_down(self):
         """Called when controller is destroyed."""
         super().tear_down()
 
-        self._status_listeners[:] = []
+        self._status_listeners = []
 
 
 class DefaultMediaReceiverController(BaseMediaPlayer):

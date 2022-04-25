@@ -303,4 +303,4 @@ class MultizoneController(BaseController):
         """Called when controller is destroyed."""
         super().tear_down()
 
-        self._status_listeners[:] = []
+        self._status_listeners = []
