@@ -212,7 +212,7 @@ class ZeroConfListener:
                 cast_type = CAST_TYPE_GROUP
                 manufacturer = MF_GOOGLE
             else:
-                cast_type, manufacturer = CAST_TYPES.get(model_name.lower(), None, None)
+                cast_type, manufacturer = CAST_TYPES.get(model_name.lower(), (None, None))
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
                     {service_info},
