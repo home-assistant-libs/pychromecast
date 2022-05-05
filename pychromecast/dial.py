@@ -94,7 +94,7 @@ def _get_status(services, zconf, path, secure, timeout, context):
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
         data = response.read()
-    return json.loads(data.decode("utf-8"))
+    return (host, json.loads(data.decode("utf-8")))
 
 
 def get_ssl_context():
@@ -116,9 +116,10 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
         cast_type = CAST_TYPE_GROUP
         manufacturer = "Google Inc."
     else:
+        host = "<unknown>"
         try:
             display_supported = True
-            status = _get_status(
+            host, status = _get_status(
                 cast_info.services,
                 zconf,
                 "/setup/eureka_info?params=device_info,name",
@@ -143,7 +144,12 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
             OSError,
             ValueError,
         ) as err:
-            _LOGGER.warning("Failed to determine cast type (%s)", err)
+            _LOGGER.warning(
+                "Failed to determine cast type for host %s (%s) (services:%s)",
+                host,
+                err,
+                cast_info.services,
+            )
             cast_type = CAST_TYPE_CHROMECAST
 
     return CastInfo(
@@ -171,7 +177,7 @@ def get_device_info(  # pylint: disable=too-many-locals
     try:
         if services is None:
             services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
-        status = _get_status(
+        _, status = _get_status(
             services,
             zconf,
             "/setup/eureka_info?params=device_info,name",
@@ -251,7 +257,7 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
     try:
         if services is None:
             services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
-        status = _get_status(
+        _, status = _get_status(
             services,
             zconf,
             "/setup/eureka_info?params=multizone",

@@ -8,6 +8,21 @@ CAST_TYPE_AUDIO = "audio"
 # Cast Audio group device, supports only audio
 CAST_TYPE_GROUP = "group"
 
+MF_GOOGLE = "Google Inc."
+
+CAST_TYPES = {
+    "chromecast audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "chromecast": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "eureka dongle": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "google cast group": (CAST_TYPE_GROUP, MF_GOOGLE),
+    "google home mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "google home": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "google nest hub": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "google nest mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "lenovocd-24502f": (CAST_TYPE_AUDIO, "LENOVO"),
+    "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
+}
+
 SERVICE_TYPE_HOST = "host"
 SERVICE_TYPE_MDNS = "mdns"
 
