@@ -18,9 +18,11 @@ CAST_TYPES = {
     "google home mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "google home": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "google nest hub": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "google nest hub max": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
     "google nest mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, "LENOVO"),
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "shield android tv": (CAST_TYPE_CHROMECAST, "NVIDIA"),
 }
 
 SERVICE_TYPE_HOST = "host"
