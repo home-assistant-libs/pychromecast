@@ -21,6 +21,7 @@ CAST_TYPES = {
     "google nest hub max": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
     "google nest mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, "LENOVO"),
+    "mitv-mssp2": (CAST_TYPE_CHROMECAST, "Xiaomi"),
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "shield android tv": (CAST_TYPE_CHROMECAST, "NVIDIA"),
 }
