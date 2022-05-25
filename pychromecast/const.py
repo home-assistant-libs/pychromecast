@@ -23,6 +23,7 @@ CAST_TYPES = {
     "lenovocd-24502f": (CAST_TYPE_AUDIO, "LENOVO"),
     "mitv-mssp2": (CAST_TYPE_CHROMECAST, "Xiaomi"),
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "shield android tv": (CAST_TYPE_CHROMECAST, "NVIDIA"),
 }
 
