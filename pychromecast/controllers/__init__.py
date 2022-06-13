@@ -138,7 +138,7 @@ class BaseController(abc.ABC):
             no_add_request_id=no_add_request_id,
         )
 
-    def receive_message(self, _message, _data: dict):  # pylint: disable=no-self-use
+    def receive_message(self, _message, _data: dict):
         """
         Called when a message is received that matches the namespace.
         Returns boolean indicating if message was handled.
