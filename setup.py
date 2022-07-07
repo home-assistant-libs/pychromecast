@@ -3,9 +3,11 @@ from setuptools import setup, find_packages
 
 long_description = open("README.rst").read()
 
+exec(open('pychromecast/version.py').read())  # Set __version__
+
 setup(
     name="PyChromecast",
-    version="13.0.0",
+    version=__version__,
     license="MIT",
     url="https://github.com/balloob/pychromecast",
     author="Paulus Schoutsen",
