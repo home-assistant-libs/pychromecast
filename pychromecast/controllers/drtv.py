@@ -1,6 +1,5 @@
 """Controller to interface with the DRTV app, from the Danish Broadcasting Corporation, dr.dk"""
 import threading
-import time
 import json
 
 from .media import STREAM_TYPE_BUFFERED, STREAM_TYPE_LIVE, MESSAGE_TYPE, TYPE_LOAD, BaseMediaPlayer
@@ -9,6 +8,7 @@ from ..config import APP_DRTV
 from ..error import PyChromecastError
 
 APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
+
 
 class DRTVController(BaseMediaPlayer):
     """Controller to interact with DRTV app."""
@@ -63,43 +63,17 @@ class DRTVController(BaseMediaPlayer):
                 "userId": ""
             },
         }
-
-        print(msg)
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def _get_drtokens(self):
-        """Try to automatically retrieve a token from the webplayer. Requires Selenium with Chrome support."""
-
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-
-            options = Options()
-            options.headless = True
-
-            driver = webdriver.Chrome(options=options) 
-            try:
-                url = 'http://dr.dk/tv/'
-                driver.get(url)
-
-                for _ in range(10):
-                    script_get_token = """return localStorage['session.tokens']"""
-                    result = driver.execute_script(script_get_token)
-                    if result:
-                        return result
-                    time.sleep(1)
-            finally:
-                driver.quit()
-        except Exception as err:
-            raise PyChromecastError("Failed in retrieving DR token automatically; Selenium installed with Chrome support?", err)
-        return ""
-
     # pylint: disable-next=arguments-differ
-    def quick_play(self, media_id=None, dr_tokens=None, **kwargs):
-        """Quick Play"""
-        if not dr_tokens:
-            dr_tokens = self._get_drtokens()
+    def quick_play(self, media_id, dr_tokens, **kwargs):
+        """
+        Quick Play
 
+        Parameters:
+        media_id: the id of the media to play, e.g. 20875
+        dr_session_tokens: JWT tokens to allow access to the content
+        """
         play_media_done_event = threading.Event()
 
         def play_media_done(_):
@@ -115,4 +89,3 @@ class DRTVController(BaseMediaPlayer):
         play_media_done_event.wait(30)
         if not play_media_done_event.is_set():
             raise PyChromecastError()
-

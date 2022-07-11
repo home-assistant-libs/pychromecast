@@ -7,8 +7,6 @@ import argparse
 import logging
 import sys
 from time import sleep
-import json
-import threading
 
 import zeroconf
 import pychromecast
@@ -79,6 +77,32 @@ cast = chromecasts[0]
 cast.wait()
 print(f'Found chromecast with name "{args.cast}", attempting to play "{args.media_id}"')
 
+if not args.dr_tokens:
+    print("Trying to automatically retrieve a token from the webplayer. Requires Selenium with Chrome support.")
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+
+    options = Options()
+    options.headless = True
+
+    driver = webdriver.Chrome(options=options)
+    try:
+        url = 'http://dr.dk/tv/'
+        driver.get(url)
+
+        for _ in range(20):
+            script_get_token = """return localStorage['session.tokens']"""
+            result = driver.execute_script(script_get_token)
+            if result:
+                args.dr_tokens = result
+                break
+            sleep(1)
+
+        if not args.dr_tokens:
+            raise Exception("Failed in retrieving DR token automatically")
+    finally:
+        driver.quit()
+
 app_name = "drtv"
 app_data = {
     "media_id": args.media_id,
@@ -92,5 +116,3 @@ quick_play.quick_play(cast, app_name, app_data)
 sleep(10)
 
 browser.stop_discovery()
-
-
