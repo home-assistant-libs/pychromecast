@@ -78,7 +78,7 @@ cast.wait()
 print(f'Found chromecast with name "{args.cast}", attempting to play "{args.media_id}"')
 
 if not args.dr_tokens:
-    print("Trying to automatically retrieve a token from the webplayer. Requires Selenium with Chrome support.")
+    print("Trying to automatically retrieve a token from the webplayer. Requires Selenium with Chrome support. See https://pypi.org/project/selenium/")
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
