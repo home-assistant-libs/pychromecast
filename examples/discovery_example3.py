@@ -26,6 +26,9 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
+parser.add_argument(
+    "--verbose", help="Full display of discovered devices", action="store_true"
+)
 args = parser.parse_args()
 
 if args.show_debug:
@@ -54,4 +57,8 @@ browser.stop_discovery()
 
 print(f"Discovered {len(devices)} device(s):")
 for device in devices:
-    print(f"  {device}")
+    print(
+        f"  '{device.friendly_name}' ({device.model_name}) @ {device.host}:{device.port} uuid: {device.uuid}"
+    )
+    if args.verbose:
+        print(f"  service: {device}")

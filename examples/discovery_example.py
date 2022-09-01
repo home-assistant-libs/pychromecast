@@ -28,6 +28,9 @@ parser.add_argument("--show-debug", help="Enable debug log", action="store_true"
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
+parser.add_argument(
+    "--verbose", help="Full display of discovered devices", action="store_true"
+)
 args = parser.parse_args()
 
 if args.show_debug:
@@ -41,7 +44,11 @@ def list_devices():
     """Print a list of known devices."""
     print("Currently known cast devices:")
     for uuid, service in browser.services.items():
-        print(f"  {uuid} {service}")
+        print(
+            f"  '{service.friendly_name}' ({service.model_name}) @ {service.host}:{service.port} uuid: {service.uuid}"
+        )
+        if args.verbose:
+            print(f"  service: {service}")
 
 
 class MyCastListener(pychromecast.discovery.AbstractCastListener):
@@ -49,17 +56,21 @@ class MyCastListener(pychromecast.discovery.AbstractCastListener):
 
     def add_cast(self, uuid, _service):
         """Called when a new cast has beeen discovered."""
-        print(f"Found cast device with UUID {uuid}")
+        print(
+            f"Found cast device '{browser.services[uuid].friendly_name}' with UUID {uuid}"
+        )
         list_devices()
 
     def remove_cast(self, uuid, _service, cast_info):
         """Called when a cast has beeen lost (MDNS info expired or host down)."""
-        print(f"Lost cast device with UUID {uuid} {cast_info}")
+        print(f"Lost cast device '{cast_info.friendly_name}' with UUID {uuid}")
         list_devices()
 
     def update_cast(self, uuid, _service):
         """Called when a cast has beeen updated (MDNS info renewed or changed)."""
-        print(f"Updated cast device with UUID {uuid}")
+        print(
+            f"Updated cast device '{browser.services[uuid].friendly_name}' with UUID {uuid}"
+        )
         list_devices()
 
 
