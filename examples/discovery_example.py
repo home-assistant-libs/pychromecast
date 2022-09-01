@@ -43,7 +43,7 @@ if args.show_zeroconf_debug:
 def list_devices():
     """Print a list of known devices."""
     print("Currently known cast devices:")
-    for uuid, service in browser.services.items():
+    for service in browser.services.values():
         print(
             f"  '{service.friendly_name}' ({service.model_name}) @ {service.host}:{service.port} uuid: {service.uuid}"
         )
