@@ -25,6 +25,9 @@ CAST_TYPES = {
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "shield android tv": (CAST_TYPE_CHROMECAST, "NVIDIA"),
+    "bravia 4k vh2": (CAST_TYPE_CHROMECAST, "Sony"),
+    "marshall stanmore ii": (CAST_TYPE_AUDIO, "Unknown manufacturer"),
+    "C4A": (CAST_TYPE_AUDIO, "Sony Corporation"),
 }
 
 SERVICE_TYPE_HOST = "host"
