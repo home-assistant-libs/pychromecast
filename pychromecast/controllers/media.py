@@ -36,6 +36,7 @@ TYPE_QUEUE_NEXT = "QUEUE_NEXT"
 TYPE_QUEUE_PREV = "QUEUE_PREV"
 TYPE_QUEUE_UPDATE = "QUEUE_UPDATE"
 TYPE_SEEK = "SEEK"
+TYPE_SET_PLAYBACK_RATE = "SET_PLAYBACK_RATE"
 TYPE_STOP = "STOP"
 
 METADATA_TYPE_GENERIC = 0
@@ -135,7 +136,8 @@ class MediaStatus:
             # Add time since last update
             return (
                 self.current_time
-                + (datetime.utcnow() - self.last_updated).total_seconds()
+                + self.playback_rate
+                * (datetime.utcnow() - self.last_updated).total_seconds()
             )
         # Not playing, return last reported seek time
         return self.current_time
@@ -667,6 +669,15 @@ class MediaController(BaseMediaPlayer):
                 MESSAGE_TYPE: TYPE_SEEK,
                 "currentTime": position,
                 "resumeState": "PLAYBACK_START",
+            }
+        )
+
+    def set_playback_rate(self, playback_rate):
+        """Set the playback rate. 1.0 is regular time, 0.5 is slow motion."""
+        self._send_command(
+            {
+                MESSAGE_TYPE: TYPE_SET_PLAYBACK_RATE,
+                "playbackRate": playback_rate,
             }
         )
 
