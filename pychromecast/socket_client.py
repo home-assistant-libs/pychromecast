@@ -556,6 +556,13 @@ class SocketClient(threading.Thread):
         receive something on the socket (get_socket()).
         """
         # pylint: disable=too-many-branches, too-many-return-statements
+        self.logger.debug(
+            "[%s(%s):%s] run_once timeout: %s",
+            self.fn or "",
+            self.host,
+            self.port,
+            timeout,
+        )
 
         try:
             if not self._check_connection():
