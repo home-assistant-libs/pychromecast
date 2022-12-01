@@ -563,9 +563,11 @@ class SocketClient(threading.Thread):
             return 1
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
+        rlist = [self.socket, self.socketpair[0]]
         try:
+            can_read, _, _ = select.select(rlist, [], [], timeout)
             poll_obj = select.poll()
-            for poll_fd in (self.socket, self.socketpair[0]):
+            for poll_fd in rlist:
                 poll_obj.register(poll_fd, select.POLLIN)
             poll_result = poll_obj.poll(timeout)
             #self.logger.debug(
@@ -575,14 +577,15 @@ class SocketClient(threading.Thread):
             #    self.port,
             #    poll_result,
             #)
-            can_read = [fd for fd, _status in poll_result]
-            #self.logger.debug(
-            #    "[%s(%s):%s] run_once can_read: %s",
-            #    self.fn or "",
-            #    self.host,
-            #    self.port,
-            #    can_read,
-            #)
+            can_read2 = [fd for fd, _status in poll_result]
+            self.logger.debug(
+                "[%s(%s):%s] run_once can_read: %s ; can_read2: %s",
+                self.fn or "",
+                self.host,
+                self.port,
+                can_read,
+                can_read2,
+            )
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
