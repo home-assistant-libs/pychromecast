@@ -571,9 +571,14 @@ class SocketClient(threading.Thread):
             return 1
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
-        rlist = [self.socket, self.socketpair[0]]
+        #rlist = [self.socket, self.socketpair[0]]
+        #try:
+        #    can_read, _, _ = select.select(rlist, [], [], timeout)
         try:
-            can_read, _, _ = select.select(rlist, [], [], timeout)
+            poll = select.poll()
+            poll.register(self.socket, POLLIN)
+            poll.register(self.socketpair[0], POLLIN)
+            poll.poll(timeout)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
