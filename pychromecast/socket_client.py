@@ -568,21 +568,21 @@ class SocketClient(threading.Thread):
             for poll_fd in (self.socket, self.socketpair[0]):
                 poll_obj.register(poll_fd, select.POLLIN)
             poll_result = poll_obj.poll(timeout)
-            self.logger.debug(
-                "[%s(%s):%s] run_once poll_result: %s",
-                self.fn or "",
-                self.host,
-                self.port,
-                poll_result,
-            )
+            #self.logger.debug(
+            #    "[%s(%s):%s] run_once poll_result: %s",
+            #    self.fn or "",
+            #    self.host,
+            #    self.port,
+            #    poll_result,
+            #)
             can_read = [fd for fd, _status in poll_result]
-            self.logger.debug(
-                "[%s(%s):%s] run_once can_read: %s",
-                self.fn or "",
-                self.host,
-                self.port,
-                can_read,
-            )
+            #self.logger.debug(
+            #    "[%s(%s):%s] run_once can_read: %s",
+            #    self.fn or "",
+            #    self.host,
+            #    self.port,
+            #    can_read,
+            #)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
