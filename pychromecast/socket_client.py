@@ -63,7 +63,6 @@ POLL_TIME_BLOCKING = 5.0
 POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30
 RETRY_TIME = 5
-READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
 
 class InterruptLoop(Exception):
     """The chromecast has been manually stopped."""
@@ -566,8 +565,8 @@ class SocketClient(threading.Thread):
         # poll the socket, as well as the socketpair to allow us to be interrupted
         try:
             poll = select.poll()
-            poll.register(self.socket, READ_ONLY)
-            poll.register(self.socketpair[0], READ_ONLY)
+            for poll_fd in (self.socket, self.socketpair[0]):
+                poll.register(poll_fd, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR)
             poll_result = poll.poll(timeout)
             can_read = [fd for fd, _status in poll_result]
         except (ValueError, OSError) as exc:
