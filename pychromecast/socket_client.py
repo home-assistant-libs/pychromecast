@@ -568,7 +568,8 @@ class SocketClient(threading.Thread):
             poll = select.poll()
             poll.register(self.socket, READ_ONLY)
             poll.register(self.socketpair[0], READ_ONLY)
-            poll.poll(timeout)
+            poll_result = poll.poll(timeout)
+            can_read = [fd for fd, _status in poll_result]
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
