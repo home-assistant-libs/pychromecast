@@ -13,6 +13,8 @@ MF_GOOGLE = "Google Inc."
 CAST_TYPES = {
     "chromecast audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "chromecast": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "chromecast hd": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
+    "chromecast ultra": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
     "eureka dongle": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
     "google cast group": (CAST_TYPE_GROUP, MF_GOOGLE),
     "google home mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
