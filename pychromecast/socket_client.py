@@ -64,6 +64,7 @@ POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30
 RETRY_TIME = 5
 
+
 class InterruptLoop(Exception):
     """The chromecast has been manually stopped."""
 
@@ -565,7 +566,7 @@ class SocketClient(threading.Thread):
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
         # Map file descriptors to socket objects
-        fd_to_socket = { rlist_item.fileno(): rlist_item for rlist_item in rlist }
+        fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
         try:
             poll_obj = select.poll()
             for poll_fd in rlist:
