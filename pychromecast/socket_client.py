@@ -572,7 +572,7 @@ class SocketClient(threading.Thread):
             poll_obj = select.poll()
             for poll_fd in rlist:
                 poll_obj.register(poll_fd, select.POLLIN)
-            poll_result = poll_obj.poll(timeout)
+            poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
             can_read = [fd_to_socket[fd] for fd, _status in poll_result]
         except (ValueError, OSError) as exc:
             self.logger.error(
