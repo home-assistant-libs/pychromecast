@@ -17,6 +17,7 @@ class HomeAssistantController(BaseController):
     def __init__(
         self,
         hass_url,
+        hass_uuid,
         client_id,
         refresh_token,
         app_namespace=APP_NAMESPACE,
@@ -24,6 +25,7 @@ class HomeAssistantController(BaseController):
     ):
         super().__init__(app_namespace, app_id)
         self.hass_url = hass_url
+        self.hass_uuid = hass_uuid
         self.client_id = client_id
         self.refresh_token = refresh_token
         # {
@@ -45,6 +47,7 @@ class HomeAssistantController(BaseController):
             self.status is not None
             and self.status["connected"]
             and self.status["hassUrl"] == self.hass_url
+            and self.status["hassUUID"] == self.hass_uuid
         )
 
     def channel_connected(self):
@@ -90,6 +93,7 @@ class HomeAssistantController(BaseController):
                     "refreshToken": self.refresh_token,
                     "clientId": self.client_id,
                     "hassUrl": self.hass_url,
+                    "hassUUID": self.hass_uuid,
                 }
             )
         except Exception:  # pylint: disable=broad-except
@@ -99,6 +103,7 @@ class HomeAssistantController(BaseController):
         self._hass_connecting_event.wait(10)
         try:
             if not self._hass_connecting_event.is_set():
+                self.logger.warning("_connect_hass failed for %s", self.hass_url)
                 raise PyChromecastError()
         finally:
             self._hass_connecting_event.set()
@@ -110,13 +115,24 @@ class HomeAssistantController(BaseController):
     def get_status(self, callback_function=None):
         """Get status of Home Assistant Cast."""
         self._send_connected_message(
-            {"type": "get_status"}, callback_function=callback_function
+            {
+                "type": "get_status",
+                "hassUrl": self.hass_url,
+                "hassUUID": self.hass_uuid,
+            },
+            callback_function=callback_function,
         )
 
     def show_lovelace_view(self, view_path, url_path=None, callback_function=None):
         """Show a Lovelace UI."""
         self._send_connected_message(
-            {"type": "show_lovelace_view", "viewPath": view_path, "urlPath": url_path},
+            {
+                "type": "show_lovelace_view",
+                "hassUrl": self.hass_url,
+                "hassUUID": self.hass_uuid,
+                "viewPath": view_path,
+                "urlPath": url_path,
+            },
             callback_function=callback_function,
         )
 

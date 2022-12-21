@@ -370,7 +370,11 @@ class SocketClient(threading.Thread):
                             self.port,
                         )
                     return
-                except OSError as err:
+
+                # OSError raised if connecting to the socket fails, NotConnected raised
+                # if another thread tries - and fails - to send a message before the
+                # calls to receiver_controller and heartbeat_controller.
+                except (OSError, NotConnected) as err:
                     self.connecting = True
                     if self.stop.is_set():
                         self.logger.error(
@@ -528,20 +532,19 @@ class SocketClient(threading.Thread):
             return
 
         self.heartbeat_controller.reset()
-        self._force_recon = False
         self.logger.debug("Thread started...")
-        try:
-            while not self.stop.is_set():
+        while not self.stop.is_set():
+            try:
                 if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
                     break
-        except Exception:  # pylint: disable=broad-except
-            self.logger.exception(
-                ("[%s(%s):%s] Unhandled exception in worker thread"),
-                self.fn or "",
-                self.host,
-                self.port,
-            )
-            raise
+            except Exception:  # pylint: disable=broad-except
+                self._force_recon = True
+                self.logger.exception(
+                    "[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect",
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
 
         self.logger.debug("Thread done...")
         # Clean up
@@ -562,8 +565,15 @@ class SocketClient(threading.Thread):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
+        # Map file descriptors to socket objects because select.select does not support fd > 1024
+        # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
+        fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
         try:
-            can_read, _, _ = select.select(rlist, [], [], timeout)
+            poll_obj = select.poll()
+            for poll_fd in rlist:
+                poll_obj.register(poll_fd, select.POLLIN)
+            poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
+            can_read = [fd_to_socket[fd] for fd, _status in poll_result]
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
@@ -901,12 +911,15 @@ class SocketClient(threading.Thread):
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
-                if not no_add_request_id and callback_function:
-                    self._request_callbacks[request_id] = {
-                        "event": threading.Event(),
-                        "response": None,
-                        "function": callback_function,
-                    }
+                if callback_function:
+                    if not no_add_request_id:
+                        self._request_callbacks[request_id] = {
+                            "event": threading.Event(),
+                            "response": None,
+                            "function": callback_function,
+                        }
+                    else:
+                        callback_function(None)
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error:
                 self._request_callbacks.pop(request_id, None)
@@ -918,10 +931,15 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
         else:
-            raise NotConnected("Chromecast {self.host}:{self.port} is connecting...")
+            raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
 
     def send_platform_message(
-        self, namespace, message, inc_session_id=False, callback_function_param=False
+        self,
+        namespace,
+        message,
+        inc_session_id=False,
+        callback_function_param=False,
+        no_add_request_id=False,
     ):
         """Helper method to send a message to the platform."""
         return self.send_message(
@@ -930,10 +948,16 @@ class SocketClient(threading.Thread):
             message,
             inc_session_id,
             callback_function_param,
+            no_add_request_id=no_add_request_id,
         )
 
     def send_app_message(
-        self, namespace, message, inc_session_id=False, callback_function_param=False
+        self,
+        namespace,
+        message,
+        inc_session_id=False,
+        callback_function_param=False,
+        no_add_request_id=False,
     ):
         """Helper method to send a message to current running app."""
         if namespace not in self.app_namespaces:
@@ -948,6 +972,7 @@ class SocketClient(threading.Thread):
             message,
             inc_session_id,
             callback_function_param,
+            no_add_request_id=no_add_request_id,
         )
 
     def register_connection_listener(self, listener: ConnectionStatusListener):

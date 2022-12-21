@@ -2,9 +2,11 @@
 Controller to interface with Supla.
 """
 import logging
+import threading
 
 from . import BaseController
 from ..config import APP_SUPLA
+from ..error import PyChromecastError
 
 APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 
@@ -18,7 +20,7 @@ class SuplaController(BaseController):
 
         self.logger = logging.getLogger(__name__)
 
-    def play_media(self, media_id, is_live=False):
+    def play_media(self, media_id, is_live=False, callback_function=None):
         """
         Play Supla media
         """
@@ -38,8 +40,24 @@ class SuplaController(BaseController):
             "playbackRate": 1,
             "env": "prod",
         }
-        self.send_message(msg, inc_session_id=True)
+
+        self.send_message(
+            msg,
+            inc_session_id=False,
+            callback_function=callback_function,
+            no_add_request_id=True,
+        )
 
     def quick_play(self, media_id=None, is_live=False, **kwargs):
         """Quick Play"""
-        self.play_media(media_id, is_live=is_live, **kwargs)
+        play_media_done_event = threading.Event()
+
+        def play_media_done(_):
+            play_media_done_event.set()
+
+        self.play_media(
+            media_id, is_live=is_live, callback_function=play_media_done, **kwargs
+        )
+        play_media_done_event.wait(10)
+        if not play_media_done_event.is_set():
+            raise PyChromecastError()

@@ -287,4 +287,4 @@ class ReceiverController(BaseController):
         self.launch_failure = None
         self.app_to_launch = None
 
-        self._status_listeners[:] = []
+        self._status_listeners = []

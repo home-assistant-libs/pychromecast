@@ -43,11 +43,6 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-app_name = "homeassistant_media"
-app_data = {
-    "media_id": args.url,
-}
-
 if args.show_debug:
     logging.basicConfig(level=logging.DEBUG)
 if args.show_zeroconf_debug:
@@ -67,6 +62,10 @@ cast = list(chromecasts)[0]
 cast.wait()
 print(f'Found chromecast with name "{args.cast}", attempting to play "{args.url}"')
 
+app_name = "homeassistant_media"
+app_data = {
+    "media_id": args.url,
+}
 quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)

@@ -12,6 +12,8 @@ import zeroconf
 from .const import (
     CAST_TYPE_AUDIO,
     CAST_TYPE_GROUP,
+    CAST_TYPES,
+    MF_GOOGLE,
     SERVICE_TYPE_HOST,
     SERVICE_TYPE_MDNS,
 )
@@ -206,8 +208,13 @@ class ZeroConfListener:
 
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
-            cast_type = CAST_TYPE_GROUP if service.port != 8009 else None
-            manufacturer = "Google Inc." if service.port != 8009 else None
+            if service.port != 8009:
+                cast_type = CAST_TYPE_GROUP
+                manufacturer = MF_GOOGLE
+            else:
+                cast_type, manufacturer = CAST_TYPES.get(
+                    model_name.lower(), (None, None)
+                )
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
                     {service_info},

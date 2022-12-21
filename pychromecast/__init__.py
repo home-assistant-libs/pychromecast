@@ -27,9 +27,7 @@ from .const import CAST_TYPE_CHROMECAST, SERVICE_TYPE_HOST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
 from .models import CastInfo
 
-__all__ = ("__version__", "__version_info__", "get_chromecasts", "Chromecast")
-__version_info__ = ("0", "7", "6")
-__version__ = ".".join(__version_info__)
+__all__ = ("get_chromecasts", "Chromecast")
 
 IDLE_APP_ID = "E8C28D3C"
 IGNORE_CEC = []

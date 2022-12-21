@@ -2,17 +2,18 @@
 Controller to interface with the Yle Areena app namespace.
 """
 
+import threading
+
+from .media import BaseMediaPlayer, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
 from ..config import APP_YLEAREENA
-from .media import MediaController, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
+from ..error import PyChromecastError
 
 
-class YleAreenaController(MediaController):
+class YleAreenaController(BaseMediaPlayer):
     """Controller to interact with Yle Areena app namespace."""
 
     def __init__(self):
-        super().__init__()
-        self.app_id = APP_YLEAREENA
-        self.supporting_app_id = APP_YLEAREENA
+        super().__init__(supporting_app_id=APP_YLEAREENA)
 
     def play_areena_media(  # pylint: disable=too-many-locals
         self,
@@ -22,6 +23,7 @@ class YleAreenaController(MediaController):
         current_time=0,
         autoplay=True,
         stream_type=STREAM_TYPE_BUFFERED,
+        callback_function=None,
     ):
         """
         Play media with the entry id "kaltura_id".
@@ -50,11 +52,24 @@ class YleAreenaController(MediaController):
             },
         }
 
-        self.send_message(msg, inc_session_id=True)
+        self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    # pylint: disable=arguments-differ
+    # pylint: disable-next=arguments-differ
     def quick_play(self, media_id=None, audio_lang="", text_lang="off", **kwargs):
         """Quick Play"""
+        play_media_done_event = threading.Event()
+
+        def play_media_done(_):
+            play_media_done_event.set()
+
         self.play_areena_media(
-            media_id, audio_language=audio_lang, text_language=text_lang, **kwargs
+            media_id,
+            audio_language=audio_lang,
+            text_language=text_lang,
+            callback_function=play_media_done,
+            **kwargs
         )
+
+        play_media_done_event.wait(10)
+        if not play_media_done_event.is_set():
+            raise PyChromecastError()
