@@ -17,6 +17,7 @@ import ssl
 import sys
 import threading
 import time
+import platform
 from collections import defaultdict, namedtuple
 from struct import pack, unpack
 
@@ -565,15 +566,20 @@ class SocketClient(threading.Thread):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
-        # Map file descriptors to socket objects because select.select does not support fd > 1024
-        # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
-        fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
+        operatingSystem = platform.uname().system
         try:
-            poll_obj = select.poll()
-            for poll_fd in rlist:
-                poll_obj.register(poll_fd, select.POLLIN)
-            poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
-            can_read = [fd_to_socket[fd] for fd, _status in poll_result]
+            if operatingSystem != "Windows":
+                # Map file descriptors to socket objects because select.select does not support fd > 1024
+                # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
+                fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
+          
+                poll_obj = select.poll()
+                for poll_fd in rlist:
+                    poll_obj.register(poll_fd, select.POLLIN)
+                poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
+                can_read = [fd_to_socket[fd] for fd, _status in poll_result]
+            else:
+                can_read, _, _ = select.select(rlist, [], [], timeout)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
