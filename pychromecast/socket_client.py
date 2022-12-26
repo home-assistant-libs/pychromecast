@@ -229,6 +229,8 @@ class SocketClient(threading.Thread):
 
         self.receiver_controller.register_status_listener(self)
 
+        self.hasSelectPoll = hasattr(select,"poll")
+
     def initialize_connection(
         self,
     ):  # pylint:disable=too-many-statements, too-many-branches
@@ -565,9 +567,8 @@ class SocketClient(threading.Thread):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
-        availableCommands = dir(select)
         try:
-            if "poll" in availableCommands:
+            if self.hasSelectPoll == True:
                 # Map file descriptors to socket objects because select.select does not support fd > 1024
                 # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
                 fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
