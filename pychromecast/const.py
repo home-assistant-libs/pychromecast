@@ -9,6 +9,7 @@ CAST_TYPE_AUDIO = "audio"
 CAST_TYPE_GROUP = "group"
 
 MF_GOOGLE = "Google Inc."
+MF_JBL = "JBL"
 MF_LENOVO = "LENOVO"
 MF_LG = "LG"
 MF_MARSHALL = "Marshall"
@@ -36,6 +37,10 @@ CAST_TYPES = {
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "bravia 4k vh2": (CAST_TYPE_CHROMECAST, MF_SONY),
     "C4A": (CAST_TYPE_AUDIO, MF_SONY),
+    "JBL Link 10": (CAST_TYPE_AUDIO, MF_JBL),
+    "JBL Link 20": (CAST_TYPE_AUDIO, MF_JBL),
+    "JBL Link 300": (CAST_TYPE_AUDIO, MF_JBL),
+    "JBL Link 500": (CAST_TYPE_AUDIO, MF_JBL),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, MF_LENOVO),
     "Lenovo Smart Display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
     "LG WK7 ThinQ Speaker": (CAST_TYPE_AUDIO, MF_LG),
