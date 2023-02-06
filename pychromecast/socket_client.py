@@ -704,7 +704,6 @@ class SocketClient(threading.Thread):
         """Route message to any handlers on the message namespace"""
         # route message to handlers
         if message.namespace in self._handlers:
-
             # debug messages
             if message.namespace != NS_HEARTBEAT:
                 self.logger.debug(
