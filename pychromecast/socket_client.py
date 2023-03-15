@@ -56,6 +56,8 @@ CONNECTION_STATUS_FAILED = "FAILED"
 CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
+# Check for select poll method
+SELECT_HAS_POLL = hasattr(select,"poll")
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
@@ -565,15 +567,19 @@ class SocketClient(threading.Thread):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
-        # Map file descriptors to socket objects because select.select does not support fd > 1024
-        # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
-        fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
         try:
-            poll_obj = select.poll()
-            for poll_fd in rlist:
-                poll_obj.register(poll_fd, select.POLLIN)
-            poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
-            can_read = [fd_to_socket[fd] for fd, _status in poll_result]
+            if SELECT_HAS_POLL == True:
+                # Map file descriptors to socket objects because select.select does not support fd > 1024
+                # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
+                fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
+          
+                poll_obj = select.poll()
+                for poll_fd in rlist:
+                    poll_obj.register(poll_fd, select.POLLIN)
+                poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
+                can_read = [fd_to_socket[fd] for fd, _status in poll_result]
+            else:
+                can_read, _, _ = select.select(rlist, [], [], timeout)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
