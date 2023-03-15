@@ -18,6 +18,7 @@ MF_NVIDIA = "NVIDIA"
 MF_PHILIPS = "Philips"
 MF_PIONEER = "Pioneer"
 MF_SONY = "Sony"
+MF_SVS = "SVS"
 MF_VIZIO = "Vizio"
 MF_WNC = "wnc"
 MF_XIAOMI = "Xiaomi"
@@ -53,6 +54,7 @@ CAST_TYPES = {
     "shield android tv": (CAST_TYPE_CHROMECAST, MF_NVIDIA),
     "Smart Soundbar 10": (CAST_TYPE_AUDIO, MF_CANTON),
     "Stream TV": (CAST_TYPE_CHROMECAST, MF_WNC),
+    "SVS Pro SoundBase": (CAST_TYPE_AUDIO, MF_SVS),
     "TPM191E": (CAST_TYPE_CHROMECAST, MF_PHILIPS),
     "V705-H3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
 }
