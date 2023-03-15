@@ -8,6 +8,7 @@ CAST_TYPE_AUDIO = "audio"
 # Cast Audio group device, supports only audio
 CAST_TYPE_GROUP = "group"
 
+MF_CANTON = "Canton Elektronik GmbH + Co. KG"
 MF_GOOGLE = "Google Inc."
 MF_LENOVO = "LENOVO"
 MF_LG = "LG"
@@ -45,6 +46,7 @@ CAST_TYPES = {
     "Pioneer VSX-1131": (CAST_TYPE_AUDIO, MF_PIONEER),
     "Pioneer VSX-LX305": (CAST_TYPE_AUDIO, MF_PIONEER),
     "shield android tv": (CAST_TYPE_CHROMECAST, MF_NVIDIA),
+    "Smart Soundbar 10": (CAST_TYPE_AUDIO, MF_CANTON),
     "Stream TV": (CAST_TYPE_CHROMECAST, MF_WNC),
     "TPM191E": (CAST_TYPE_CHROMECAST, MF_PHILIPS),
     "V705-H3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
