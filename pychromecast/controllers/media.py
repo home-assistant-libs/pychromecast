@@ -544,7 +544,7 @@ class BaseMediaPlayer(BaseController):
             self.logger.warning(
                 "Quick Play failed for %s:%s(%s)", media_id, media_type, kwargs
             )
-            raise PyChromecastError()
+            raise PyChromecastError()  # pylint: disable=broad-exception-raised
 
 
 class MediaController(BaseMediaPlayer):

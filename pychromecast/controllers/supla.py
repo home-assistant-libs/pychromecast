@@ -60,4 +60,4 @@ class SuplaController(BaseController):
         )
         play_media_done_event.wait(10)
         if not play_media_done_event.is_set():
-            raise PyChromecastError()
+            raise PyChromecastError()  # pylint: disable=broad-exception-raised

@@ -57,7 +57,7 @@ CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 # Check for select poll method
-SELECT_HAS_POLL = hasattr(select,"poll")
+SELECT_HAS_POLL = hasattr(select, "poll")
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
@@ -557,7 +557,7 @@ class SocketClient(threading.Thread):
         Use run_once() in your own main loop after you
         receive something on the socket (get_socket()).
         """
-        # pylint: disable=too-many-branches, too-many-return-statements
+        # pylint: disable=too-many-branches, too-many-statements, too-many-return-statements
 
         try:
             if not self._check_connection():
@@ -568,11 +568,11 @@ class SocketClient(threading.Thread):
         # poll the socket, as well as the socketpair to allow us to be interrupted
         rlist = [self.socket, self.socketpair[0]]
         try:
-            if SELECT_HAS_POLL == True:
+            if SELECT_HAS_POLL is True:
                 # Map file descriptors to socket objects because select.select does not support fd > 1024
                 # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
                 fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
-          
+
                 poll_obj = select.poll()
                 for poll_fd in rlist:
                     poll_obj.register(poll_fd, select.POLLIN)

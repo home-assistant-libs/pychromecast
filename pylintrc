@@ -1,4 +1,4 @@
-[MASTER]
+[MAIN]
 ignore=cast_channel_pb2.py,authority_keys_pb2.py,logging_pb2.py
 reports=no
 
@@ -13,4 +13,4 @@ disable=
   too-many-nested-blocks,
 
 [EXCEPTIONS]
-overgeneral-exceptions=Exception,PyChromecastError
+overgeneral-exceptions=builtins.Exception,pychromecast.error.PyChromecastError
