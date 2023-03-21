@@ -241,7 +241,6 @@ class SocketClient(threading.Thread):
             self.socket.close()
             self.socket = None
 
-
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
