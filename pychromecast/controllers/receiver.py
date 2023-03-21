@@ -152,11 +152,12 @@ class ReceiverController(BaseController):
 
             self.launch_failure = None
 
-            def handle_launch_response(_response) -> None:
+            def handle_launch_response(response) -> None:
                 if not callback_function:
                     return
 
-                callback_function()
+                if response and response[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
+                    callback_function()
 
             self.send_message(
                 {MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
