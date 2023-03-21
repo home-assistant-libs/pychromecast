@@ -385,9 +385,19 @@ class Chromecast:
 
     def quit_app(self):
         """Tells the Chromecast to quit current app_id."""
-        self.logger.info("Quiting current app")
+        self.logger.info("Quitting current app")
 
-        self.socket_client.receiver_controller.stop_app()
+        def stop_app_callback(_response):
+            """Set event when stop app request has been handled."""
+            stop_app_done.set()
+
+        stop_app_done = threading.Event()
+        self.socket_client.receiver_controller.stop_app(
+            callback_function_param=stop_app_callback
+        )
+        stop_app_done.wait(10)
+        if not stop_app_done.is_set():
+            self.logger.warning("Failed to stop app")
 
     def volume_up(self, delta=0.1):
         """Increment volume by 0.1 (or delta) unless it is already maxed.
