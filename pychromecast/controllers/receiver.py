@@ -79,9 +79,7 @@ class ReceiverController(BaseController):
 
         self.status = None
         self.launch_failure = None
-        self.app_to_launch = None
         self.cast_type = cast_type
-        self.app_launch_event_function = None
 
         self._status_listeners = []
         self._launch_error_listeners = []
@@ -152,11 +150,18 @@ class ReceiverController(BaseController):
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
 
-            self.app_to_launch = app_id
-            self.app_launch_event_function = callback_function
             self.launch_failure = None
 
-            self.send_message({MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id})
+            def handle_launch_response(response) -> None:
+                if not callback_function:
+                    return
+
+                callback_function()
+
+            self.send_message(
+                {MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
+                callback_function=handle_launch_response,
+            )
         else:
             self.logger.info("Not launching app %s - already running", app_id)
             if callback_function:
@@ -224,18 +229,10 @@ class ReceiverController(BaseController):
     def _process_get_status(self, data):
         """Processes a received STATUS message and notifies listeners."""
         status = self._parse_status(data, self.cast_type)
-        is_new_app = self.app_id != status.app_id and self.app_to_launch
         self.status = status
 
         self.logger.debug("Received status: %s", self.status)
         self._report_status()
-
-        if is_new_app and self.app_to_launch == self.app_id:
-            self.app_to_launch = None
-            if self.app_launch_event_function:
-                self.logger.debug("Start app_launch_event_function...")
-                self.app_launch_event_function()
-                self.app_launch_event_function = None
 
     def _report_status(self):
         """Reports the current status to all listeners."""
@@ -266,9 +263,6 @@ class ReceiverController(BaseController):
         launch_failure = self._parse_launch_error(data)
         self.launch_failure = launch_failure
 
-        if self.app_to_launch:
-            self.app_to_launch = None
-
         self.logger.debug("Launch status: %s", launch_failure)
 
         for listener in self._launch_error_listeners:
@@ -285,6 +279,5 @@ class ReceiverController(BaseController):
 
         self.status = None
         self.launch_failure = None
-        self.app_to_launch = None
 
         self._status_listeners = []

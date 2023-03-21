@@ -208,7 +208,7 @@ class SocketClient(threading.Thread):
         self.destination_id = None
         self.session_id = None
         self._request_id = 0
-        # dict mapping requestId on threading.Event objects
+        # dict mapping requestId to callback functions
         self._request_callbacks = {}
         self._open_channels = []
 
@@ -241,9 +241,6 @@ class SocketClient(threading.Thread):
             self.socket.close()
             self.socket = None
 
-        # Make sure nobody is blocking.
-        for callback in self._request_callbacks.values():
-            callback["event"].set()
 
         self.app_namespaces = []
         self.destination_id = None
@@ -644,15 +641,8 @@ class SocketClient(threading.Thread):
         # See if any handlers will accept this message
         self._route_message(message, data)
 
-        if REQUEST_ID in data:
-            callback = self._request_callbacks.pop(data[REQUEST_ID], None)
-            if callback is not None:
-                event = callback["event"]
-                callback["response"] = data
-                function = callback["function"]
-                event.set()
-                if function:
-                    function(data)
+        if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
+            self._request_callbacks.pop(data[REQUEST_ID], None)(data)
 
         return 0
 
@@ -918,11 +908,7 @@ class SocketClient(threading.Thread):
             try:
                 if callback_function:
                     if not no_add_request_id:
-                        self._request_callbacks[request_id] = {
-                            "event": threading.Event(),
-                            "response": None,
-                            "function": callback_function,
-                        }
+                        self._request_callbacks[request_id] = callback_function
                     else:
                         callback_function(None)
                 self.socket.sendall(be_size + msg.SerializeToString())
