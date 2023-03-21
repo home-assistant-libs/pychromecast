@@ -152,7 +152,7 @@ class ReceiverController(BaseController):
 
             self.launch_failure = None
 
-            def handle_launch_response(response) -> None:
+            def handle_launch_response(_response) -> None:
                 if not callback_function:
                     return
 
