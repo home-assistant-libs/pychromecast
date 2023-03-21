@@ -399,7 +399,6 @@ class Chromecast:
         if not stop_app_done.is_set():
             self.logger.warning("Failed to stop app")
 
-
     def volume_up(self, delta=0.1):
         """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
