@@ -279,6 +279,10 @@ class SocketClient(threading.Thread):
                 if now < retry["next_retry"]:
                     continue
                 try:
+                    if self.socket is not None:
+                        self.socket.close()
+                        self.socket = None
+
                     self.socket = new_socket()
                     self.socket.settimeout(self.timeout)
                     self._report_connection_status(
