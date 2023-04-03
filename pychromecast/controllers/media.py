@@ -539,7 +539,7 @@ class BaseMediaPlayer(BaseController):
             **kwargs,
             callback_function=start_play_media_sent_callback,
         )
-        start_play_media_sent.wait(10)
+        start_play_media_sent.wait(30)
         if not start_play_media_sent.is_set():
             self.logger.warning(
                 "Quick Play failed for %s:%s(%s)", media_id, media_type, kwargs
