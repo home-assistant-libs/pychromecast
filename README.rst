@@ -41,7 +41,7 @@ How to use
 
     >> # Discover and connect to chromecasts named Living Room
     >> chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Living Room"])
-    >> [cc.device.friendly_name for cc in chromecasts]
+    >> [cc.friendly_name for cc in chromecasts]
     ['Living Room']
 
     >> cast = chromecasts[0]
