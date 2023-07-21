@@ -41,15 +41,13 @@ How to use
 
     >> # Discover and connect to chromecasts named Living Room
     >> chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Living Room"])
-    >> [cc.friendly_name for cc in chromecasts]
+    >> [cc.cast_info.friendly_name for cc in chromecasts]
     ['Living Room']
 
     >> cast = chromecasts[0]
     >> # Start worker thread and wait for cast device to be ready
     >> cast.wait()
-    >> print(cast.device)
-    DeviceStatus(friendly_name='Living Room', model_name='Chromecast', manufacturer='Google Inc.', uuid=UUID('df6944da-f016-4cb8-97d0-3da2ccaa380b'), cast_type='cast')
-
+    
     >> print(cast.status)
     CastStatus(is_active_input=True, is_stand_by=False, volume_level=1.0, volume_muted=False, app_id='CC1AD845', display_name='Default Media Receiver', namespaces=['urn:x-cast:com.google.cast.player.message', 'urn:x-cast:com.google.cast.media'], session_id='CCA39713-9A4F-34A6-A8BF-5D97BE7ECA5C', transport_id='web-9', status_text='')
 
