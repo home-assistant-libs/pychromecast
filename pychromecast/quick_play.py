@@ -8,6 +8,7 @@ from .controllers.media import DefaultMediaReceiverController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.youtube import YouTubeController
+from .controllers.shaka import ShakaController
 
 
 def quick_play(cast, app_name, data):
@@ -69,6 +70,8 @@ def quick_play(cast, app_name, data):
         controller = YleAreenaController()
     elif app_name == "youtube":
         controller = YouTubeController()
+    elif app_name == "shaka":
+        controller = ShakaController()
     else:
         raise NotImplementedError()
 
