@@ -71,8 +71,14 @@ def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
     return (host, port)
 
 
-def _get_status(services, zconf, path, secure, timeout, context):
+def _get_status(services, zconf, path, timeout, context, secure=None):
     """Query a cast device via http(s)."""
+
+    if secure is None:
+        try:
+            return _get_status(services, zconf, path, timeout/2, context, secure=True)
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return _get_status(services, zconf, path, timeout/2, context, secure=False)
 
     for service in services.copy():
         host, _, _ = get_host_from_service(service, zconf)
@@ -123,9 +129,9 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
                 cast_info.services,
                 zconf,
                 "/setup/eureka_info?params=device_info,name",
-                True,
                 timeout,
                 context,
+                secure=True,
             )
             if "device_info" in status:
                 device_info = status["device_info"]
@@ -181,7 +187,6 @@ def get_device_info(  # pylint: disable=too-many-locals
             services,
             zconf,
             "/setup/eureka_info?params=device_info,name",
-            True,
             timeout,
             context,
         )
@@ -192,7 +197,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         manufacturer = "Unknown manufacturer"
         model_name = "Unknown model name"
         multizone_supported = False
-        udn = None
+        udn = status.get("ssdp_udn", None)
 
         if "device_info" in status:
             device_info = status["device_info"]
@@ -261,9 +266,9 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
             services,
             zconf,
             "/setup/eureka_info?params=multizone",
-            True,
             timeout,
             context,
+            secure=True,
         )
 
         dynamic_groups = []

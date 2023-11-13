@@ -259,7 +259,7 @@ HOSTLISTENER_MAX_FAIL = 5
 class HostBrowser(threading.Thread):
     """Repeateadly poll a set of known hosts."""
 
-    def __init__(self, cast_listener, devices, lock):
+    def __init__(self, cast_listener, devices, lock, timeout):
         super().__init__(daemon=True)
         self._cast_listener = cast_listener
         self._devices = devices
@@ -268,6 +268,7 @@ class HostBrowser(threading.Thread):
         self._services_lock = lock
         self._start_requested = False
         self._context = None
+        self._timeout = timeout
         self.stop = threading.Event()
 
     def add_hosts(self, known_hosts):
@@ -325,7 +326,7 @@ class HostBrowser(threading.Thread):
                 # This host should not be polled
                 continue
 
-            device_status = get_device_info(host, timeout=30, context=self._context)
+            device_status = get_device_info(host, timeout=self._timeout/len(known_hosts), context=self._context)
 
             if not device_status:
                 hoststatus.failcount += 1
@@ -526,7 +527,7 @@ class CastBrowser:
     instance is passed, a new instance will be created.
     """
 
-    def __init__(self, cast_listener, zeroconf_instance=None, known_hosts=None):
+    def __init__(self, cast_listener, zeroconf_instance=None, known_hosts=None, timeout=DISCOVER_TIMEOUT):
         self._cast_listener = cast_listener
         self.zc = zeroconf_instance  # pylint: disable=invalid-name
         self._zc_browser = None
@@ -534,7 +535,7 @@ class CastBrowser:
         self.services = self.devices  # For backwards compatibility
         self._services_lock = threading.Lock()
         self.host_browser = HostBrowser(
-            self._cast_listener, self.devices, self._services_lock
+            self._cast_listener, self.devices, self._services_lock, timeout=DISCOVER_TIMEOUT
         )
         self.zeroconf_listener = ZeroConfListener(
             self._cast_listener, self.devices, self.host_browser, self._services_lock
@@ -634,7 +635,7 @@ def discover_chromecasts(
 
     discover_complete = threading.Event()
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts, timeout=timeout)
     browser.start_discovery()
 
     # Wait for the timeout or the maximum number of devices
@@ -685,7 +686,7 @@ def discover_listed_chromecasts(
     discover_complete = threading.Event()
 
     zconf = zeroconf_instance or zeroconf.Zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts, timeout=discovery_timeout)
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
