@@ -100,6 +100,7 @@ def _get_status(services, zconf, path, secure, timeout, context):
 def get_ssl_context():
     """Create an SSL context."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     return context
 
