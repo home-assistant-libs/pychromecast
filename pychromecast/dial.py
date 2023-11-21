@@ -204,7 +204,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         manufacturer = "Unknown manufacturer"
         model_name = "Unknown model name"
         multizone_supported = False
-        udn = status.get("ssdp_udn", None)
+        udn = None
 
         if "device_info" in status:
             device_info = status["device_info"]
@@ -216,6 +216,8 @@ def get_device_info(  # pylint: disable=too-many-locals
             model_name = device_info.get("model_name", model_name)
             manufacturer = device_info.get("manufacturer", manufacturer)
             udn = device_info.get("ssdp_udn", None)
+        else:
+            udn = status.get("ssdp_udn", None)
 
         if not display_supported:
             cast_type = CAST_TYPE_AUDIO
