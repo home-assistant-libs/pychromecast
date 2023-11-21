@@ -619,16 +619,19 @@ def discover_chromecasts(
     Discover chromecasts on the network.
 
     Returns a tuple of:
-      A list of chromecast devices, or an empty list if no matching chromecasts were
-      found.
+      A list of chromecast devices, or an empty list if no chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
       are (no longer) needed, call browser.stop_discovery().
 
     :param zeroconf_instance: An existing zeroconf instance.
     """
 
+    _LOGGER.info(
+        "discover_chromecasts is deprecated and will be removed in June 2024, update to use CastBrowser instead."
+    )
+
     def add_callback(_uuid, _service):
-        """Called when zeroconf has discovered a new chromecast."""
+        """Called when a new chromecast has been discovered."""
         if max_devices is not None and browser.count >= max_devices:
             discover_complete.set()
 
