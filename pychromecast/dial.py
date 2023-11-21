@@ -76,9 +76,11 @@ def _get_status(services, zconf, path, timeout, context, secure=None):
 
     if secure is None:
         try:
-            return _get_status(services, zconf, path, timeout/2, context, secure=True)
+            return _get_status(services, zconf, path, timeout / 2, context, secure=True)
         except (urllib.error.HTTPError, urllib.error.URLError):
-            return _get_status(services, zconf, path, timeout/2, context, secure=False)
+            return _get_status(
+                services, zconf, path, timeout / 2, context, secure=False
+            )
 
     for service in services.copy():
         host, _, _ = get_host_from_service(service, zconf)
