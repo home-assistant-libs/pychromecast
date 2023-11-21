@@ -178,14 +178,26 @@ def get_device_info(  # pylint: disable=too-many-locals
     try:
         if services is None:
             services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
-        _, status = _get_status(
-            services,
-            zconf,
-            "/setup/eureka_info?params=device_info,name",
-            True,
-            timeout,
-            context,
-        )
+
+        # Try connection with SSL first, and if it fails fall back to non-SSL
+        try:
+            _, status = _get_status(
+                services,
+                zconf,
+                "/setup/eureka_info?params=device_info,name",
+                True,
+                timeout / 2,
+                context,
+            )
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            _, status = _get_status(
+                services,
+                zconf,
+                "/setup/eureka_info?params=device_info,name",
+                False,
+                timeout / 2,
+                context,
+            )
 
         cast_type = CAST_TYPE_CHROMECAST
         display_supported = True
@@ -205,6 +217,8 @@ def get_device_info(  # pylint: disable=too-many-locals
             model_name = device_info.get("model_name", model_name)
             manufacturer = device_info.get("manufacturer", manufacturer)
             udn = device_info.get("ssdp_udn", None)
+        else:
+            udn = status.get("ssdp_udn", None)
 
         if not display_supported:
             cast_type = CAST_TYPE_AUDIO
