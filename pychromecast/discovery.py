@@ -618,6 +618,9 @@ def discover_chromecasts(
     """
     Discover chromecasts on the network.
 
+    Deprecated as of February 2021, will be removed in June 2024.
+
+
     Returns a tuple of:
       A list of chromecast devices, or an empty list if no chromecasts were found.
       A service browser to keep the Chromecast mDNS data updated. When updates
