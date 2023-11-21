@@ -592,7 +592,9 @@ class CastListener(CastBrowser):
     """
 
     def __init__(self, add_callback=None, remove_callback=None, update_callback=None):
-        _LOGGER.info("CastListener is deprecated and will be removed in June 2024, update to use CastBrowser instead")
+        _LOGGER.info(
+            "CastListener is deprecated and will be removed in June 2024, update to use CastBrowser instead"
+        )
         listener = SimpleCastListener(add_callback, remove_callback, update_callback)
         super().__init__(listener)
 
