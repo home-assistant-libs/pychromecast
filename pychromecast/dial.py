@@ -71,16 +71,8 @@ def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
     return (host, port)
 
 
-def _get_status(services, zconf, path, timeout, context, secure=None):
+def _get_status(services, zconf, path, secure, timeout, context):
     """Query a cast device via http(s)."""
-
-    if secure is None:
-        try:
-            return _get_status(services, zconf, path, timeout / 2, context, secure=True)
-        except (urllib.error.HTTPError, urllib.error.URLError):
-            return _get_status(
-                services, zconf, path, timeout / 2, context, secure=False
-            )
 
     for service in services.copy():
         host, _, _ = get_host_from_service(service, zconf)
@@ -131,9 +123,9 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
                 cast_info.services,
                 zconf,
                 "/setup/eureka_info?params=device_info,name",
+                True,
                 timeout,
                 context,
-                secure=True,
             )
             if "device_info" in status:
                 device_info = status["device_info"]
@@ -185,13 +177,25 @@ def get_device_info(  # pylint: disable=too-many-locals
     try:
         if services is None:
             services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
-        _, status = _get_status(
-            services,
-            zconf,
-            "/setup/eureka_info?params=device_info,name",
-            timeout,
-            context,
-        )
+
+        try:
+            _, status = _get_status(
+                services,
+                zconf,
+                "/setup/eureka_info?params=device_info,name",
+                True,
+                timeout / 2,
+                context,
+            )
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            _, status = _get_status(
+                services,
+                zconf,
+                "/setup/eureka_info?params=device_info,name",
+                False,
+                timeout / 2,
+                context,
+            )
 
         cast_type = CAST_TYPE_CHROMECAST
         display_supported = True
@@ -268,9 +272,9 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
             services,
             zconf,
             "/setup/eureka_info?params=multizone",
+            True,
             timeout,
             context,
-            secure=True,
         )
 
         dynamic_groups = []
