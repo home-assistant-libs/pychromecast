@@ -178,6 +178,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         if services is None:
             services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
 
+        # Try connection with SSL first, and if it fails fall back to non-SSL
         try:
             _, status = _get_status(
                 services,
