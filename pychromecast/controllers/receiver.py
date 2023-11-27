@@ -183,7 +183,7 @@ class ReceiverController(BaseController):
 
         """
         volume = min(max(0, volume), 1)
-        self.logger.info("Receiver:setting volume to %.1f", volume)
+        self.logger.info("Receiver:setting volume to %.2f", volume)
         self.send_message({MESSAGE_TYPE: "SET_VOLUME", "volume": {"level": volume}})
         return volume
 
