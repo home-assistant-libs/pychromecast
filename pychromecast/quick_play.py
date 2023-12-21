@@ -3,6 +3,7 @@
 from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
 from .controllers.bubbleupnp import BubbleUPNPController
+from .controllers.drtv import DRTVController
 from .controllers.homeassistant_media import HomeAssistantMediaController
 from .controllers.media import DefaultMediaReceiverController
 from .controllers.supla import SuplaController
@@ -61,6 +62,8 @@ def quick_play(cast, app_name, data):
         controller = BubbleUPNPController()
     elif app_name == "default_media_receiver":
         controller = DefaultMediaReceiverController()
+    elif app_name == "drtv":
+        controller = DRTVController()
     elif app_name == "homeassistant_media":
         controller = HomeAssistantMediaController()
     elif app_name == "supla":
