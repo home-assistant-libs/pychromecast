@@ -21,9 +21,7 @@ CAST_NAME = "Living Room"
 
 # Change to an audio or video url
 # Sample DRM request from https://reference.dashif.org/dash.js/latest/samples/drm/clearkey.html
-MEDIA_URL = (
-    "https://media.axprod.net/TestVectors/v7-MultiDRM-SingleKey/Manifest_1080p_ClearKey.mpd"
-)
+MEDIA_URL = "https://media.axprod.net/TestVectors/v7-MultiDRM-SingleKey/Manifest_1080p_ClearKey.mpd"
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the Shaka Controller to play an URL with DRM."
