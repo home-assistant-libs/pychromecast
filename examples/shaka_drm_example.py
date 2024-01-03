@@ -71,60 +71,50 @@ app_data = {
     "media_type": "",
     "stream_type": "LIVE",
     "media_info": {
-    "customData": {
-        "asset": {
-            "name": "Custom DRM Video",
-            "shortName": "",
-            "iconUri": "",
-            "manifestUri": "https://media.axprod.net/TestVectors/v7-MultiDRM-SingleKey/Manifest_1080p_ClearKey.mpd",
-            "source": "Custom",
-            "focus": False,
-            "disabled": False,
-            "extraText": [],
-            "extraThumbnail": [],
-            "certificateUri": None,
-            "description": None,
-            "isFeatured": False,
-            "drm": [
-                "No DRM protection"
-            ],
-            "features": [
-                "VOD"
-            ],
-            "licenseServers": {
-                "__type__": "map"
-            },
-            "licenseRequestHeaders": {
-                "__type__": "map"
-            },
-            "requestFilter": None,
-            "responseFilter": None,
-            "clearKeys": {
-                "__type__": "map"
-            },
-            "extraConfig": {
-                "drm": {
-                    "clearKeys": {
-                        "nrQFDeRLSAKTLifXUIPiZg": "FmY0xnWCPCNaSpRG-tUuTQ"
+        "customData": {
+            "asset": {
+                "name": "Custom DRM Video",
+                "shortName": "",
+                "iconUri": "",
+                "manifestUri": "https://media.axprod.net/TestVectors/v7-MultiDRM-SingleKey/Manifest_1080p_ClearKey.mpd",
+                "source": "Custom",
+                "focus": False,
+                "disabled": False,
+                "extraText": [],
+                "extraThumbnail": [],
+                "certificateUri": None,
+                "description": None,
+                "isFeatured": False,
+                "drm": ["No DRM protection"],
+                "features": ["VOD"],
+                "licenseServers": {"__type__": "map"},
+                "licenseRequestHeaders": {"__type__": "map"},
+                "requestFilter": None,
+                "responseFilter": None,
+                "clearKeys": {"__type__": "map"},
+                "extraConfig": {
+                    "drm": {
+                        "clearKeys": {
+                            "nrQFDeRLSAKTLifXUIPiZg": "FmY0xnWCPCNaSpRG-tUuTQ"
+                        }
                     }
-                }
-            },
-            "adTagUri": None,
-            "imaVideoId": None,
-            "imaAssetKey": None,
-            "imaContentSrcId": None,
-            "imaManifestType": None,
-            "mediaTailorUrl": None,
-            "mediaTailorAdsParams": None,
-            "mimeType": None,
-            "mediaPlaylistFullMimeType": None,
-            "storedProgress": 1,
-            "storedContent": None
+                },
+                "adTagUri": None,
+                "imaVideoId": None,
+                "imaAssetKey": None,
+                "imaContentSrcId": None,
+                "imaManifestType": None,
+                "mediaTailorUrl": None,
+                "mediaTailorAdsParams": None,
+                "mimeType": None,
+                "mediaPlaylistFullMimeType": None,
+                "storedProgress": 1,
+                "storedContent": None,
             }
         }
-    }
-
+    },
 }
+
 quick_play.quick_play(cast, app_name, app_data)
 
 sleep(10)
