@@ -9,6 +9,8 @@ from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.youtube import YouTubeController
 from .controllers.shaka import ShakaController
+from .controllers.nrktv import NrkTvController
+from .controllers.nrkradio import NrkRadioController
 
 
 def quick_play(cast, app_name, data):
@@ -72,6 +74,10 @@ def quick_play(cast, app_name, data):
         controller = YouTubeController()
     elif app_name == "shaka":
         controller = ShakaController()
+    elif app_name == "nrktv":
+        controller = NrkTvController()
+    elif app_name == "nrkradio":
+        controller = NrkRadioController()
     else:
         raise NotImplementedError()
 
