@@ -13,7 +13,7 @@ from .controllers.nrktv import NrkTvController
 from .controllers.nrkradio import NrkRadioController
 
 
-def quick_play(cast, app_name, data):
+def quick_play(cast, app_name, data):  # pylint:disable=too-many-branches
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
     based on parameters defined in `data`.
