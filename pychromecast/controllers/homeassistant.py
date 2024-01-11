@@ -9,6 +9,7 @@ from . import BaseController
 
 
 APP_NAMESPACE = "urn:x-cast:com.nabucasa.hast"
+DEFAULT_HASS_CONNECT_TIMEOUT = 30
 
 
 class HomeAssistantController(BaseController):
@@ -22,12 +23,14 @@ class HomeAssistantController(BaseController):
         refresh_token,
         app_namespace=APP_NAMESPACE,
         app_id=APP_HOMEASSISTANT_LOVELACE,
+        hass_connect_timeout=DEFAULT_HASS_CONNECT_TIMEOUT,
     ):
         super().__init__(app_namespace, app_id)
         self.hass_url = hass_url
         self.hass_uuid = hass_uuid
         self.client_id = client_id
         self.refresh_token = refresh_token
+        self.hass_connect_timeout = hass_connect_timeout
         # {
         #   connected: boolean;
         #   showDemo: boolean;
@@ -100,7 +103,7 @@ class HomeAssistantController(BaseController):
             self._hass_connecting_event.set()
             raise
 
-        self._hass_connecting_event.wait(10)
+        self._hass_connecting_event.wait(self.hass_connect_timeout)
         try:
             if not self._hass_connecting_event.is_set():
                 self.logger.warning("_connect_hass failed for %s", self.hass_url)
