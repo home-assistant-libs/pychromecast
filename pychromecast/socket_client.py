@@ -859,8 +859,9 @@ class SocketClient(threading.Thread):
         destination_id,
         namespace,
         data,
+        *,
         inc_session_id=False,
-        callback_function=False,
+        callback_function=None,
         no_add_request_id=False,
         force=False,
     ):
@@ -931,8 +932,9 @@ class SocketClient(threading.Thread):
         self,
         namespace,
         message,
+        *,
         inc_session_id=False,
-        callback_function_param=False,
+        callback_function=None,
         no_add_request_id=False,
     ):
         """Helper method to send a message to the platform."""
@@ -940,8 +942,8 @@ class SocketClient(threading.Thread):
             PLATFORM_DESTINATION_ID,
             namespace,
             message,
-            inc_session_id,
-            callback_function_param,
+            inc_session_id=inc_session_id,
+            callback_function=callback_function,
             no_add_request_id=no_add_request_id,
         )
 
@@ -949,8 +951,9 @@ class SocketClient(threading.Thread):
         self,
         namespace,
         message,
+        *,
         inc_session_id=False,
-        callback_function_param=False,
+        callback_function=None,
         no_add_request_id=False,
     ):
         """Helper method to send a message to current running app."""
@@ -964,8 +967,8 @@ class SocketClient(threading.Thread):
             self.destination_id,
             namespace,
             message,
-            inc_session_id,
-            callback_function_param,
+            inc_session_id=inc_session_id,
+            callback_function=callback_function,
             no_add_request_id=no_add_request_id,
         )
 

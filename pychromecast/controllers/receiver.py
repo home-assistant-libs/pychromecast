@@ -124,14 +124,14 @@ class ReceiverController(BaseController):
         listener.new_launch_error(launch_failure)"""
         self._launch_error_listeners.append(listener)
 
-    def update_status(self, callback_function_param=False):
+    def update_status(self, *, callback_function=None):
         """Sends a message to the Chromecast to update the status."""
         self.logger.debug("Receiver:Updating status")
         self.send_message(
-            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
+            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
         )
 
-    def launch_app(self, app_id, force_launch=False, callback_function=False):
+    def launch_app(self, app_id, *, force_launch=False, callback_function=None):
         """Launches an app on the Chromecast.
 
         Will only launch if it is not currently running unless
@@ -139,14 +139,14 @@ class ReceiverController(BaseController):
 
         if not force_launch and self.status is None:
             self.update_status(
-                lambda response: self._send_launch_message(
+                callback_function=lambda response: self._send_launch_message(
                     app_id, force_launch, callback_function
                 )
             )
         else:
             self._send_launch_message(app_id, force_launch, callback_function)
 
-    def _send_launch_message(self, app_id, force_launch=False, callback_function=False):
+    def _send_launch_message(self, app_id, force_launch=False, callback_function=None):
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
 
@@ -168,13 +168,13 @@ class ReceiverController(BaseController):
             if callback_function:
                 callback_function()
 
-    def stop_app(self, callback_function_param=False):
+    def stop_app(self, *, callback_function=None):
         """Stops the current running app on the Chromecast."""
         self.logger.info("Receiver:Stopping current app '%s'", self.app_id)
         return self.send_message(
             {MESSAGE_TYPE: "STOP"},
             inc_session_id=True,
-            callback_function=callback_function_param,
+            callback_function=callback_function,
         )
 
     def set_volume(self, volume):

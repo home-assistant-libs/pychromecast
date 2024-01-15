@@ -53,7 +53,7 @@ class BaseController(abc.ABC):
             and self.namespace in self._socket_client.app_namespaces
         )
 
-    def launch(self, callback_function=None, force_launch=False):
+    def launch(self, *, callback_function=None, force_launch=False):
         """If set, launches app related to the controller."""
         self._check_registered()
 
@@ -86,6 +86,7 @@ class BaseController(abc.ABC):
     def send_message(
         self,
         data,
+        *,
         inc_session_id=False,
         callback_function=None,
         no_add_request_id=False,
@@ -107,8 +108,8 @@ class BaseController(abc.ABC):
                 self.launch(
                     callback_function=lambda: self.send_message_nocheck(
                         data,
-                        inc_session_id,
-                        callback_function,
+                        inc_session_id=inc_session_id,
+                        callback_function=callback_function,
                         no_add_request_id=no_add_request_id,
                     )
                 )
@@ -119,12 +120,16 @@ class BaseController(abc.ABC):
             )
 
         self.send_message_nocheck(
-            data, inc_session_id, callback_function, no_add_request_id=no_add_request_id
+            data,
+            inc_session_id=inc_session_id,
+            callback_function=callback_function,
+            no_add_request_id=no_add_request_id,
         )
 
     def send_message_nocheck(
         self,
         data,
+        *,
         inc_session_id=False,
         callback_function=None,
         no_add_request_id=False,
@@ -133,8 +138,8 @@ class BaseController(abc.ABC):
         self._message_func(
             self.namespace,
             data,
-            inc_session_id,
-            callback_function,
+            inc_session_id=inc_session_id,
+            callback_function=callback_function,
             no_add_request_id=no_add_request_id,
         )
 

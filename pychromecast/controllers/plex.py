@@ -342,7 +342,7 @@ class PlexController(BaseController):
         def callback():  # pylint: disable=missing-docstring
             self._send_cmd(msg, inc_session_id=True, inc=False)
 
-        self.launch(callback)
+        self.launch(callback_function=callback)
 
     def quit_app(self):
         """Quit the Plex app."""
@@ -443,7 +443,7 @@ class PlexController(BaseController):
             finally:
                 self.play_media_event.set()
 
-        self.launch(app_launched_callback)
+        self.launch(callback_function=app_launched_callback)
 
     def join(self, timeout=None):
         """Join the thread."""
