@@ -370,6 +370,7 @@ class BaseMediaPlayer(BaseController):
         self,
         url,
         content_type,
+        *,
         title=None,
         thumb=None,
         current_time=None,
@@ -436,19 +437,19 @@ class BaseMediaPlayer(BaseController):
         self,
         url,
         content_type,
-        title=None,
-        thumb=None,
-        current_time=None,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-        enqueue=False,
-        media_info=None,
-        callback_function=None,
+        title,
+        thumb,
+        current_time,
+        autoplay,
+        stream_type,
+        metadata,
+        subtitles,
+        subtitles_lang,
+        subtitles_mime,
+        subtitle_id,
+        enqueue,
+        media_info,
+        callback_function,
     ):
         media_info = media_info or {}
         media = {
@@ -587,10 +588,10 @@ class MediaController(BaseMediaPlayer):
         call listener.new_media_status(status)"""
         self._status_listeners.append(listener)
 
-    def update_status(self, callback_function_param=False):
+    def update_status(self, *, callback_function=None):
         """Send message to update the status."""
         self.send_message(
-            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function_param
+            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
         )
 
     def _send_command(self, command):

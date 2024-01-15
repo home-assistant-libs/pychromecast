@@ -381,7 +381,9 @@ class Chromecast:
         """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
 
-        self.socket_client.receiver_controller.launch_app(app_id, force_launch)
+        self.socket_client.receiver_controller.launch_app(
+            app_id, force_launch=force_launch
+        )
 
     def quit_app(self):
         """Tells the Chromecast to quit current app_id."""
@@ -393,7 +395,7 @@ class Chromecast:
 
         stop_app_done = threading.Event()
         self.socket_client.receiver_controller.stop_app(
-            callback_function_param=stop_app_callback
+            callback_function=stop_app_callback
         )
         stop_app_done.wait(10)
         if not stop_app_done.is_set():
