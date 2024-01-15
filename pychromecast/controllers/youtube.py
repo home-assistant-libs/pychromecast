@@ -83,11 +83,7 @@ class YouTubeController(BaseController):
         (send message will launch app if it is not running).
         """
         self.status_update_event.clear()
-        # This gets the screenId but always throws. Couldn't find a better way.
-        try:
-            self.send_message({MESSAGE_TYPE: TYPE_GET_SCREEN_ID})
-        except UnsupportedNamespace:
-            pass
+        self.send_message({MESSAGE_TYPE: TYPE_GET_SCREEN_ID})
         status = self.status_update_event.wait(10)
         if not status:
             _LOGGER.warning("Failed to update screen_id")
