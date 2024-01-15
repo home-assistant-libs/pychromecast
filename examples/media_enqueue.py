@@ -18,7 +18,6 @@ CAST_NAME = "Living Room"
 
 # Change to an audio or video url
 MEDIA_URLS = [
-    "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/llnws/bbc_radio_fourfm.mpd",
     "https://www.bensound.com/bensound-music/bensound-jazzyfrenchy.mp3",
     "https://audio.guim.co.uk/2020/08/14-65292-200817TIFXR.mp3",
 ]
