@@ -22,6 +22,7 @@ CAST_NAME = "Kitchen speaker"
 MEDIA_URL = (
     "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 )
+MEDIA_TYPE = "video/mp4"
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the BubbleUPNP Controller to play an URL."
@@ -40,6 +41,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
+)
+parser.add_argument(
+    "--media-type", help='Media type (default: "%(default)s")', default=MEDIA_TYPE
 )
 args = parser.parse_args()
 
@@ -65,7 +69,7 @@ print(f'Found chromecast with name "{args.cast}", attempting to play "{args.url}
 app_name = "bubbleupnp"
 app_data = {
     "media_id": args.url,
-    "media_type": "audio/mp3",
+    "media_type": args.media_type,
     "stream_type": "LIVE",
 }
 quick_play.quick_play(cast, app_name, app_data)
