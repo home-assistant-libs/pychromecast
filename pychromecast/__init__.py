@@ -23,9 +23,10 @@ from .discovery import (  # noqa: F401
     stop_discovery,
 )
 from .dial import get_cast_type
-from .const import CAST_TYPE_CHROMECAST, SERVICE_TYPE_HOST
+from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT, SERVICE_TYPE_HOST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
 from .models import CastInfo
+from .response_handler import WaitResponse
 
 __all__ = ("get_chromecasts", "Chromecast")
 
@@ -377,46 +378,44 @@ class Chromecast:
         if status:
             self.status_event.set()
 
-    def start_app(self, app_id, force_launch=False):
+    def start_app(self, app_id, force_launch=False, timeout=REQUEST_TIMEOUT):
         """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
 
+        response_handler = WaitResponse(timeout)
         self.socket_client.receiver_controller.launch_app(
-            app_id, force_launch=force_launch
+            app_id,
+            force_launch=force_launch,
+            callback_function=response_handler.callback,
         )
+        response_handler.wait_response()
 
-    def quit_app(self):
+    def quit_app(self, timeout=REQUEST_TIMEOUT):
         """Tells the Chromecast to quit current app_id."""
         self.logger.info("Quitting current app")
 
-        def stop_app_callback(_response):
-            """Set event when stop app request has been handled."""
-            stop_app_done.set()
-
-        stop_app_done = threading.Event()
+        response_handler = WaitResponse(timeout)
         self.socket_client.receiver_controller.stop_app(
-            callback_function=stop_app_callback
+            callback_function=response_handler.callback
         )
-        stop_app_done.wait(10)
-        if not stop_app_done.is_set():
-            self.logger.warning("Failed to stop app")
+        response_handler.wait_response()
 
-    def volume_up(self, delta=0.1):
+    def volume_up(self, delta=0.1, timeout=REQUEST_TIMEOUT):
         """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
 
         """
         if delta <= 0:
             raise ValueError(f"volume delta must be greater than zero, not {delta}")
-        return self.set_volume(self.status.volume_level + delta)
+        return self.set_volume(self.status.volume_level + delta, timeout=timeout)
 
-    def volume_down(self, delta=0.1):
+    def volume_down(self, delta=0.1, timeout=REQUEST_TIMEOUT):
         """Decrement the volume by 0.1 (or delta) unless it is already 0.
         Returns the new volume.
         """
         if delta <= 0:
             raise ValueError(f"volume delta must be greater than zero, not {delta}")
-        return self.set_volume(self.status.volume_level - delta)
+        return self.set_volume(self.status.volume_level - delta, timeout=timeout)
 
     def wait(self, timeout=None):
         """

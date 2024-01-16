@@ -241,6 +241,10 @@ class SocketClient(threading.Thread):
             self.socket.close()
             self.socket = None
 
+        # Make sure nobody is blocking.
+        for callback_function in self._request_callbacks.values():
+            callback_function(False, None)
+
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
@@ -853,7 +857,7 @@ class SocketClient(threading.Thread):
 
         return message
 
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments, too-many-branches
     def send_message(
         self,
         destination_id,
@@ -907,6 +911,8 @@ class SocketClient(threading.Thread):
             )
 
         if not force and self.stop.is_set():
+            if callback_function:
+                callback_function(False, None)
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
             try:
@@ -914,9 +920,11 @@ class SocketClient(threading.Thread):
                     if not no_add_request_id:
                         self._request_callbacks[request_id] = callback_function
                     else:
-                        callback_function(None)
+                        callback_function(True, None)
                 self.socket.sendall(be_size + msg.SerializeToString())
             except socket.error:
+                if callback_function:
+                    callback_function(False, None)
                 self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
                 self.logger.info(
@@ -926,6 +934,8 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
         else:
+            if callback_function:
+                callback_function(False, None)
             raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
 
     def send_platform_message(

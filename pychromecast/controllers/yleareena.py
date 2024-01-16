@@ -2,11 +2,10 @@
 Controller to interface with the Yle Areena app namespace.
 """
 
-import threading
-
 from .media import BaseMediaPlayer, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
 from ..config import APP_YLEAREENA
 from ..error import PyChromecastError
+from ..response_handler import WaitResponse
 
 
 class YleAreenaController(BaseMediaPlayer):
@@ -57,19 +56,16 @@ class YleAreenaController(BaseMediaPlayer):
     # pylint: disable-next=arguments-differ
     def quick_play(self, media_id=None, audio_lang="", text_lang="off", **kwargs):
         """Quick Play"""
-        play_media_done_event = threading.Event()
-
-        def play_media_done(_):
-            play_media_done_event.set()
-
+        response_handler = WaitResponse(10)
         self.play_areena_media(
             media_id,
             audio_language=audio_lang,
             text_language=text_lang,
-            callback_function=play_media_done,
-            **kwargs
+            **kwargs,
+            callback_function=response_handler.callback
         )
+        request_completed = response_handler.wait_response()
 
-        play_media_done_event.wait(10)
-        if not play_media_done_event.is_set():
+        if not request_completed or not response_handler.msg_sent:
+            self.logger.warning("Quick Play failed for %s:(%s)", media_id, kwargs)
             raise PyChromecastError()  # pylint: disable=broad-exception-raised

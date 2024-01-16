@@ -1,6 +1,7 @@
 """
 Controller to interface with the Plex-app.
 """
+from functools import partial
 import json
 import threading
 
@@ -9,6 +10,8 @@ from urllib.parse import urlparse
 
 from . import BaseController
 from ..const import MESSAGE_TYPE
+from ..error import RequestFailed
+from ..response_handler import chain_on_success
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -339,10 +342,15 @@ class PlexController(BaseController):
             media, type=TYPE_DETAILS, requestId=self._inc_request(), **kwargs
         )
 
-        def callback():  # pylint: disable=missing-docstring
-            self._send_cmd(msg, inc_session_id=True, inc=False)
+        def callback(msg_sent, _response):
+            if not msg_sent:
+                raise RequestFailed("PlexController.show_media")
 
-        self.launch(callback_function=callback)
+        self.launch(
+            callback_function=chain_on_success(
+                partial(self._send_cmd, msg, inc_session_id=True, inc=False), callback
+            )
+        )
 
     def quit_app(self):
         """Quit the Plex app."""
@@ -437,7 +445,9 @@ class PlexController(BaseController):
         """
         self.play_media_event.clear()
 
-        def app_launched_callback():  # pylint: disable=missing-docstring
+        def app_launched_callback(msg_sent: bool, _response: dict | None) -> None:
+            if not msg_sent:
+                raise RequestFailed("PlexController.play_media")
             try:
                 self._send_start_play(media, **kwargs)
             finally:

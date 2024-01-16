@@ -8,6 +8,9 @@ CAST_TYPE_AUDIO = "audio"
 # Cast Audio group device, supports only audio
 CAST_TYPE_GROUP = "group"
 
+# Default command timeout
+REQUEST_TIMEOUT = 10.0
+
 MF_CANTON = "Canton Elektronik GmbH + Co. KG"
 MF_GOOGLE = "Google Inc."
 MF_JBL = "JBL"
