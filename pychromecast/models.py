@@ -19,7 +19,7 @@ if hasattr(zeroconf, "EventLoopBlocked"):
 class CastInfo:
     """Cast info container."""
 
-    services: list[ServiceInfo]
+    services: list[HostServiceInfo | MDNSServiceInfo]
     uuid: UUID
     model_name: str | None
     friendly_name: str | None
@@ -30,8 +30,15 @@ class CastInfo:
 
 
 @dataclass(frozen=True)
-class ServiceInfo:
+class HostServiceInfo:
     """Service info container."""
 
-    type: str
-    data: tuple[str, int] | str
+    host: str
+    port: int
+
+
+@dataclass(frozen=True)
+class MDNSServiceInfo:
+    """Service info container."""
+
+    name: str

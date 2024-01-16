@@ -11,13 +11,8 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import (
-    CAST_TYPE_AUDIO,
-    CAST_TYPE_CHROMECAST,
-    CAST_TYPE_GROUP,
-    SERVICE_TYPE_HOST,
-)
-from .models import ZEROCONF_ERRORS, CastInfo, ServiceInfo
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
+from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -31,8 +26,8 @@ def get_host_from_service(service, zconf):
     """Resolve host and port from service."""
     service_info = None
 
-    if service.type == SERVICE_TYPE_HOST:
-        return service.data + (None,)
+    if isinstance(service, HostServiceInfo):
+        return (service.host, service.port, None)
 
     try:
         service_info = zconf.get_service_info("_googlecast._tcp.local.", service.data)
@@ -177,7 +172,7 @@ def get_device_info(  # pylint: disable=too-many-locals
 
     try:
         if services is None:
-            services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
+            services = [HostServiceInfo(host, 8009)]
 
         # Try connection with SSL first, and if it fails fall back to non-SSL
         try:
@@ -271,7 +266,7 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
 
     try:
         if services is None:
-            services = [ServiceInfo(SERVICE_TYPE_HOST, (host, 8009))]
+            services = [HostServiceInfo(host, 8009)]
         _, status = _get_status(
             services,
             zconf,

@@ -62,8 +62,6 @@ CAST_TYPES = {
     "V705-H3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
 }
 
-SERVICE_TYPE_HOST = "host"
-SERVICE_TYPE_MDNS = "mdns"
 
 MESSAGE_TYPE = "type"
 REQUEST_ID = "requestId"

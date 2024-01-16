@@ -9,16 +9,9 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import (
-    CAST_TYPE_AUDIO,
-    CAST_TYPE_GROUP,
-    CAST_TYPES,
-    MF_GOOGLE,
-    SERVICE_TYPE_HOST,
-    SERVICE_TYPE_MDNS,
-)
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, CAST_TYPES, MF_GOOGLE
 from .dial import get_device_info, get_multizone_status, get_ssl_context
-from .models import ZEROCONF_ERRORS, CastInfo, ServiceInfo
+from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 DISCOVER_TIMEOUT = 5
 
@@ -111,7 +104,7 @@ class ZeroConfListener:
         cast_info = None
         device_removed = False
         uuid = None
-        service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
+        service_info = MDNSServiceInfo(name)
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
             for uuid, info_for_uuid in self._devices.items():
@@ -204,7 +197,7 @@ class ZeroConfListener:
             )
             return
 
-        service_info = ServiceInfo(SERVICE_TYPE_MDNS, name)
+        service_info = MDNSServiceInfo(name)
 
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
@@ -419,8 +412,8 @@ class HostBrowser(threading.Thread):
             for uuid in self._devices:
                 for service in self._devices[uuid].services.copy():
                     if (
-                        service.type == SERVICE_TYPE_HOST
-                        and service.data[0] == host
+                        isinstance(service, HostServiceInfo)
+                        and service.host == host
                         and uuid not in host_uuids
                     ):
                         self._remove_host_service(host, uuid, callbacks)
@@ -440,7 +433,7 @@ class HostBrowser(threading.Thread):
         cast_type,
         manufacturer,
     ):
-        service_info = ServiceInfo(SERVICE_TYPE_HOST, (host, port))
+        service_info = HostServiceInfo(host, port)
 
         callback = self._cast_listener.add_cast
         if uuid in self._devices:
@@ -493,9 +486,9 @@ class HostBrowser(threading.Thread):
 
         info_for_uuid = self._devices[uuid]
         for service in info_for_uuid.services:
-            if service.type == SERVICE_TYPE_HOST and service.data[0] == host:
+            if isinstance(service, HostServiceInfo) and service.host == host:
                 info_for_uuid.services.remove(service)
-                port = service.data[1]
+                port = service.port
                 name = f"{host}:{port}"
                 _LOGGER.debug(
                     "Host %s down or no longer handles uuid %s, removing host based service",
