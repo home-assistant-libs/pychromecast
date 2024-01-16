@@ -9,7 +9,7 @@ from uuid import UUID
 
 import zeroconf
 
-ZEROCONF_ERRORS = (IOError, asyncio.TimeoutError)
+ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
 if hasattr(zeroconf, "EventLoopBlocked"):
     # Added in zeroconf 0.37.0
     ZEROCONF_ERRORS = (*ZEROCONF_ERRORS, zeroconf.EventLoopBlocked)

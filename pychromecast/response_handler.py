@@ -21,7 +21,7 @@ class AcceptsCallbackFunc(Protocol):
         self,
         *,
         callback_function: CallbackType | None = None,
-    ):
+    ) -> None:
         ...
 
 
