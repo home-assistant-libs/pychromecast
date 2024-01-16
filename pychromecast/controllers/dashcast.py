@@ -27,7 +27,7 @@ class DashCastController(BaseController):
         # Indicate that the message was successfully handled.
         return True
 
-    def load_url(self, url, force=False, reload_seconds=0, callback_function=None):
+    def load_url(self, url, *, force=False, reload_seconds=0, callback_function=None):
         """
         Starts loading a URL with an optional reload time
         in seconds.
