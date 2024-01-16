@@ -12,7 +12,7 @@ from uuid import UUID
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
-from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
+from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
