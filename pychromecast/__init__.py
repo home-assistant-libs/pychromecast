@@ -16,16 +16,15 @@ from .discovery import (  # noqa: F401
     DISCOVER_TIMEOUT,
     CastBrowser,
     CastListener,  # Deprecated
-    ServiceInfo,
     SimpleCastListener,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
 )
 from .dial import get_cast_type
-from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT, SERVICE_TYPE_HOST
+from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa: F401
-from .models import CastInfo
+from .models import CastInfo, HostServiceInfo
 from .response_handler import WaitResponse
 
 __all__ = ("get_chromecasts", "Chromecast")
@@ -44,7 +43,7 @@ def get_chromecast_from_host(host, tries=None, retry_wait=None, timeout=None):
     ip_address, port, uuid, model_name, friendly_name = host
     _LOGGER.debug("get_chromecast_from_host %s", host)
     port = port or 8009
-    services = [ServiceInfo(SERVICE_TYPE_HOST, (ip_address, port))]
+    services = [HostServiceInfo(ip_address, port)]
     cast_info = CastInfo(
         services, uuid, model_name, friendly_name, ip_address, port, None, None
     )
