@@ -299,6 +299,8 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
 
 @dataclass(frozen=True)
 class MultizoneInfo:
+    """Multizone info container."""
+
     friendly_name: str
     uuid: UUID | None
     host: str | None
@@ -307,12 +309,16 @@ class MultizoneInfo:
 
 @dataclass(frozen=True)
 class MultizoneStatus:
+    """Multizone status container."""
+
     dynamic_groups: list[MultizoneInfo]
     groups: list[MultizoneInfo]
 
 
 @dataclass(frozen=True)
 class DeviceStatus:
+    """Device status container."""
+
     friendly_name: str
     model_name: str
     manufacturer: str

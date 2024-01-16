@@ -53,6 +53,8 @@ class CastStatus:
 
 @dataclass(frozen=True)
 class LaunchFailure:
+    """Launch failure container."""
+
     reason: str | None
     app_id: str | None
     request_id: int | None
