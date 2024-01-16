@@ -8,6 +8,7 @@ Without him this would not have been possible.
 # pylint: disable=too-many-lines
 
 import abc
+from dataclasses import dataclass
 import errno
 import json
 import logging
@@ -127,9 +128,20 @@ def _is_ssl_timeout(exc):
     )
 
 
-NetworkAddress = namedtuple("NetworkAddress", ["address", "port"])
+@dataclass(frozen=True)
+class NetworkAddress:
+    """Network address container."""
 
-ConnectionStatus = namedtuple("ConnectionStatus", ["status", "address"])
+    address: str
+    port: int | None
+
+
+@dataclass(frozen=True)
+class ConnectionStatus:
+    """Connection status container."""
+
+    status: str
+    address: NetworkAddress
 
 
 class ConnectionStatusListener(abc.ABC):
