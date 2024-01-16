@@ -260,7 +260,7 @@ class PlexController(BaseController):
 
         return False
 
-    def update_status(self, *, callback_function= None):
+    def update_status(self, *, callback_function=None):
         """Send message to update status."""
         self.send_message(
             {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
