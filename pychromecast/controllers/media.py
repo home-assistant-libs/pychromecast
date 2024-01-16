@@ -12,6 +12,7 @@ import threading
 from ..config import APP_MEDIA_RECEIVER
 from ..const import MESSAGE_TYPE
 from ..error import PyChromecastError
+from ..response_handler import WaitResponse
 from . import BaseController
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
@@ -529,19 +530,16 @@ class BaseMediaPlayer(BaseController):
 
         media_type = kwargs.pop("media_type", "video/mp4")
 
-        def start_play_media_sent_callback(_):
-            """Set event when playback request has been sent."""
-            start_play_media_sent.set()
-
-        start_play_media_sent = threading.Event()
+        response_handler = WaitResponse(30)
         self.play_media(
             media_id,
             media_type,
             **kwargs,
-            callback_function=start_play_media_sent_callback,
+            callback_function=response_handler.callback
         )
-        start_play_media_sent.wait(30)
-        if not start_play_media_sent.is_set():
+        request_completed = response_handler.wait_response()
+
+        if not request_completed or not response_handler.msg_sent:
             self.logger.warning(
                 "Quick Play failed for %s:%s(%s)", media_id, media_type, kwargs
             )

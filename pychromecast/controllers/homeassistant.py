@@ -1,10 +1,12 @@
 """
 Controller to interface with Home Assistant
 """
+from functools import partial
 import threading
 
 from ..config import APP_HOMEASSISTANT_LOVELACE
 from ..error import PyChromecastError
+from ..response_handler import chain_on_success
 from . import BaseController
 
 
@@ -74,15 +76,18 @@ class HomeAssistantController(BaseController):
 
             # We just got connected, call the callbacks.
             self._hass_connecting_event.set()
-            while self._on_connect:
-                self._on_connect.pop()()
-
+            self._call_on_connect_callbacks(True)
             return True
 
         return False
 
-    def _connect_hass(self, callback_function=None):
-        """Connect to Home Assistant."""
+    def _call_on_connect_callbacks(self, msg_sent: bool) -> None:
+        """Call on connect callbacks."""
+        while self._on_connect:
+            self._on_connect.pop()(msg_sent, None)
+
+    def _connect_hass(self, callback_function):
+        """Connect to Home Assistant and call the provided callback."""
         self._on_connect.append(callback_function)
 
         if not self._hass_connecting_event.is_set():
@@ -101,6 +106,7 @@ class HomeAssistantController(BaseController):
             )
         except Exception:  # pylint: disable=broad-except
             self._hass_connecting_event.set()
+            self._call_on_connect_callbacks(False)
             raise
 
         self._hass_connecting_event.wait(self.hass_connect_timeout)
@@ -110,6 +116,7 @@ class HomeAssistantController(BaseController):
                 raise PyChromecastError()  # pylint: disable=broad-exception-raised
         finally:
             self._hass_connecting_event.set()
+            self._call_on_connect_callbacks(False)
 
     def show_demo(self):
         """Show the demo."""
@@ -139,12 +146,14 @@ class HomeAssistantController(BaseController):
             callback_function=callback_function,
         )
 
-    def _send_connected_message(self, data, callback_function=None):
+    def _send_connected_message(self, data, callback_function):
         """Send a message to a connected Home Assistant Cast"""
         if self.hass_connected:
             self.send_message_nocheck(data, callback_function=callback_function)
             return
 
         self._connect_hass(
-            lambda: self.send_message_nocheck(data, callback_function=callback_function)
+            chain_on_success(
+                partial(self.send_message_nocheck, data), callback_function
+            )
         )

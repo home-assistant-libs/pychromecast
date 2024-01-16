@@ -4,10 +4,12 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 from __future__ import annotations
 
 import abc
+from functools import partial
 import logging
 from typing import TYPE_CHECKING
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
+from ..response_handler import chain_on_success
 
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
@@ -106,15 +108,20 @@ class BaseController(abc.ABC):
         ):
             if self.supporting_app_id is not None:
                 self.launch(
-                    callback_function=lambda: self.send_message_nocheck(
-                        data,
-                        inc_session_id=inc_session_id,
-                        callback_function=callback_function,
-                        no_add_request_id=no_add_request_id,
+                    callback_function=chain_on_success(
+                        partial(
+                            self.send_message_nocheck,
+                            data,
+                            inc_session_id=inc_session_id,
+                            no_add_request_id=no_add_request_id,
+                        ),
+                        callback_function,
                     )
                 )
                 return
 
+            if callback_function:
+                callback_function(False, None)
             raise UnsupportedNamespace(
                 f"Namespace {self.namespace} is not supported by running application."
             )

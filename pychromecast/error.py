@@ -52,3 +52,11 @@ class ControllerNotRegistered(PyChromecastError):
     Raised when trying to interact with a controller while it is
     not registered with a ChromeCast object.
     """
+
+
+class RequestFailed(PyChromecastError):
+    """Raised when a request failed to complete."""
+    MSG = "Failed to execute {request}."
+
+    def __init__(self, request: str) -> None:
+        super().__init__(self.MSG.format(request=request))

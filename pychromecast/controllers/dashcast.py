@@ -2,6 +2,7 @@
 Controller to interface with the DashCast app namespace.
 """
 from ..config import APP_DASHCAST
+from ..response_handler import chain_on_success
 from . import BaseController
 
 
@@ -37,7 +38,7 @@ class DashCastController(BaseController):
         to reload the app.
         """
 
-        def launch_callback():
+        def launch_callback(callback_function):
             """Loads requested URL after app launched."""
             should_reload = not force and reload_seconds not in (0, None)
             reload_milliseconds = 0 if not should_reload else reload_seconds * 1000
@@ -52,4 +53,4 @@ class DashCastController(BaseController):
                 msg, inc_session_id=True, callback_function=callback_function
             )
 
-        self.launch(callback_function=launch_callback)
+        self.launch(callback_function=chain_on_success(launch_callback, callback_function))

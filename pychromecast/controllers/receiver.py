@@ -3,6 +3,7 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 import abc
+from functools import partial
 
 from collections import namedtuple
 
@@ -12,8 +13,10 @@ from ..const import (
     CAST_TYPE_GROUP,
     MESSAGE_TYPE,
     REQUEST_ID,
+    REQUEST_TIMEOUT,
     SESSION_ID,
 )
+from ..response_handler import WaitResponse, chain_on_success
 from . import BaseController
 
 APP_ID = "appId"
@@ -139,10 +142,12 @@ class ReceiverController(BaseController):
 
         if not force_launch and self.status is None:
             self.update_status(
-                callback_function=lambda response: self._send_launch_message(
-                    app_id, force_launch, callback_function
+                callback_function=chain_on_success(
+                    partial(self._send_launch_message, app_id, force_launch),
+                    callback_function,
                 )
             )
+
         else:
             self._send_launch_message(app_id, force_launch, callback_function)
 
@@ -152,12 +157,19 @@ class ReceiverController(BaseController):
 
             self.launch_failure = None
 
-            def handle_launch_response(response) -> None:
+            def handle_launch_response(msg_sent: bool, response: dict | None) -> None:
                 if not callback_function:
                     return
 
-                if response and response[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
-                    callback_function()
+                if not msg_sent or not response:
+                    callback_function(False, response)
+                    return
+
+                if response[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
+                    callback_function(True, response)
+                    return
+
+                callback_function(False, response)
 
             self.send_message(
                 {MESSAGE_TYPE: TYPE_LAUNCH, APP_ID: app_id},
@@ -166,7 +178,7 @@ class ReceiverController(BaseController):
         else:
             self.logger.info("Not launching app %s - already running", app_id)
             if callback_function:
-                callback_function()
+                callback_function(True, None)
 
     def stop_app(self, *, callback_function=None):
         """Stops the current running app on the Chromecast."""
@@ -177,19 +189,29 @@ class ReceiverController(BaseController):
             callback_function=callback_function,
         )
 
-    def set_volume(self, volume):
+    def set_volume(self, volume, timeout=REQUEST_TIMEOUT):
         """Allows to set volume. Should be value between 0..1.
         Returns the new volume.
 
         """
         volume = min(max(0, volume), 1)
         self.logger.info("Receiver:setting volume to %.2f", volume)
-        self.send_message({MESSAGE_TYPE: "SET_VOLUME", "volume": {"level": volume}})
+        response_handler = WaitResponse(timeout)
+        self.send_message(
+            {MESSAGE_TYPE: "SET_VOLUME", "volume": {"level": volume}},
+            callback_function=response_handler.callback,
+        )
+        response_handler.wait_response()
         return volume
 
-    def set_volume_muted(self, muted):
+    def set_volume_muted(self, muted, timeout=REQUEST_TIMEOUT):
         """Allows to mute volume."""
-        self.send_message({MESSAGE_TYPE: "SET_VOLUME", "volume": {"muted": muted}})
+        response_handler = WaitResponse(timeout)
+        self.send_message(
+            {MESSAGE_TYPE: "SET_VOLUME", "volume": {"muted": muted}},
+            callback_function=response_handler.callback,
+        )
+        response_handler.wait_response()
 
     @staticmethod
     def _parse_status(data, cast_type):
