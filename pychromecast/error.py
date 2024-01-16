@@ -61,3 +61,6 @@ class RequestFailed(PyChromecastError):
 
     def __init__(self, request: str) -> None:
         super().__init__(self.MSG.format(request=request))
+
+class ZeroConfInstanceRequired(PyChromecastError):
+    """Raised when a zeroconf instance is required."""
