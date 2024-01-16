@@ -18,7 +18,7 @@ import ssl
 import sys
 import threading
 import time
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from struct import pack, unpack
 
 from . import cast_channel_pb2

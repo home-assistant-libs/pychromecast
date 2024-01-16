@@ -3,7 +3,6 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 import abc
-from collections import namedtuple
 from dataclasses import dataclass
 from functools import partial
 
