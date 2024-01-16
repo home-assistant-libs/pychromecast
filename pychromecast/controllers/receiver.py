@@ -3,9 +3,8 @@ Provides a controller for controlling the default media players
 on the Chromecast.
 """
 import abc
+from dataclasses import dataclass
 from functools import partial
-
-from collections import namedtuple
 
 from ..const import (
     CAST_TYPE_AUDIO,
@@ -33,25 +32,32 @@ VOLUME_CONTROL_TYPE_ATTENUATION = "attenuation"
 VOLUME_CONTROL_TYPE_FIXED = "fixed"
 VOLUME_CONTROL_TYPE_MASTER = "master"
 
-CastStatus = namedtuple(
-    "CastStatus",
-    [
-        "is_active_input",
-        "is_stand_by",
-        "volume_level",
-        "volume_muted",
-        "app_id",
-        "display_name",
-        "namespaces",
-        "session_id",
-        "transport_id",
-        "status_text",
-        "icon_url",
-        "volume_control_type",
-    ],
-)
 
-LaunchFailure = namedtuple("LaunchStatus", ["reason", "app_id", "request_id"])
+@dataclass(frozen=True)
+class CastStatus:
+    """Cast status container."""
+
+    is_active_input: bool | None
+    is_stand_by: bool | None
+    volume_level: float
+    volume_muted: bool
+    app_id: str | None
+    display_name: str | None
+    namespaces: list[str]
+    session_id: str | None
+    transport_id: str | None
+    status_text: str
+    icon_url: str | None
+    volume_control_type: str
+
+
+@dataclass(frozen=True)
+class LaunchFailure:
+    """Launch failure container."""
+
+    reason: str | None
+    app_id: str | None
+    request_id: int | None
 
 
 class CastStatusListener(abc.ABC):

@@ -4,9 +4,8 @@ on the Chromecast.
 """
 import abc
 from datetime import datetime
+from dataclasses import dataclass
 import logging
-
-from collections import namedtuple
 import threading
 
 from ..config import APP_MEDIA_RECEIVER
@@ -102,7 +101,14 @@ MEDIA_PLAYER_ERROR_CODES = {
 }
 
 
-MediaImage = namedtuple("MediaImage", "url height width")
+@dataclass(frozen=True)
+class MediaImage:
+    """Media image metadata container."""
+
+    url: str | None
+    height: int | None
+    width: int | None
+
 
 _LOGGER = logging.getLogger(__name__)
 

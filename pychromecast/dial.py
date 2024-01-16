@@ -1,7 +1,7 @@
 """
 Implements the DIAL-protocol to communicate with the Chromecast
 """
-from collections import namedtuple
+from dataclasses import dataclass
 import json
 import logging
 import socket
@@ -297,18 +297,31 @@ def get_multizone_status(host, services=None, zconf=None, timeout=30, context=No
         return None
 
 
-MultizoneInfo = namedtuple("MultizoneInfo", ["friendly_name", "uuid", "host", "port"])
+@dataclass(frozen=True)
+class MultizoneInfo:
+    """Multizone info container."""
 
-MultizoneStatus = namedtuple("MultizoneStatus", ["dynamic_groups", "groups"])
+    friendly_name: str
+    uuid: UUID | None
+    host: str | None
+    port: int | None
 
-DeviceStatus = namedtuple(
-    "DeviceStatus",
-    [
-        "friendly_name",
-        "model_name",
-        "manufacturer",
-        "uuid",
-        "cast_type",
-        "multizone_supported",
-    ],
-)
+
+@dataclass(frozen=True)
+class MultizoneStatus:
+    """Multizone status container."""
+
+    dynamic_groups: list[MultizoneInfo]
+    groups: list[MultizoneInfo]
+
+
+@dataclass(frozen=True)
+class DeviceStatus:
+    """Device status container."""
+
+    friendly_name: str
+    model_name: str
+    manufacturer: str
+    uuid: UUID | None
+    cast_type: str
+    multizone_supported: bool
