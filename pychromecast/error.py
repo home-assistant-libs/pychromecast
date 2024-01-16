@@ -56,6 +56,7 @@ class ControllerNotRegistered(PyChromecastError):
 
 class RequestFailed(PyChromecastError):
     """Raised when a request failed to complete."""
+
     MSG = "Failed to execute {request}."
 
     def __init__(self, request: str) -> None:

@@ -5,7 +5,7 @@ Controller to interface with the Yle Areena app namespace.
 from .media import BaseMediaPlayer, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
 from ..config import APP_YLEAREENA
 from ..error import PyChromecastError
-from .. response_handler import WaitResponse
+from ..response_handler import WaitResponse
 
 
 class YleAreenaController(BaseMediaPlayer):
@@ -67,7 +67,5 @@ class YleAreenaController(BaseMediaPlayer):
         request_completed = response_handler.wait_response()
 
         if not request_completed or not response_handler.msg_sent:
-            self.logger.warning(
-                "Quick Play failed for %s:(%s)", media_id, kwargs
-            )
+            self.logger.warning("Quick Play failed for %s:(%s)", media_id, kwargs)
             raise PyChromecastError()  # pylint: disable=broad-exception-raised

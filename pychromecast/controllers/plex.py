@@ -445,9 +445,7 @@ class PlexController(BaseController):
         """
         self.play_media_event.clear()
 
-        def app_launched_callback(
-            msg_sent: bool, _response: dict | None
-        ) -> None:
+        def app_launched_callback(msg_sent: bool, _response: dict | None) -> None:
             if not msg_sent:
                 raise RequestFailed("PlexController.play_media")
             try:

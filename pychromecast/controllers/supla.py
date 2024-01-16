@@ -6,7 +6,7 @@ import logging
 from . import BaseController
 from ..config import APP_SUPLA
 from ..error import PyChromecastError
-from .. response_handler import WaitResponse
+from ..response_handler import WaitResponse
 
 APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 
@@ -60,7 +60,5 @@ class SuplaController(BaseController):
         request_completed = response_handler.wait_response()
 
         if not request_completed or not response_handler.msg_sent:
-            self.logger.warning(
-                "Quick Play failed for %s:(%s)", media_id, kwargs
-            )
+            self.logger.warning("Quick Play failed for %s:(%s)", media_id, kwargs)
             raise PyChromecastError()  # pylint: disable=broad-exception-raised

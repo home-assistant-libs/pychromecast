@@ -384,7 +384,9 @@ class Chromecast:
 
         response_handler = WaitResponse(timeout)
         self.socket_client.receiver_controller.launch_app(
-            app_id, force_launch=force_launch, callback_function=response_handler.callback
+            app_id,
+            force_launch=force_launch,
+            callback_function=response_handler.callback,
         )
         response_handler.wait_response()
 

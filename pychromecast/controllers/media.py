@@ -532,10 +532,7 @@ class BaseMediaPlayer(BaseController):
 
         response_handler = WaitResponse(30)
         self.play_media(
-            media_id,
-            media_type,
-            **kwargs,
-            callback_function=response_handler.callback
+            media_id, media_type, **kwargs, callback_function=response_handler.callback
         )
         request_completed = response_handler.wait_response()
 

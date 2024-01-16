@@ -53,4 +53,6 @@ class DashCastController(BaseController):
                 msg, inc_session_id=True, callback_function=callback_function
             )
 
-        self.launch(callback_function=chain_on_success(launch_callback, callback_function))
+        self.launch(
+            callback_function=chain_on_success(launch_callback, callback_function)
+        )
