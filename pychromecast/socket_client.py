@@ -20,7 +20,6 @@ import time
 from collections import defaultdict, namedtuple
 from struct import pack, unpack
 
-from . import cast_channel_pb2
 from .controllers import BaseController
 from .controllers.media import MediaController
 from .controllers.receiver import ReceiverController
@@ -32,6 +31,7 @@ from .error import (
     NotConnected,
     PyChromecastStopped,
 )
+from .generated import cast_channel_pb2
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
 NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat"
@@ -852,7 +852,7 @@ class SocketClient(threading.Thread):
         # now read the payload
         payload = self._read_bytes_from_socket(read_len)
 
-        message = cast_channel_pb2.CastMessage()
+        message = cast_channel_pb2.CastMessage()  # pylint: disable=no-member
         message.ParseFromString(payload)
 
         return message
@@ -886,9 +886,9 @@ class SocketClient(threading.Thread):
         if inc_session_id:
             data[SESSION_ID] = self.session_id
 
-        msg = cast_channel_pb2.CastMessage()
+        msg = cast_channel_pb2.CastMessage()  # pylint: disable=no-member
 
-        msg.protocol_version = msg.CASTV2_1_0  # pylint: disable=no-member
+        msg.protocol_version = msg.CASTV2_1_0
         msg.source_id = self.source_id
         msg.destination_id = destination_id
         msg.payload_type = (
@@ -901,7 +901,7 @@ class SocketClient(threading.Thread):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if msg.namespace != NS_HEARTBEAT:  # pylint: disable=no-member
+        if msg.namespace != NS_HEARTBEAT:
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
