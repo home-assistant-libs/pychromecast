@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
-from ..generated.cast_channel_pb2 import (  # pylint: disable-next=no-name-in-module
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import CallbackType, chain_on_success
