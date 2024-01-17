@@ -661,7 +661,7 @@ class SocketClient(threading.Thread):
         self._route_message(message, data)
 
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
-            self._request_callbacks.pop(data[REQUEST_ID], None)(data)
+            self._request_callbacks.pop(data[REQUEST_ID], None)(True, data)
 
         return 0
 
