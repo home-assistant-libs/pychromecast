@@ -115,9 +115,9 @@ class ZeroConfListener(zeroconf.ServiceListener):
         self._host_browser = host_browser
         self._services_lock = lock
 
-    def remove_service(self, _zconf: zeroconf.Zeroconf, typ: str, name: str) -> None:
+    def remove_service(self, zc: zeroconf.Zeroconf, type_: str, name: str) -> None:
         """Called by zeroconf when an mDNS service is lost."""
-        _LOGGER.debug("remove_service %s, %s", typ, name)
+        _LOGGER.debug("remove_service %s, %s", type_, name)
         cast_info = None
         device_removed = False
         uuid = None
@@ -133,7 +133,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     break
 
         if not cast_info:
-            _LOGGER.debug("remove_service unknown %s, %s", typ, name)
+            _LOGGER.debug("remove_service unknown %s, %s", type_, name)
             return
 
         if device_removed:
@@ -141,15 +141,15 @@ class ZeroConfListener(zeroconf.ServiceListener):
         else:
             self._cast_listener.update_cast(uuid, name)
 
-    def update_service(self, zconf: zeroconf.Zeroconf, typ: str, name: str) -> None:
+    def update_service(self, zc: zeroconf.Zeroconf, type_: str, name: str) -> None:
         """Called by zeroconf when an mDNS service is updated."""
-        _LOGGER.debug("update_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name, self._cast_listener.update_cast)
+        _LOGGER.debug("update_service %s, %s", type_, name)
+        self._add_update_service(zc, type_, name, self._cast_listener.update_cast)
 
-    def add_service(self, zconf: zeroconf.Zeroconf, typ: str, name: str) -> None:
+    def add_service(self, zc: zeroconf.Zeroconf, type_: str, name: str) -> None:
         """Called by zeroconf when an mDNS service is discovered."""
-        _LOGGER.debug("add_service %s, %s", typ, name)
-        self._add_update_service(zconf, typ, name, self._cast_listener.add_cast)
+        _LOGGER.debug("add_service %s, %s", type_, name)
+        self._add_update_service(zc, type_, name, self._cast_listener.add_cast)
 
     # pylint: disable-next=too-many-locals
     def _add_update_service(
