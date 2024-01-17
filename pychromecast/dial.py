@@ -1,6 +1,8 @@
 """
 Implements the DIAL-protocol to communicate with the Chromecast
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 import json
 import logging
@@ -8,11 +10,13 @@ import socket
 import ssl
 import urllib.request
 from uuid import UUID
+from typing import Any
 
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
-from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo
+from .error import ZeroConfInstanceRequired
+from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -22,7 +26,9 @@ FORMAT_BASE_URL_HTTPS = "https://{}:8443"
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_host_from_service(service, zconf):
+def get_host_from_service(
+    service: HostServiceInfo | MDNSServiceInfo, zconf: zeroconf.Zeroconf | None
+) -> tuple[str | None, int | None, zeroconf.ServiceInfo | None]:
     """Resolve host and port from service."""
     service_info = None
 
@@ -30,7 +36,9 @@ def get_host_from_service(service, zconf):
         return (service.host, service.port, None)
 
     try:
-        service_info = zconf.get_service_info("_googlecast._tcp.local.", service.data)
+        if not zconf:
+            raise ZeroConfInstanceRequired
+        service_info = zconf.get_service_info("_googlecast._tcp.local.", service.name)
         if service_info:
             _LOGGER.debug(
                 "get_info_from_service resolved service %s to service_info %s",
@@ -49,24 +57,30 @@ def get_host_from_service(service, zconf):
     return _get_host_from_zc_service_info(service_info) + (service_info,)
 
 
-def _get_host_from_zc_service_info(service_info: zeroconf.ServiceInfo):
+def _get_host_from_zc_service_info(
+    service_info: zeroconf.ServiceInfo | None,
+) -> tuple[str | None, int | None]:
     """Get hostname or IP + port from zeroconf service_info."""
     host = None
     port = None
-    if (
-        service_info
-        and service_info.port
-        and (service_info.server or len(service_info.addresses) > 0)
-    ):
+    if service_info and service_info.port:
         if len(service_info.addresses) > 0:
             host = socket.inet_ntoa(service_info.addresses[0])
-        else:
+        elif service_info.server is not None:
             host = service_info.server.lower()
-        port = service_info.port
+        if host is not None:
+            port = service_info.port
     return (host, port)
 
 
-def _get_status(services, zconf, path, secure, timeout, context):
+def _get_status(
+    services: set[HostServiceInfo | MDNSServiceInfo],
+    zconf: zeroconf.Zeroconf | None,
+    path: str,
+    secure: bool,
+    timeout: float,
+    context: ssl.SSLContext | None,
+) -> tuple[str | None, Any]:
     """Query a cast device via http(s)."""
 
     for service in services.copy():
@@ -92,7 +106,7 @@ def _get_status(services, zconf, path, secure, timeout, context):
     return (host, json.loads(data.decode("utf-8")))
 
 
-def get_ssl_context():
+def get_ssl_context() -> ssl.SSLContext:
     """Create an SSL context."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
@@ -100,19 +114,20 @@ def get_ssl_context():
     return context
 
 
-def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
-    """
-    :param cast_info: cast_info
-    :return: An updated cast_info with filled cast_type
-    :rtype: pychromecast.models.CastInfo
-    """
+def get_cast_type(
+    cast_info: CastInfo,
+    zconf: zeroconf.Zeroconf | None = None,
+    timeout: float = 30,
+    context: ssl.SSLContext | None = None,
+) -> CastInfo:
+    """Add cast type and manufacturer to a CastInfo instance."""
     cast_type = CAST_TYPE_CHROMECAST
     manufacturer = "Unknown manufacturer"
     if cast_info.port != 8009:
         cast_type = CAST_TYPE_GROUP
         manufacturer = "Google Inc."
     else:
-        host = "<unknown>"
+        host: str | None = "<unknown>"
         try:
             display_supported = True
             host, status = _get_status(
@@ -161,18 +176,17 @@ def get_cast_type(cast_info, zconf=None, timeout=30, context=None):
 
 
 def get_device_info(  # pylint: disable=too-many-locals
-    host, services=None, zconf=None, timeout=30, context=None
-):
-    """
-    :param host: Hostname or ip to fetch status from
-    :type host: str
-    :return: The device status as a named tuple.
-    :rtype: pychromecast.dial.DeviceStatus or None
-    """
+    host: str,
+    services: set[HostServiceInfo | MDNSServiceInfo] | None = None,
+    zconf: zeroconf.Zeroconf | None = None,
+    timeout: float = 30,
+    context: ssl.SSLContext | None = None,
+) -> DeviceStatus | None:
+    """Return a filled in DeviceStatus object for the specified device."""
 
     try:
         if services is None:
-            services = [HostServiceInfo(host, 8009)]
+            services = {HostServiceInfo(host, 8009)}
 
         # Try connection with SSL first, and if it fails fall back to non-SSL
         try:
@@ -235,7 +249,8 @@ def get_device_info(  # pylint: disable=too-many-locals
         return None
 
 
-def _get_group_info(host, group):
+def _get_group_info(host: str, group: Any) -> MultizoneInfo:
+    """Parse group JSON data and return a MultizoneInfo instance."""
     name = group.get("name", "Unknown group name")
     udn = group.get("uuid", None)
     uuid = None
@@ -256,17 +271,18 @@ def _get_group_info(host, group):
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
 
-def get_multizone_status(host, services=None, zconf=None, timeout=30, context=None):
-    """
-    :param host: Hostname or ip to fetch status from
-    :type host: str
-    :return: The multizone status as a named tuple.
-    :rtype: pychromecast.dial.MultizoneStatus or None
-    """
+def get_multizone_status(
+    host: str,
+    services: set[HostServiceInfo | MDNSServiceInfo] | None = None,
+    zconf: zeroconf.Zeroconf | None = None,
+    timeout: float = 30,
+    context: ssl.SSLContext | None = None,
+) -> MultizoneStatus | None:
+    """Return a filled in MultizoneStatus object for the specified device."""
 
     try:
         if services is None:
-            services = [HostServiceInfo(host, 8009)]
+            services = {HostServiceInfo(host, 8009)}
         _, status = _get_status(
             services,
             zconf,

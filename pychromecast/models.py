@@ -19,7 +19,7 @@ if hasattr(zeroconf, "EventLoopBlocked"):
 class CastInfo:
     """Cast info container."""
 
-    services: list[HostServiceInfo | MDNSServiceInfo]
+    services: set[HostServiceInfo | MDNSServiceInfo]
     uuid: UUID
     model_name: str | None
     friendly_name: str | None
