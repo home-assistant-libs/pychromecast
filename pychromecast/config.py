@@ -2,6 +2,7 @@
 Data and methods to retrieve app specific configuration
 """
 import json
+from typing import cast
 
 import requests
 
@@ -22,7 +23,7 @@ APP_NRKTV = "3AEDF8D1"
 APP_NRKRADIO = "A49874B1"
 
 
-def get_possible_app_ids():
+def get_possible_app_ids() -> list[str]:
     """Returns all possible app ids."""
 
     try:
@@ -32,14 +33,17 @@ def get_possible_app_ids():
         )
         data = json.loads(req.text[4:])
 
-        return [app["app_id"] for app in data["applications"]] + data["enabled_app_ids"]
+        return cast(
+            list[str],
+            [app["app_id"] for app in data["applications"]] + data["enabled_app_ids"],
+        )
 
     except ValueError:
         # If json fails to parse
         return []
 
 
-def get_app_config(app_id):
+def get_app_config(app_id: str) -> dict:
     """Get specific configuration for 'app_id'."""
     try:
         req = requests.get(
@@ -47,7 +51,7 @@ def get_app_config(app_id):
             timeout=10,
         )
 
-        return json.loads(req.text[4:]) if req.status_code == 200 else {}
+        return cast(dict, json.loads(req.text[4:])) if req.status_code == 200 else {}
 
     except ValueError:
         # If json fails to parse
