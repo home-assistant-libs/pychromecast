@@ -9,7 +9,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
-from ..generated.cast_channel_pb2 import CastMessage  # pylint: disable=no-name-in-module
+from ..generated.cast_channel_pb2 import (  # pylint: disable-next=no-name-in-module
+    CastMessage,
+)
 from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
 
 class SendMessageFunc(Protocol):
     """Protocol for SocketClient's send message functions."""
+
     def __call__(
         self,
         namespace: str,
