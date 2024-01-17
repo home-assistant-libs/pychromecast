@@ -6,13 +6,31 @@ from __future__ import annotations
 import abc
 from functools import partial
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
-from ..response_handler import chain_on_success
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    CastMessage,
+)
+from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
+
+
+class SendMessageFunc(Protocol):
+    """Protocol for SocketClient's send message functions."""
+
+    def __call__(
+        self,
+        namespace: str,
+        message: Any,
+        *,
+        inc_session_id: bool = False,
+        callback_function: CallbackType | None = None,
+        no_add_request_id: bool = False,
+    ) -> None:
+        ...
 
 
 class BaseController(abc.ABC):
@@ -20,11 +38,11 @@ class BaseController(abc.ABC):
 
     def __init__(
         self,
-        namespace,
-        supporting_app_id=None,
-        target_platform=False,
-        app_must_match=False,
-    ):
+        namespace: str,
+        supporting_app_id: str | None = None,
+        target_platform: bool = False,
+        app_must_match: bool = False,
+    ) -> None:
         """
         Initialize the controller.
 
@@ -42,12 +60,12 @@ class BaseController(abc.ABC):
         self.target_platform = target_platform
 
         self._socket_client: SocketClient | None = None
-        self._message_func = None
+        self._message_func: SendMessageFunc | None = None
 
         self.logger = logging.getLogger(__name__)
 
     @property
-    def is_active(self):
+    def is_active(self) -> bool:
         """True if the controller is connected to a socket client and the
         Chromecast is running an app that supports this controller."""
         return (
@@ -55,17 +73,30 @@ class BaseController(abc.ABC):
             and self.namespace in self._socket_client.app_namespaces
         )
 
-    def launch(self, *, callback_function=None, force_launch=False):
+    def launch(
+        self,
+        *,
+        callback_function: CallbackType | None = None,
+        force_launch: bool = False,
+    ) -> None:
         """If set, launches app related to the controller."""
-        self._check_registered()
+        if self.supporting_app_id is None:
+            self.logger.debug(
+                "%s: Can't launch app with no supporting app_id",
+                self.__class__.__name__,
+            )
+            return
 
-        self._socket_client.receiver_controller.launch_app(
+        if self._socket_client is None:
+            raise ControllerNotRegistered
+
+        self._socket_client.receiver_controller.launch_app(  # type: ignore[no-untyped-call]
             self.supporting_app_id,
             force_launch=force_launch,
             callback_function=callback_function,
         )
 
-    def registered(self, socket_client):
+    def registered(self, socket_client: SocketClient) -> None:
         """Called when a controller is registered."""
         self._socket_client = socket_client
 
@@ -74,31 +105,32 @@ class BaseController(abc.ABC):
         else:
             self._message_func = self._socket_client.send_app_message
 
-    def unregistered(self):
+    def unregistered(self) -> None:
         """Called when a controller is unregistered."""
         self._message_func = None
 
-    def channel_connected(self):
+    def channel_connected(self) -> None:
         """Called when a channel has been openend that supports the
         namespace of this controller."""
 
-    def channel_disconnected(self):
+    def channel_disconnected(self) -> None:
         """Called when a channel is disconnected."""
 
     def send_message(
         self,
-        data,
+        data: Any,
         *,
-        inc_session_id=False,
-        callback_function=None,
-        no_add_request_id=False,
-    ):
+        inc_session_id: bool = False,
+        callback_function: CallbackType | None = None,
+        no_add_request_id: bool = False,
+    ) -> None:
         """
         Send a message on this namespace to the Chromecast. Ensures app is loaded.
 
         Will raise a NotConnected exception if not connected.
         """
-        self._check_registered()
+        if self._socket_client is None:
+            raise ControllerNotRegistered
 
         receiver_ctrl = self._socket_client.receiver_controller
 
@@ -135,13 +167,16 @@ class BaseController(abc.ABC):
 
     def send_message_nocheck(
         self,
-        data,
+        data: Any,
         *,
-        inc_session_id=False,
-        callback_function=None,
-        no_add_request_id=False,
-    ):
+        inc_session_id: bool = False,
+        callback_function: CallbackType | None = None,
+        no_add_request_id: bool = False,
+    ) -> None:
         """Send a message."""
+        if TYPE_CHECKING:
+            assert self._message_func
+
         self._message_func(
             self.namespace,
             data,
@@ -150,7 +185,7 @@ class BaseController(abc.ABC):
             no_add_request_id=no_add_request_id,
         )
 
-    def receive_message(self, _message, _data: dict):
+    def receive_message(self, _message: CastMessage, _data: dict) -> bool:
         """
         Called when a message is received that matches the namespace.
         Returns boolean indicating if message was handled.
@@ -158,17 +193,7 @@ class BaseController(abc.ABC):
         """
         return False
 
-    def tear_down(self):
+    def tear_down(self) -> None:
         """Called when we are shutting down."""
         self._socket_client = None
         self._message_func = None
-
-    def _check_registered(self):
-        """Helper method to see if we are registered with a Cast object."""
-        if self._socket_client is None:
-            raise ControllerNotRegistered(
-                (
-                    "Trying to use the controller without it being registered "
-                    "with a Cast object."
-                )
-            )
