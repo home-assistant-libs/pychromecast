@@ -90,7 +90,7 @@ class BaseController(abc.ABC):
         if self._socket_client is None:
             raise ControllerNotRegistered
 
-        self._socket_client.receiver_controller.launch_app(  # type: ignore[no-untyped-call]
+        self._socket_client.receiver_controller.launch_app(
             self.supporting_app_id,
             force_launch=force_launch,
             callback_function=callback_function,

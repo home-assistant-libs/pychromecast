@@ -15,8 +15,11 @@ from ..const import (
     REQUEST_TIMEOUT,
     SESSION_ID,
 )
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    CastMessage,
+)
 from ..response_handler import WaitResponse, chain_on_success
-from . import BaseController
+from . import BaseController, CallbackType
 
 APP_ID = "appId"
 ERROR_REASON = "reason"
@@ -64,7 +67,7 @@ class CastStatusListener(abc.ABC):
     """Listener for receiving cast status events."""
 
     @abc.abstractmethod
-    def new_cast_status(self, status: CastStatus):
+    def new_cast_status(self, status: CastStatus) -> None:
         """Updated cast status."""
 
 
@@ -72,7 +75,7 @@ class LaunchErrorListener(abc.ABC):
     """Listener for receiving launch error events."""
 
     @abc.abstractmethod
-    def new_launch_error(self, status: LaunchFailure):
+    def new_launch_error(self, status: LaunchFailure) -> None:
         """Launch error."""
 
 
@@ -83,27 +86,27 @@ class ReceiverController(BaseController):
     :param cast_type: Type of Chromecast device.
     """
 
-    def __init__(self, cast_type=CAST_TYPE_CHROMECAST):
+    def __init__(self, cast_type: str = CAST_TYPE_CHROMECAST) -> None:
         super().__init__(NS_RECEIVER, target_platform=True)
 
-        self.status = None
-        self.launch_failure = None
+        self.status: CastStatus | None = None
+        self.launch_failure: LaunchFailure | None = None
         self.cast_type = cast_type
 
-        self._status_listeners = []
-        self._launch_error_listeners = []
+        self._status_listeners: list[CastStatusListener] = []
+        self._launch_error_listeners: list[LaunchErrorListener] = []
 
-    def disconnected(self):
+    def disconnected(self) -> None:
         """Called when disconnected. Will erase status."""
         self.logger.info("Receiver:channel_disconnected")
         self.status = None
 
     @property
-    def app_id(self):
+    def app_id(self) -> str | None:
         """Convenience method to retrieve current app id."""
         return self.status.app_id if self.status else None
 
-    def receive_message(self, _message, data: dict):
+    def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """
         Called when a receiver message is received.
 
@@ -121,26 +124,36 @@ class ReceiverController(BaseController):
 
         return False
 
-    def register_status_listener(self, listener: CastStatusListener):
+    def register_status_listener(self, listener: CastStatusListener) -> None:
         """Register a status listener for when a new Chromecast status
         has been received. Listeners will be called with
         listener.new_cast_status(status)"""
         self._status_listeners.append(listener)
 
-    def register_launch_error_listener(self, listener: LaunchErrorListener):
+    def register_launch_error_listener(self, listener: LaunchErrorListener) -> None:
         """Register a listener for when a new launch error message
         has been received. Listeners will be called with
         listener.new_launch_error(launch_failure)"""
         self._launch_error_listeners.append(listener)
 
-    def update_status(self, *, callback_function=None):
+    def update_status(
+        self,
+        *,
+        callback_function: CallbackType | None = None,
+    ) -> None:
         """Sends a message to the Chromecast to update the status."""
         self.logger.debug("Receiver:Updating status")
         self.send_message(
             {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
         )
 
-    def launch_app(self, app_id, *, force_launch=False, callback_function=None):
+    def launch_app(
+        self,
+        app_id: str,
+        *,
+        force_launch: bool = False,
+        callback_function: CallbackType | None = None,
+    ) -> None:
         """Launches an app on the Chromecast.
 
         Will only launch if it is not currently running unless
@@ -157,7 +170,12 @@ class ReceiverController(BaseController):
         else:
             self._send_launch_message(app_id, force_launch, callback_function)
 
-    def _send_launch_message(self, app_id, force_launch=False, callback_function=None):
+    def _send_launch_message(
+        self,
+        app_id: str,
+        force_launch: bool,
+        callback_function: CallbackType | None,
+    ) -> None:
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
 
@@ -186,7 +204,11 @@ class ReceiverController(BaseController):
             if callback_function:
                 callback_function(True, None)
 
-    def stop_app(self, *, callback_function=None):
+    def stop_app(
+        self,
+        *,
+        callback_function: CallbackType | None = None,
+    ) -> None:
         """Stops the current running app on the Chromecast."""
         self.logger.info("Receiver:Stopping current app '%s'", self.app_id)
         return self.send_message(
@@ -195,7 +217,7 @@ class ReceiverController(BaseController):
             callback_function=callback_function,
         )
 
-    def set_volume(self, volume, timeout=REQUEST_TIMEOUT):
+    def set_volume(self, volume: float, timeout: float = REQUEST_TIMEOUT) -> float:
         """Allows to set volume. Should be value between 0..1.
         Returns the new volume.
 
@@ -210,7 +232,7 @@ class ReceiverController(BaseController):
         response_handler.wait_response()
         return volume
 
-    def set_volume_muted(self, muted, timeout=REQUEST_TIMEOUT):
+    def set_volume_muted(self, muted: bool, timeout: float = REQUEST_TIMEOUT) -> None:
         """Allows to mute volume."""
         response_handler = WaitResponse(timeout)
         self.send_message(
@@ -220,7 +242,7 @@ class ReceiverController(BaseController):
         response_handler.wait_response()
 
     @staticmethod
-    def _parse_status(data, cast_type):
+    def _parse_status(data: dict, cast_type: str) -> CastStatus:
         """
         Parses a STATUS message and returns a CastStatus object.
 
@@ -228,12 +250,12 @@ class ReceiverController(BaseController):
         :param cast_type: Type of Chromecast.
         :rtype: CastStatus
         """
-        data = data.get("status", {})
+        status_data: dict = data.get("status", {})
 
-        volume_data = data.get("volume", {})
+        volume_data: dict = status_data.get("volume", {})
 
         try:
-            app_data = data["applications"][0]
+            app_data: dict = status_data["applications"][0]
         except (KeyError, IndexError):
             app_data = {}
 
@@ -255,16 +277,13 @@ class ReceiverController(BaseController):
         )
         return status
 
-    def _process_get_status(self, data):
+    def _process_get_status(self, data: dict) -> None:
         """Processes a received STATUS message and notifies listeners."""
         status = self._parse_status(data, self.cast_type)
         self.status = status
 
         self.logger.debug("Received status: %s", self.status)
-        self._report_status()
 
-    def _report_status(self):
-        """Reports the current status to all listeners."""
         for listener in self._status_listeners:
             try:
                 listener.new_cast_status(self.status)
@@ -274,7 +293,7 @@ class ReceiverController(BaseController):
                 )
 
     @staticmethod
-    def _parse_launch_error(data):
+    def _parse_launch_error(data: dict) -> LaunchFailure:
         """
         Parses a LAUNCH_ERROR message and returns a LaunchFailure object.
 
@@ -285,7 +304,7 @@ class ReceiverController(BaseController):
             data.get(ERROR_REASON, None), data.get(APP_ID), data.get(REQUEST_ID)
         )
 
-    def _process_launch_error(self, data):
+    def _process_launch_error(self, data: dict) -> None:
         """
         Processes a received LAUNCH_ERROR message and notifies listeners.
         """
@@ -302,7 +321,7 @@ class ReceiverController(BaseController):
                     "Exception thrown when calling launch error listener"
                 )
 
-    def tear_down(self):
+    def tear_down(self) -> None:
         """Called when controller is destroyed."""
         super().tear_down()
 
