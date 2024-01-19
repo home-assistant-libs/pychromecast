@@ -512,7 +512,7 @@ class SocketClient(threading.Thread):
             for namespace in self.app_namespaces:
                 if namespace in self._handlers:
                     self._ensure_channel_connected(self.destination_id)
-                    for handler in self._handlers[namespace]:
+                    for handler in set(self._handlers[namespace]):
                         handler.channel_connected()
 
     def _gen_request_id(self):
@@ -730,7 +730,7 @@ class SocketClient(threading.Thread):
                 )
 
             # message handlers
-            for handler in self._handlers[message.namespace]:
+            for handler in set(self._handlers[message.namespace]):
                 try:
                     handled = handler.receive_message(message, data)
 
@@ -773,8 +773,8 @@ class SocketClient(threading.Thread):
             except Exception:  # pylint: disable=broad-except
                 pass
 
-        for namespace in self._handlers.values():
-            for handler in namespace:
+        for handlers in self._handlers.values():
+            for handler in set(handlers):
                 try:
                     handler.tear_down()
                 except Exception:  # pylint: disable=broad-except
@@ -1050,7 +1050,7 @@ class SocketClient(threading.Thread):
         """Handles a channel being disconnected."""
         for namespace in self.app_namespaces:
             if namespace in self._handlers:
-                for handler in self._handlers[namespace]:
+                for handler in set(self._handlers[namespace]):
                     handler.channel_disconnected()
 
         self.app_namespaces = []
