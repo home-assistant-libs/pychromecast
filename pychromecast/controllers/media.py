@@ -7,12 +7,16 @@ from datetime import datetime
 from dataclasses import dataclass
 import logging
 import threading
+from typing import Any
 
 from ..config import APP_MEDIA_RECEIVER
 from ..const import MESSAGE_TYPE
-from ..error import PyChromecastError
+from ..error import ControllerNotRegistered, PyChromecastError
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    CastMessage,
+)
 from ..response_handler import WaitResponse
-from . import BaseController
+from . import BaseController, CallbackType
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -71,7 +75,7 @@ CMD_SUPPORT_SKIP_FORWARD = 16
 CMD_SUPPORT_SKIP_BACKWARD = 32
 
 # From https://developers.google.com/cast/docs/web_receiver/error_codes
-MEDIA_PLAYER_ERROR_CODES = {
+MEDIA_PLAYER_ERROR_CODES: dict[int | None, str] = {
     100: "MEDIA_UNKNOWN",
     101: "MEDIA_ABORTED",
     102: "MEDIA_DECODE",
@@ -116,29 +120,33 @@ _LOGGER = logging.getLogger(__name__)
 class MediaStatus:
     """Class to hold the media status."""
 
-    def __init__(self):
-        self.current_time = 0
-        self.content_id = None
-        self.content_type = None
-        self.duration = None
+    def __init__(self) -> None:
+        self.current_time = 0.0
+        self.content_id: str | None = None
+        self.content_type: str | None = None
+        self.duration: float | None = None
         self.stream_type = STREAM_TYPE_UNKNOWN
-        self.idle_reason = None
-        self.media_session_id = None
-        self.playback_rate = 1
+        self.idle_reason: str | None = None
+        self.media_session_id: int | None = None
+        self.playback_rate = 1.0
         self.player_state = MEDIA_PLAYER_STATE_UNKNOWN
         self.supported_media_commands = 0
-        self.volume_level = 1
+        self.volume_level = 1.0
         self.volume_muted = False
-        self.media_custom_data = {}
-        self.media_metadata = {}
-        self.subtitle_tracks = {}
-        self.current_subtitle_tracks = []
-        self.last_updated = None
+        self.media_custom_data: dict = {}
+        self.media_metadata: dict = {}
+        self.subtitle_tracks: dict = {}
+        self.current_subtitle_tracks: list = []
+        self.last_updated: datetime | None = None
 
     @property
-    def adjusted_current_time(self):
+    def adjusted_current_time(self) -> float | None:
         """Returns calculated current seek time of media in seconds"""
-        if self.player_state == MEDIA_PLAYER_STATE_PLAYING:
+        if (
+            self.current_time is not None
+            and self.last_updated is not None
+            and self.player_state == MEDIA_PLAYER_STATE_PLAYING
+        ):
             # Add time since last update
             return (
                 self.current_time
@@ -148,12 +156,12 @@ class MediaStatus:
         return self.current_time
 
     @property
-    def metadata_type(self):
+    def metadata_type(self) -> int | None:
         """Type of meta data."""
         return self.media_metadata.get("metadataType")
 
     @property
-    def player_is_playing(self):
+    def player_is_playing(self) -> bool:
         """Return True if player is PLAYING."""
         return self.player_state in (
             MEDIA_PLAYER_STATE_PLAYING,
@@ -161,92 +169,92 @@ class MediaStatus:
         )
 
     @property
-    def player_is_paused(self):
+    def player_is_paused(self) -> bool:
         """Return True if player is PAUSED."""
         return self.player_state == MEDIA_PLAYER_STATE_PAUSED
 
     @property
-    def player_is_idle(self):
+    def player_is_idle(self) -> bool:
         """Return True if player is IDLE."""
         return self.player_state == MEDIA_PLAYER_STATE_IDLE
 
     @property
-    def media_is_generic(self):
+    def media_is_generic(self) -> bool:
         """Return True if media status represents generic media."""
         return self.metadata_type == METADATA_TYPE_GENERIC
 
     @property
-    def media_is_tvshow(self):
+    def media_is_tvshow(self) -> bool:
         """Return True if media status represents a tv show."""
         return self.metadata_type == METADATA_TYPE_TVSHOW
 
     @property
-    def media_is_movie(self):
+    def media_is_movie(self) -> bool:
         """Return True if media status represents a movie."""
         return self.metadata_type == METADATA_TYPE_MOVIE
 
     @property
-    def media_is_musictrack(self):
+    def media_is_musictrack(self) -> bool:
         """Return True if media status represents a musictrack."""
         return self.metadata_type == METADATA_TYPE_MUSICTRACK
 
     @property
-    def media_is_photo(self):
+    def media_is_photo(self) -> bool:
         """Return True if media status represents a photo."""
         return self.metadata_type == METADATA_TYPE_PHOTO
 
     @property
-    def stream_type_is_buffered(self):
+    def stream_type_is_buffered(self) -> bool:
         """Return True if stream type is BUFFERED."""
         return self.stream_type == STREAM_TYPE_BUFFERED
 
     @property
-    def stream_type_is_live(self):
+    def stream_type_is_live(self) -> bool:
         """Return True if stream type is LIVE."""
         return self.stream_type == STREAM_TYPE_LIVE
 
     @property
-    def title(self):
+    def title(self) -> str | None:
         """Return title of media."""
         return self.media_metadata.get("title")
 
     @property
-    def series_title(self):
+    def series_title(self) -> str | None:
         """Return series title if available."""
         return self.media_metadata.get("seriesTitle")
 
     @property
-    def season(self):
+    def season(self) -> int | None:
         """Return season if available."""
         return self.media_metadata.get("season")
 
     @property
-    def episode(self):
+    def episode(self) -> int | None:
         """Return episode if available."""
         return self.media_metadata.get("episode")
 
     @property
-    def artist(self):
+    def artist(self) -> str | None:
         """Return artist if available."""
         return self.media_metadata.get("artist")
 
     @property
-    def album_name(self):
+    def album_name(self) -> str | None:
         """Return album name if available."""
         return self.media_metadata.get("albumName")
 
     @property
-    def album_artist(self):
+    def album_artist(self) -> str | None:
         """Return album artist if available."""
         return self.media_metadata.get("albumArtist")
 
     @property
-    def track(self):
+    def track(self) -> int | None:
         """Return track number if available."""
         return self.media_metadata.get("track")
 
     @property
-    def images(self):
+    def images(self) -> list[MediaImage]:
         """Return a list of MediaImage objects for this media."""
         return [
             MediaImage(item.get("url"), item.get("height"), item.get("width"))
@@ -254,46 +262,46 @@ class MediaStatus:
         ]
 
     @property
-    def supports_pause(self):
+    def supports_pause(self) -> bool:
         """True if PAUSE is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_PAUSE)
 
     @property
-    def supports_seek(self):
+    def supports_seek(self) -> bool:
         """True if SEEK is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_SEEK)
 
     @property
-    def supports_stream_volume(self):
+    def supports_stream_volume(self) -> bool:
         """True if STREAM_VOLUME is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_STREAM_VOLUME)
 
     @property
-    def supports_stream_mute(self):
+    def supports_stream_mute(self) -> bool:
         """True if STREAM_MUTE is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_STREAM_MUTE)
 
     @property
-    def supports_skip_forward(self):
+    def supports_skip_forward(self) -> bool:
         """True if SKIP_FORWARD is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_SKIP_FORWARD)
 
     @property
-    def supports_skip_backward(self):
+    def supports_skip_backward(self) -> bool:
         """True if SKIP_BACKWARD is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_SKIP_BACKWARD)
 
     @property
-    def supports_queue_next(self):
+    def supports_queue_next(self) -> bool:
         """True if QUEUE_NEXT is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_QUEUE_NEXT)
 
     @property
-    def supports_queue_prev(self):
+    def supports_queue_prev(self) -> bool:
         """True if QUEUE_PREV is supported."""
         return bool(self.supported_media_commands & CMD_SUPPORT_QUEUE_PREV)
 
-    def update(self, data):
+    def update(self, data: dict) -> None:
         """New data will only contain the changed attributes."""
         if not data.get("status", []):
             return
@@ -327,7 +335,7 @@ class MediaStatus:
         )
         self.last_updated = datetime.utcnow()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         info = {
             "metadata_type": self.metadata_type,
             "title": self.title,
@@ -355,18 +363,18 @@ class MediaStatusListener(abc.ABC):
     """Listener for receiving media status events."""
 
     @abc.abstractmethod
-    def new_media_status(self, status: MediaStatus):
+    def new_media_status(self, status: MediaStatus) -> None:
         """Updated media status."""
 
     @abc.abstractmethod
-    def load_media_failed(self, item: int, error_code: int):
+    def load_media_failed(self, item: int, error_code: int) -> None:
         """Called when load media failed."""
 
 
 class BaseMediaPlayer(BaseController):
     """Mixin class for apps which can play media using the default media namespace."""
 
-    def __init__(self, supporting_app_id, app_must_match=True):
+    def __init__(self, supporting_app_id: str, app_must_match: bool = True) -> None:
         super().__init__(
             "urn:x-cast:com.google.cast.media",
             supporting_app_id=supporting_app_id,
@@ -375,23 +383,23 @@ class BaseMediaPlayer(BaseController):
 
     def play_media(  # pylint: disable=too-many-locals
         self,
-        url,
-        content_type,
+        url: str,
+        content_type: str,
         *,
-        title=None,
-        thumb=None,
-        current_time=None,
-        autoplay=True,
-        stream_type=STREAM_TYPE_BUFFERED,
-        metadata=None,
-        subtitles=None,
-        subtitles_lang="en-US",
-        subtitles_mime="text/vtt",
-        subtitle_id=1,
-        enqueue=False,
-        media_info=None,
-        callback_function=None,
-    ):
+        title: str | None = None,
+        thumb: str | None = None,
+        current_time: float | None = None,
+        autoplay: bool = True,
+        stream_type: str = STREAM_TYPE_LIVE,
+        metadata: dict | None = None,
+        subtitles: str | None = None,
+        subtitles_lang: str = "en-US",
+        subtitles_mime: str = "text/vtt",
+        subtitle_id: int = 1,
+        enqueue: bool = False,
+        media_info: dict | None = None,
+        callback_function: CallbackType | None = None,
+    ) -> None:
         """
         Plays media on the Chromecast. Start default media receiver if not
         already started.
@@ -442,22 +450,22 @@ class BaseMediaPlayer(BaseController):
 
     def _send_start_play_media(  # pylint: disable=too-many-locals
         self,
-        url,
-        content_type,
-        title,
-        thumb,
-        current_time,
-        autoplay,
-        stream_type,
-        metadata,
-        subtitles,
-        subtitles_lang,
-        subtitles_mime,
-        subtitle_id,
-        enqueue,
-        media_info,
-        callback_function,
-    ):
+        url: str,
+        content_type: str,
+        title: str | None,
+        thumb: str | None,
+        current_time: float | None,
+        autoplay: bool,
+        stream_type: str,
+        metadata: dict | None,
+        subtitles: str | None,
+        subtitles_lang: str,
+        subtitles_mime: str,
+        subtitle_id: int,
+        enqueue: bool,
+        media_info: dict | None,
+        callback_function: CallbackType | None,
+    ) -> None:
         media_info = media_info or {}
         media = {
             "contentId": url,
@@ -503,8 +511,10 @@ class BaseMediaPlayer(BaseController):
             }
 
         if enqueue:
+            if self._socket_client is None:
+                raise ControllerNotRegistered
             status = self._socket_client.media_controller.status
-            msg = {
+            msg: dict[str, Any] = {
                 "mediaSessionId": status.media_session_id,
                 "items": [
                     {
@@ -531,14 +541,14 @@ class BaseMediaPlayer(BaseController):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(self, media_id=None, **kwargs):
+    def quick_play(self, media_id: str | None = None, **kwargs: Any) -> None:
         """Quick Play"""
 
         media_type = kwargs.pop("media_type", "video/mp4")
 
         response_handler = WaitResponse(30)
         self.play_media(
-            media_id, media_type, **kwargs, callback_function=response_handler.callback
+            media_id, media_type, **kwargs, callback_function=response_handler.callback  # type: ignore[arg-type]
         )
         request_completed = response_handler.wait_response()
 
@@ -552,7 +562,7 @@ class BaseMediaPlayer(BaseController):
 class MediaController(BaseMediaPlayer):
     """Controller to interact with Google media namespace."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             supporting_app_id=APP_MEDIA_RECEIVER,
             app_must_match=False,
@@ -561,18 +571,18 @@ class MediaController(BaseMediaPlayer):
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
-        self._status_listeners = []
+        self._status_listeners: list[MediaStatusListener] = []
 
-    def channel_connected(self):
+    def channel_connected(self) -> None:
         """Called when media channel is connected. Will update status."""
         self.update_status()
 
-    def channel_disconnected(self):
+    def channel_disconnected(self) -> None:
         """Called when a media channel is disconnected. Will erase status."""
         self.status = MediaStatus()
         self._fire_status_changed()
 
-    def receive_message(self, _message, data: dict):
+    def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """Called when a media message is received."""
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
             self._process_media_status(data)
@@ -584,18 +594,20 @@ class MediaController(BaseMediaPlayer):
 
         return False
 
-    def register_status_listener(self, listener: MediaStatusListener):
+    def register_status_listener(self, listener: MediaStatusListener) -> None:
         """Register a listener for new media statuses. A new status will
         call listener.new_media_status(status)"""
         self._status_listeners.append(listener)
 
-    def update_status(self, *, callback_function=None):
+    def update_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Send message to update the status."""
         self.send_message(
             {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
         )
 
-    def _send_command(self, command):
+    def _send_command(
+        self, command: dict
+    ) -> None:
         """Send a command to the Chromecast on media channel."""
         if self.status is None or self.status.media_session_id is None:
             self.logger.warning(
@@ -608,31 +620,31 @@ class MediaController(BaseMediaPlayer):
         self.send_message(command, inc_session_id=True)
 
     @property
-    def is_playing(self):
+    def is_playing(self) -> bool:
         """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
         Returns if the Chromecast is playing."""
         return self.status is not None and self.status.player_is_playing
 
     @property
-    def is_paused(self):
+    def is_paused(self) -> bool:
         """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
         Returns if the Chromecast is paused."""
         return self.status is not None and self.status.player_is_paused
 
     @property
-    def is_idle(self):
+    def is_idle(self) -> bool:
         """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
         Returns if the Chromecast is idle on a media supported app."""
         return self.status is not None and self.status.player_is_idle
 
     @property
-    def title(self):
+    def title(self) -> str | None:
         """Deprecated as of June 8, 2015. Use self.status.title.
         Return title of the current playing item."""
         return None if not self.status else self.status.title
 
     @property
-    def thumbnail(self):
+    def thumbnail(self) -> str | None:
         """Deprecated as of June 8, 2015. Use self.status.images.
         Return thumbnail url of current playing item."""
         if not self.status:
@@ -642,27 +654,29 @@ class MediaController(BaseMediaPlayer):
 
         return images[0].url if images else None
 
-    def play(self):
+    def play(self) -> None:
         """Send the PLAY command."""
         self._send_command({MESSAGE_TYPE: TYPE_PLAY})
 
-    def pause(self):
+    def pause(self) -> None:
         """Send the PAUSE command."""
         self._send_command({MESSAGE_TYPE: TYPE_PAUSE})
 
-    def stop(self):
+    def stop(self) -> None:
         """Send the STOP command."""
         self._send_command({MESSAGE_TYPE: TYPE_STOP})
 
-    def rewind(self):
+    def rewind(self) -> None:
         """Starts playing the media from the beginning."""
         self.seek(0)
 
-    def skip(self):
+    def skip(self) -> None:
         """Skips rest of the media. Values less then -5 behaved flaky."""
+        if not self.status.duration or self.status.duration < 5:
+            return
         self.seek(int(self.status.duration) - 5)
 
-    def seek(self, position):
+    def seek(self, position: float) -> None:
         """Seek the media to a specific location."""
         self._send_command(
             {
@@ -672,25 +686,25 @@ class MediaController(BaseMediaPlayer):
             }
         )
 
-    def queue_next(self):
+    def queue_next(self) -> None:
         """Send the QUEUE_NEXT command."""
         self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1})
 
-    def queue_prev(self):
+    def queue_prev(self) -> None:
         """Send the QUEUE_PREV command."""
         self._send_command({MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1})
 
-    def enable_subtitle(self, track_id):
+    def enable_subtitle(self, track_id: int) -> None:
         """Enable specific text track."""
         self._send_command(
             {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]}
         )
 
-    def disable_subtitle(self):
+    def disable_subtitle(self) -> None:
         """Disable subtitle."""
         self._send_command({MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []})
 
-    def block_until_active(self, timeout=None):
+    def block_until_active(self, timeout: float | None = None) -> None:
         """
         Blocks thread until the media controller session is active on the
         chromecast. The media controller only accepts playback control
@@ -704,7 +718,7 @@ class MediaController(BaseMediaPlayer):
         """
         self.session_active_event.wait(timeout=timeout)
 
-    def _process_media_status(self, data):
+    def _process_media_status(self, data: dict) -> None:
         """Processes a STATUS message."""
         self.status.update(data)
 
@@ -718,10 +732,10 @@ class MediaController(BaseMediaPlayer):
 
         self._fire_status_changed()
 
-    def _process_load_failed(self, data):
+    def _process_load_failed(self, data: dict) -> None:
         """Processes a LOAD_FAILED message."""
-        item = data.get("itemId")
-        error_code = data.get("detailedErrorCode")
+        item: int | None = data.get("itemId")
+        error_code: int | None = data.get("detailedErrorCode")
 
         self.logger.debug(
             "Media:Load failed with code %s(%s) for item %s",
@@ -730,9 +744,13 @@ class MediaController(BaseMediaPlayer):
             item,
         )
 
+        if item is None or error_code is None:
+            self.logger.debug("Media:Not firing load failed")
+            return
+
         self._fire_load_failed(item, error_code)
 
-    def _fire_status_changed(self):
+    def _fire_status_changed(self) -> None:
         """Tells listeners of a changed status."""
         for listener in self._status_listeners:
             try:
@@ -740,7 +758,7 @@ class MediaController(BaseMediaPlayer):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
-    def _fire_load_failed(self, item, error_code):
+    def _fire_load_failed(self, item: int, error_code: int) -> None:
         """Tells listeners of a changed status."""
         for listener in self._status_listeners:
             try:
@@ -748,7 +766,7 @@ class MediaController(BaseMediaPlayer):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling load failed callback")
 
-    def tear_down(self):
+    def tear_down(self) -> None:
         """Called when controller is destroyed."""
         super().tear_down()
 
@@ -758,5 +776,5 @@ class MediaController(BaseMediaPlayer):
 class DefaultMediaReceiverController(BaseMediaPlayer):
     """Controller to force media to play with the default media receiver."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(supporting_app_id=APP_MEDIA_RECEIVER)
