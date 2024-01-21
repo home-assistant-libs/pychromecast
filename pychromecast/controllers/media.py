@@ -605,9 +605,7 @@ class MediaController(BaseMediaPlayer):
             {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
         )
 
-    def _send_command(
-        self, command: dict
-    ) -> None:
+    def _send_command(self, command: dict) -> None:
         """Send a command to the Chromecast on media channel."""
         if self.status is None or self.status.media_session_id is None:
             self.logger.warning(
