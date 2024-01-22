@@ -13,16 +13,28 @@ from . import BaseController
 APP_NAMESPACE = "urn:x-cast:com.nabucasa.hast"
 DEFAULT_HASS_CONNECT_TIMEOUT = 30
 
+# Error codes sent in receiver_error messages
+ERR_CONNECTION_FAILED = 1
+ERR_AUTHENTICATION_FAILED = 2
+ERR_CONNECTION_LOST = 3
+ERR_HASS_URL_MISSING = 4
+ERR_NO_HTTPS = 5
+ERR_WRONG_INSTANCE = 20
+ERR_NOT_CONNECTED = 21
+ERR_FETCH_CONFIG_FAILED = 22
+
 
 class HomeAssistantController(BaseController):
     """Controller to interact with Home Assistant."""
 
     def __init__(
         self,
+        *,
         hass_url,
         hass_uuid,
         client_id,
         refresh_token,
+        unregister,
         app_namespace=APP_NAMESPACE,
         app_id=APP_HOMEASSISTANT_LOVELACE,
         hass_connect_timeout=DEFAULT_HASS_CONNECT_TIMEOUT,
@@ -32,6 +44,7 @@ class HomeAssistantController(BaseController):
         self.hass_uuid = hass_uuid
         self.client_id = client_id
         self.refresh_token = refresh_token
+        self.unregister = unregister
         self.hass_connect_timeout = hass_connect_timeout
         # {
         #   connected: boolean;
@@ -68,6 +81,11 @@ class HomeAssistantController(BaseController):
     def receive_message(self, _message, data: dict):
         """Called when a message is received."""
         if data.get("type") == "receiver_status":
+            if data["hassUrl"] != self.hass_url or data["hassUUID"] != self.hass_uuid:
+                self.logger.info("Received status for another instance")
+                self.unregister()
+                return True
+
             was_connected = self.hass_connected
             self.status = data
 
@@ -77,6 +95,12 @@ class HomeAssistantController(BaseController):
             # We just got connected, call the callbacks.
             self._hass_connecting_event.set()
             self._call_on_connect_callbacks(True)
+            return True
+
+        if data.get("type") == "receiver_error":
+            if data.get("error_code") == ERR_WRONG_INSTANCE:
+                self.logger.info("Received ERR_WRONG_INSTANCE")
+                self.unregister()
             return True
 
         return False
