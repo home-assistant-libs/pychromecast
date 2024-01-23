@@ -227,7 +227,7 @@ class MultizoneManager:
 
     def get_multizone_mediacontroller(self, group_uuid: UUID) -> MediaController:
         """Get mediacontroller of a group"""
-        return self._groups[str(group_uuid)]["chromecast"].media_controller
+        return self._groups[str(group_uuid)]["chromecast"].media_controller  # type: ignore[no-any-return]
 
 
 class MultizoneController(BaseController):
