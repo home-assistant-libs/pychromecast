@@ -187,7 +187,7 @@ class ReceiverController(BaseController):
 
             def handle_launch_response(msg_sent: bool, response: dict | None) -> None:
                 if (
-                    msg_sent
+                    msg_sent  # pylint: disable=too-many-boolean-expressions
                     and response
                     and response.get(MESSAGE_TYPE) == TYPE_LAUNCH_ERROR
                     and response.get(ERROR_REASON) == LAUNCH_CANCELLED
