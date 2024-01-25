@@ -106,17 +106,9 @@ def _message_to_string(message, data=None):
     )
 
 
-if sys.version_info >= (3, 0):
-
-    def _json_to_payload(data):
-        """Encodes a python value into JSON format."""
-        return json.dumps(data, ensure_ascii=False).encode("utf8")
-
-else:
-
-    def _json_to_payload(data):
-        """Encodes a python value into JSON format."""
-        return json.dumps(data, ensure_ascii=False)
+def _json_to_payload(data: dict) -> bytes:
+    """Encodes a python value into JSON format."""
+    return json.dumps(data, ensure_ascii=False).encode("utf8")
 
 
 def _is_ssl_timeout(exc):
