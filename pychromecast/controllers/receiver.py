@@ -31,6 +31,8 @@ TYPE_RECEIVER_STATUS = "RECEIVER_STATUS"
 TYPE_LAUNCH = "LAUNCH"
 TYPE_LAUNCH_ERROR = "LAUNCH_ERROR"
 
+LAUNCH_CANCELLED = "CANCELLED"
+
 VOLUME_CONTROL_TYPE_ATTENUATION = "attenuation"
 VOLUME_CONTROL_TYPE_FIXED = "fixed"
 VOLUME_CONTROL_TYPE_MASTER = "master"
@@ -175,6 +177,8 @@ class ReceiverController(BaseController):
         app_id: str,
         force_launch: bool,
         callback_function: CallbackType | None,
+        *,
+        retry_on_cancelled_error: bool = True,
     ) -> None:
         if force_launch or self.app_id != app_id:
             self.logger.info("Receiver:Launching app %s", app_id)
@@ -182,6 +186,25 @@ class ReceiverController(BaseController):
             self.launch_failure = None
 
             def handle_launch_response(msg_sent: bool, response: dict | None) -> None:
+                if (
+                    msg_sent
+                    and response
+                    and response.get(MESSAGE_TYPE) == TYPE_LAUNCH_ERROR
+                    and response.get(ERROR_REASON) == LAUNCH_CANCELLED
+                    and not self._launch_error_listeners
+                    and retry_on_cancelled_error
+                ):
+                    self.logger.info(
+                        "Receiver:Launching app %s failed, retrying once", app_id
+                    )
+                    self._send_launch_message(
+                        app_id,
+                        force_launch,
+                        callback_function,
+                        retry_on_cancelled_error=False,
+                    )
+                    return
+
                 if not callback_function:
                     return
 
