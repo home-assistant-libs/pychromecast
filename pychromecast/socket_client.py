@@ -119,15 +119,6 @@ else:
         return json.dumps(data, ensure_ascii=False)
 
 
-def _is_ssl_timeout(exc):
-    """Returns True if the exception is for an SSL timeout"""
-    return exc.message in (
-        "The handshake operation timed out",
-        "The write operation timed out",
-        "The read operation timed out",
-    )
-
-
 @dataclass(frozen=True)
 class NetworkAddress:
     """Network address container."""
@@ -841,18 +832,6 @@ class SocketClient(threading.Thread):
                     self.port,
                 )
                 continue
-            except ssl.SSLError as exc:
-                # Support older ssl implementations which does not raise
-                # socket.timeout on timeouts
-                if _is_ssl_timeout(exc):
-                    self.logger.debug(
-                        "[%s(%s):%s] ssl timeout in : _read_bytes_from_socket",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                    )
-                    continue
-                raise
         return b"".join(chunks)
 
     def _read_message(self):
