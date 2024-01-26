@@ -183,7 +183,6 @@ class MultizoneManager:
         self._groups[str(group_cast.uuid)] = {
             "chromecast": group_cast,
             "listener": Listener(group_cast, self._casts),
-            # "members": set(),
         }
 
     def remove_multizone(self, group_uuid: UUID) -> None:
