@@ -105,6 +105,11 @@ def _message_to_string(message, data=None):
     )
 
 
+def _json_to_payload(data: dict) -> bytes:
+    """Encodes a python value into JSON format."""
+    return json.dumps(data, ensure_ascii=False).encode("utf8")
+
+
 @dataclass(frozen=True)
 class NetworkAddress:
     """Network address container."""
@@ -872,7 +877,7 @@ class SocketClient(threading.Thread):
             cast_channel_pb2.CastMessage.STRING  # pylint: disable=no-member
         )
         msg.namespace = namespace
-        msg.payload_utf8 = json.dumps(data, ensure_ascii=False)
+        msg.payload_utf8 = _json_to_payload(data)
 
         # prepend message with Big-Endian 4 byte payload size
         be_size = pack(">I", msg.ByteSize())
