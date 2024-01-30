@@ -483,7 +483,7 @@ class Chromecast(CastStatusListener):
         """
         self.socket_client.connect()
 
-    def disconnect(self, timeout: float | None = None, blocking: bool = None) -> None:
+    def disconnect(self, timeout: float | None = None, blocking: bool = False) -> None:
         """
         Disconnects the chromecast and waits for it to terminate.
 
