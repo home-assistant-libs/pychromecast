@@ -1,13 +1,18 @@
 """
 Controller to interface with Home Assistant
 """
+from collections.abc import Callable
 from functools import partial
 import threading
+from typing import Any
 
 from ..config import APP_HOMEASSISTANT_LOVELACE
 from ..error import PyChromecastError
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    CastMessage,
+)
 from ..response_handler import chain_on_success
-from . import BaseController
+from . import CallbackType, BaseController
 
 
 APP_NAMESPACE = "urn:x-cast:com.nabucasa.hast"
@@ -30,15 +35,15 @@ class HomeAssistantController(BaseController):
     def __init__(
         self,
         *,
-        hass_url,
-        hass_uuid,
-        client_id,
-        refresh_token,
-        unregister,
-        app_namespace=APP_NAMESPACE,
-        app_id=APP_HOMEASSISTANT_LOVELACE,
-        hass_connect_timeout=DEFAULT_HASS_CONNECT_TIMEOUT,
-    ):
+        hass_url: str,
+        hass_uuid: str,
+        client_id: str | None,
+        refresh_token: str,
+        unregister: Callable[[], None],
+        app_namespace: str = APP_NAMESPACE,
+        app_id: str = APP_HOMEASSISTANT_LOVELACE,
+        hass_connect_timeout: float = DEFAULT_HASS_CONNECT_TIMEOUT,
+    ) -> None:
         super().__init__(app_namespace, app_id)
         self.hass_url = hass_url
         self.hass_uuid = hass_uuid
@@ -53,13 +58,13 @@ class HomeAssistantController(BaseController):
         #   lovelacePath?: string | number | null;
         #   urlPath?: string | null;
         # }
-        self.status = None
+        self.status: dict | None = None
         self._hass_connecting_event = threading.Event()
         self._hass_connecting_event.set()
-        self._on_connect = []
+        self._on_connect: list[CallbackType] = []
 
     @property
-    def hass_connected(self):
+    def hass_connected(self) -> bool:
         """Return if connected to Home Assistant."""
         return (
             self.status is not None
@@ -68,17 +73,17 @@ class HomeAssistantController(BaseController):
             and self.status["hassUUID"] == self.hass_uuid
         )
 
-    def channel_connected(self):
+    def channel_connected(self) -> None:
         """Called when a channel has been openend that supports the
         namespace of this controller."""
         self.get_status()
 
-    def channel_disconnected(self):
+    def channel_disconnected(self) -> None:
         """Called when a channel is disconnected."""
         self.status = None
         self._hass_connecting_event.set()
 
-    def receive_message(self, _message, data: dict):
+    def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """Called when a message is received."""
         if data.get("type") == "receiver_status":
             if data["hassUrl"] != self.hass_url or data["hassUUID"] != self.hass_uuid:
@@ -110,7 +115,7 @@ class HomeAssistantController(BaseController):
         while self._on_connect:
             self._on_connect.pop()(msg_sent, None)
 
-    def _connect_hass(self, callback_function):
+    def _connect_hass(self, callback_function: CallbackType) -> None:
         """Connect to Home Assistant and call the provided callback."""
         self._on_connect.append(callback_function)
 
@@ -142,11 +147,11 @@ class HomeAssistantController(BaseController):
             self._hass_connecting_event.set()
             self._call_on_connect_callbacks(False)
 
-    def show_demo(self):
+    def show_demo(self) -> None:
         """Show the demo."""
         self.send_message({"type": "show_demo"})
 
-    def get_status(self, callback_function=None):
+    def get_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Get status of Home Assistant Cast."""
         self._send_connected_message(
             {
@@ -157,7 +162,13 @@ class HomeAssistantController(BaseController):
             callback_function=callback_function,
         )
 
-    def show_lovelace_view(self, view_path, url_path=None, callback_function=None):
+    def show_lovelace_view(
+        self,
+        view_path: str | int | None,
+        url_path: str | None = None,
+        *,
+        callback_function: CallbackType | None = None,
+    ) -> None:
         """Show a Lovelace UI."""
         self._send_connected_message(
             {
@@ -170,7 +181,9 @@ class HomeAssistantController(BaseController):
             callback_function=callback_function,
         )
 
-    def _send_connected_message(self, data, callback_function):
+    def _send_connected_message(
+        self, data: dict[str, Any], callback_function: CallbackType | None
+    ) -> None:
         """Send a message to a connected Home Assistant Cast"""
         if self.hass_connected:
             self.send_message_nocheck(data, callback_function=callback_function)
