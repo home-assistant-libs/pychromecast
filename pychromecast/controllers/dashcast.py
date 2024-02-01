@@ -4,7 +4,7 @@ Controller to interface with the DashCast app namespace.
 from __future__ import annotations
 
 from ..config import APP_DASHCAST
-from ..generated.cast_channel_pb2 import (  # pylint: disable-next=no-name-in-module
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import chain_on_success
