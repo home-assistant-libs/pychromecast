@@ -20,7 +20,7 @@ class AcceptsCallbackFunc(Protocol):
     def __call__(
         self,
         *,
-        callback_function: CallbackType | None = None,
+        callback_function: CallbackType | None,
     ) -> None:
         ...
 
