@@ -2,8 +2,9 @@
 Controller to interface with Supla.
 """
 import logging
+from typing import Any
 
-from . import BaseController
+from . import BaseController, CallbackType
 from ..config import APP_SUPLA
 from ..error import PyChromecastError
 from ..response_handler import WaitResponse
@@ -15,12 +16,18 @@ APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 class SuplaController(BaseController):
     """Controller to interact with Supla namespace."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(APP_NAMESPACE, APP_SUPLA)
 
         self.logger = logging.getLogger(__name__)
 
-    def play_media(self, media_id, is_live=False, callback_function=None):
+    def play_media(
+        self,
+        media_id: str,
+        *,
+        is_live: bool = False,
+        callback_function: CallbackType | None = None
+    ) -> None:
         """
         Play Supla media
         """
@@ -48,8 +55,12 @@ class SuplaController(BaseController):
             no_add_request_id=True,
         )
 
-    def quick_play(self, media_id=None, is_live=False, **kwargs):
+    def quick_play(
+        self, media_id: str | None = None, is_live: bool = False, **kwargs: Any
+    ) -> None:
         """Quick Play"""
+        if media_id is None:
+            raise ValueError("media_id must be specified")
         response_handler = WaitResponse(10)
         self.play_media(
             media_id,
