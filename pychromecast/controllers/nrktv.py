@@ -16,5 +16,5 @@ APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 class NrkTvController(BaseMediaPlayer):
     """Controller to interact with NRK TV."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(supporting_app_id=APP_NRKTV)

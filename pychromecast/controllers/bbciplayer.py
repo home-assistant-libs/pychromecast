@@ -8,6 +8,7 @@ Controller to interface with BBC iPlayer.
 #  b09w70r2 | 960x540"
 
 import logging
+from typing import Any
 
 from .media import STREAM_TYPE_BUFFERED, STREAM_TYPE_LIVE, BaseMediaPlayer
 from ..config import APP_BBCIPLAYER
@@ -18,12 +19,18 @@ APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 class BbcIplayerController(BaseMediaPlayer):
     """Controller to interact with BBC iPlayer namespace."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(APP_BBCIPLAYER)
         self.logger = logging.getLogger(__name__)
 
     # pylint: disable-next=arguments-differ
-    def quick_play(self, media_id=None, is_live=False, metadata=None, **kwargs):
+    def quick_play(
+        self,
+        media_id: str | None = None,
+        is_live: bool = False,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any
+    ) -> None:
         """Quick Play helper for BBC iPlayer media."""
         stream_type = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
         metadata_default = {"metadataType": 0, "title": ""}
