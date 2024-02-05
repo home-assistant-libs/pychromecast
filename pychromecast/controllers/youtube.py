@@ -4,10 +4,15 @@ Use the media controller to play, pause etc.
 """
 import logging
 import threading
-from casttube import YouTubeSession
+from typing import Any
+
+from casttube import YouTubeSession  # type: ignore[import-untyped]
 
 from . import BaseController
 from ..const import MESSAGE_TYPE
+from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    CastMessage,
+)
 from ..config import APP_YOUTUBE
 
 YOUTUBE_NAMESPACE = "urn:x-cast:com.google.youtube.mdx"
@@ -20,13 +25,14 @@ _LOGGER = logging.getLogger(__name__)
 class YouTubeController(BaseController):
     """Controller to interact with Youtube."""
 
-    def __init__(self):
+    _session: YouTubeSession
+    _screen_id: str | None = None
+
+    def __init__(self) -> None:
         super().__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
         self.status_update_event = threading.Event()
-        self._screen_id = None
-        self._session = None
 
-    def start_session_if_none(self):
+    def start_session_if_none(self) -> None:
         """
         Starts a session it is not yet initialized.
         """
@@ -34,7 +40,7 @@ class YouTubeController(BaseController):
             self.update_screen_id()
             self._session = YouTubeSession(screen_id=self._screen_id)
 
-    def play_video(self, video_id, playlist_id=None):
+    def play_video(self, video_id: str, playlist_id: str | None = None) -> None:
         """
         Play video(video_id) now. This ignores the current play queue order.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
@@ -43,7 +49,7 @@ class YouTubeController(BaseController):
         self.start_session_if_none()
         self._session.play_video(video_id, playlist_id)
 
-    def add_to_queue(self, video_id):
+    def add_to_queue(self, video_id: str) -> None:
         """
         Add video(video_id) to the end of the play queue.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
@@ -51,7 +57,7 @@ class YouTubeController(BaseController):
         self.start_session_if_none()
         self._session.add_to_queue(video_id)
 
-    def play_next(self, video_id):
+    def play_next(self, video_id: str) -> None:
         """
         Play video(video_id) after the currently playing video.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
@@ -59,7 +65,7 @@ class YouTubeController(BaseController):
         self.start_session_if_none()
         self._session.play_next(video_id)
 
-    def remove_video(self, video_id):
+    def remove_video(self, video_id: str) -> None:
         """
         Remove video(videoId) from the queue.
         :param video_id: YouTube video id(http://youtube.com/watch?v=video_id)
@@ -67,14 +73,14 @@ class YouTubeController(BaseController):
         self.start_session_if_none()
         self._session.remove_video(video_id)
 
-    def clear_playlist(self):
+    def clear_playlist(self) -> None:
         """
         Clear the entire video queue
         """
         self.start_session_if_none()
         self._session.clear_playlist()
 
-    def update_screen_id(self):
+    def update_screen_id(self) -> None:
         """
         Sends a getMdxSessionStatus to get the screenId and waits for response.
         This function is blocking
@@ -88,21 +94,30 @@ class YouTubeController(BaseController):
             _LOGGER.warning("Failed to update screen_id")
         self.status_update_event.clear()
 
-    def receive_message(self, _message, data: dict):
+    def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """Called when a message is received."""
         if data[MESSAGE_TYPE] == TYPE_STATUS:
-            self._process_status(data.get("data"))
+            # Ignore the type error until validation of messages has been implemented
+            self._process_status(data.get("data"))  # type: ignore[arg-type]
             return True
 
         return False
 
-    def _process_status(self, status):
+    def _process_status(self, status: dict) -> None:
         """Process latest status update."""
         self._screen_id = status.get(ATTR_SCREEN_ID)
         self.status_update_event.set()
 
-    def quick_play(self, media_id=None, playlist_id=None, enqueue=False, **kwargs):
+    def quick_play(
+        self,
+        media_id: str | None = None,
+        playlist_id: str | None = None,
+        enqueue: bool = False,
+        **kwargs: Any
+    ) -> None:
         """Quick Play"""
+        if media_id is None:
+            raise ValueError("media_id must be specified")
         if enqueue:
             self.add_to_queue(media_id, **kwargs)
         else:
