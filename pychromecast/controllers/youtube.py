@@ -110,6 +110,7 @@ class YouTubeController(QuickPlayController):
 
     def quick_play(
         self,
+        *,
         media_id: str,
         playlist_id: str | None = None,
         enqueue: bool = False,
