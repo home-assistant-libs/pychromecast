@@ -60,14 +60,13 @@ class YleAreenaController(BaseMediaPlayer):
     # pylint: disable-next=arguments-differ
     def quick_play(
         self,
-        media_id: str | None = None,
+        *,
+        media_id: str,
         audio_lang: str = "",
         text_lang: str = "off",
         **kwargs: Any,
     ) -> None:
         """Quick Play"""
-        if media_id is None:
-            raise ValueError("media_id must be specified")
         response_handler = WaitResponse(10)
         self.play_areena_media(
             media_id,
