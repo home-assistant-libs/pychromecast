@@ -26,7 +26,7 @@ class SuplaController(QuickPlayController):
         media_id: str,
         *,
         is_live: bool = False,
-        callback_function: CallbackType | None = None
+        callback_function: CallbackType | None = None,
     ) -> None:
         """
         Play Supla media
@@ -64,7 +64,7 @@ class SuplaController(QuickPlayController):
             media_id,
             is_live=is_live,
             **kwargs,
-            callback_function=response_handler.callback
+            callback_function=response_handler.callback,
         )
         request_completed = response_handler.wait_response()
 

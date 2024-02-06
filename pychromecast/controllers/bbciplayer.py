@@ -30,7 +30,7 @@ class BbcIplayerController(BaseMediaPlayer):
         media_id: str,
         is_live: bool = False,
         metadata: dict[str, Any] | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """Quick Play helper for BBC iPlayer media."""
         stream_type = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED
