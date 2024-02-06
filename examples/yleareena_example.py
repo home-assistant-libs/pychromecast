@@ -67,7 +67,9 @@ def get_kaltura_id(program_id):
     url = f"https://areena.yle.fi/{program_id}"
 
     ffprobe = NullProbe()
-    extractor = extractor_factory(url, language_chooser, httpclient, title_formatter, ffprobe)
+    extractor = extractor_factory(
+        url, language_chooser, httpclient, title_formatter, ffprobe
+    )
     pid = extractor.program_id_from_url(url)
 
     info = extractor.program_info_for_pid(pid, url, title_formatter, ffprobe)
