@@ -52,23 +52,27 @@ def get_kaltura_id(program_id):
     This can be used with Chromecast
     """
     # yledl is not available in CI, silence import warnings
-    from yledl.streamfilters import StreamFilters  # pylint: disable=import-error
-    from yledl.http import HttpClient  # pylint: disable=import-error
-    from yledl.localization import TranslationChooser  # pylint: disable=import-error
-    from yledl.extractors import extractor_factory  # pylint: disable=import-error
-    from yledl.titleformatter import TitleFormatter  # pylint: disable=import-error
+    # pylint: disable=import-error
+    from yledl.extractors import extractor_factory  # type: ignore[import-untyped]
+    from yledl.ffprobe import NullProbe  # type: ignore[import-untyped]
+    from yledl.http import HttpClient  # type: ignore[import-untyped]
+    from yledl.io import IOContext  # type: ignore[import-untyped]
+    from yledl.localization import TranslationChooser  # type: ignore[import-untyped]
+    from yledl.titleformatter import TitleFormatter  # type: ignore[import-untyped]
 
     title_formatter = TitleFormatter()
     language_chooser = TranslationChooser("fin")
-    httpclient = HttpClient(None)
-    stream_filters = StreamFilters()
+    httpclient = HttpClient(IOContext())
 
     url = f"https://areena.yle.fi/{program_id}"
 
-    extractor = extractor_factory(url, stream_filters, language_chooser, httpclient)
+    ffprobe = NullProbe()
+    extractor = extractor_factory(
+        url, language_chooser, httpclient, title_formatter, ffprobe
+    )
     pid = extractor.program_id_from_url(url)
 
-    info = extractor.program_info_for_pid(pid, url, title_formatter, None)
+    info = extractor.program_info_for_pid(pid, url, title_formatter, ffprobe)
 
     return info.media_id.split("-")[-1]
 
