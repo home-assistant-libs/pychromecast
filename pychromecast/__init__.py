@@ -8,7 +8,7 @@ import logging
 import fnmatch
 from threading import Event
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, overload
 from uuid import UUID
 
 import zeroconf
@@ -169,6 +169,33 @@ def get_listed_chromecasts(
     # Wait for the timeout or found all wanted devices
     discover_complete.wait(discovery_timeout)
     return (list(cc_list.values()), browser)
+
+
+@overload
+def get_chromecasts(
+    tries: int | None = None,
+    retry_wait: float | None = None,
+    timeout: float | None = None,
+    blocking: Literal[True] = True,
+    callback: Callable[[Chromecast], None] | None = None,
+    zeroconf_instance: zeroconf.Zeroconf | None = None,
+    known_hosts: list[str] | None = None,
+) -> tuple[list[Chromecast], CastBrowser]:
+    ...
+
+
+@overload
+def get_chromecasts(
+    tries: int | None = None,
+    retry_wait: float | None = None,
+    timeout: float | None = None,
+    *,
+    blocking: Literal[False],
+    callback: Callable[[Chromecast], None] | None = None,
+    zeroconf_instance: zeroconf.Zeroconf | None = None,
+    known_hosts: list[str] | None = None,
+) -> CastBrowser:
+    ...
 
 
 def get_chromecasts(  # pylint: disable=too-many-locals
