@@ -26,7 +26,7 @@ classifiers=[
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/balloob/pychromecast"
+"Homepage" = "https://github.com/home-assistant-libs/pychromecast"
 
 [tool.black]
 exclude = 'pb2'
