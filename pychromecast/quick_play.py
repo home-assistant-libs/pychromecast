@@ -1,5 +1,9 @@
 """ Choose a controller and quick play """
 
+from typing import Any
+
+from . import Chromecast
+from .controllers import QuickPlayController
 from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
 from .controllers.bubbleupnp import BubbleUPNPController
@@ -13,7 +17,9 @@ from .controllers.nrktv import NrkTvController
 from .controllers.nrkradio import NrkRadioController
 
 
-def quick_play(cast, app_name, data):  # pylint:disable=too-many-branches
+def quick_play(  # pylint:disable=too-many-branches
+    cast: Chromecast, app_name: str, data: dict[str, Any]
+) -> None:
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
     based on parameters defined in `data`.
@@ -56,6 +62,7 @@ def quick_play(cast, app_name, data):  # pylint:disable=too-many-branches
             "BUFFERED" or "LIVE"
     """
 
+    controller: QuickPlayController
     if app_name == "bbciplayer":
         controller = BbcIplayerController()
     elif app_name == "bbcsounds":

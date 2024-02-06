@@ -8,7 +8,7 @@ from typing import Any
 
 from casttube import YouTubeSession  # type: ignore[import-untyped]
 
-from . import BaseController
+from . import QuickPlayController
 from ..const import MESSAGE_TYPE
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
@@ -22,7 +22,7 @@ ATTR_SCREEN_ID = "screenId"
 _LOGGER = logging.getLogger(__name__)
 
 
-class YouTubeController(BaseController):
+class YouTubeController(QuickPlayController):
     """Controller to interact with Youtube."""
 
     _session: YouTubeSession
@@ -110,14 +110,13 @@ class YouTubeController(BaseController):
 
     def quick_play(
         self,
-        media_id: str | None = None,
+        *,
+        media_id: str,
         playlist_id: str | None = None,
         enqueue: bool = False,
         **kwargs: Any
     ) -> None:
         """Quick Play"""
-        if media_id is None:
-            raise ValueError("media_id must be specified")
         if enqueue:
             self.add_to_queue(media_id, **kwargs)
         else:

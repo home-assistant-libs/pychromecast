@@ -16,7 +16,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse
-from . import BaseController, CallbackType
+from . import CallbackType, QuickPlayController
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -371,7 +371,7 @@ class MediaStatusListener(abc.ABC):
         """Called when load media failed."""
 
 
-class BaseMediaPlayer(BaseController):
+class BaseMediaPlayer(QuickPlayController):
     """Mixin class for apps which can play media using the default media namespace."""
 
     def __init__(self, supporting_app_id: str, app_must_match: bool = True) -> None:
@@ -541,14 +541,14 @@ class BaseMediaPlayer(BaseController):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(self, media_id: str | None = None, **kwargs: Any) -> None:
+    def quick_play(self, *, media_id: str, **kwargs: Any) -> None:
         """Quick Play"""
 
         media_type = kwargs.pop("media_type", "video/mp4")
 
         response_handler = WaitResponse(30)
         self.play_media(
-            media_id, media_type, **kwargs, callback_function=response_handler.callback  # type: ignore[arg-type]
+            media_id, media_type, **kwargs, callback_function=response_handler.callback
         )
         request_completed = response_handler.wait_response()
 

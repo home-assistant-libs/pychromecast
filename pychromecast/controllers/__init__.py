@@ -197,3 +197,11 @@ class BaseController(abc.ABC):
         """Called when we are shutting down."""
         self._socket_client = None
         self._message_func = None
+
+
+class QuickPlayController(BaseController, abc.ABC):
+    """ABC for controller which supports quick play."""
+
+    @abc.abstractmethod
+    def quick_play(self, *, media_id: str, **kwargs: Any) -> None:
+        """Quick Play support for a controller."""

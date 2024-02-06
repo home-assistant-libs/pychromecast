@@ -23,7 +23,8 @@ class BbcSoundsController(BaseMediaPlayer):
     # pylint: disable-next=arguments-differ
     def quick_play(
         self,
-        media_id: str | None = None,
+        *,
+        media_id: str,
         is_live: bool = False,
         metadata: dict[str, Any] | None = None,
         **kwargs: Any
@@ -34,7 +35,7 @@ class BbcSoundsController(BaseMediaPlayer):
         if metadata is None:
             metadata = metadata_default
         super().quick_play(
-            media_id,
+            media_id=media_id,
             media_type=None,
             stream_type=stream_type,
             metadata=metadata,
