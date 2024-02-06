@@ -78,7 +78,7 @@ time.sleep(1)
 warning_message = "If you see this on your TV then something is broken"
 d.load_url(
     "https://home-assistant.io/? " + warning_message,
-    callback_function=lambda result: d.load_url("https://home-assistant.io/"),
+    callback_function=lambda msg_sent, resp: d.load_url("https://home-assistant.io/"),
 )
 
 # If debugging, sleep after running so we can see any error messages.
