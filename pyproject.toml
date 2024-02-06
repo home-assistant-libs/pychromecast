@@ -1,2 +1,43 @@
+[build-system]
+requires = ["setuptools~=65.6", "wheel~=0.37.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name         = "PyChromecast"
+version      = "13.1.0"
+description  = "Python module to talk to Google Chromecast."
+readme       = "README.rst"
+authors      = [
+    {name = "Paulus Schoutsen", email = "paulus@paulusschoutsen.nl"}
+]
+requires-python = ">=3.11.0"
+dependencies = [
+    "protobuf>=4.25.1",
+    "zeroconf>=0.25.1",
+    "casttube>=0.2.0",
+]
+classifiers=[
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/balloob/pychromecast"
+
 [tool.black]
 exclude = 'pb2'
+
+[tool.setuptools]
+platforms = ["any"]
+zip-safe  = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["pychromecast*"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
