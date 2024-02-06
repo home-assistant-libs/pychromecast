@@ -27,7 +27,7 @@ class BbcSoundsController(BaseMediaPlayer):
         media_id: str,
         is_live: bool = False,
         metadata: dict[str, Any] | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Any:
         """Quick Play helper for BBC Sounds media"""
         stream_type = STREAM_TYPE_LIVE if is_live else STREAM_TYPE_BUFFERED

@@ -114,7 +114,7 @@ class YouTubeController(QuickPlayController):
         media_id: str,
         playlist_id: str | None = None,
         enqueue: bool = False,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """Quick Play"""
         if enqueue:
