@@ -6,10 +6,12 @@ Example that shows how to receive updates on discovered chromecasts.
 import argparse
 import logging
 import time
+from uuid import UUID
 
 import zeroconf
 
 import pychromecast
+from pychromecast import CastInfo
 
 parser = argparse.ArgumentParser(
     description="Example on how to receive updates on discovered chromecasts."
@@ -40,7 +42,7 @@ if args.show_zeroconf_debug:
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 
-def list_devices():
+def list_devices() -> None:
     """Print a list of known devices."""
     print("Currently known cast devices:")
     for service in browser.services.values():
@@ -54,19 +56,19 @@ def list_devices():
 class MyCastListener(pychromecast.discovery.AbstractCastListener):
     """Listener for discovering chromecasts."""
 
-    def add_cast(self, uuid, _service):
+    def add_cast(self, uuid: UUID, service: str) -> None:
         """Called when a new cast has beeen discovered."""
         print(
             f"Found cast device '{browser.services[uuid].friendly_name}' with UUID {uuid}"
         )
         list_devices()
 
-    def remove_cast(self, uuid, _service, cast_info):
+    def remove_cast(self, uuid: UUID, service: str, cast_info: CastInfo) -> None:
         """Called when a cast has beeen lost (MDNS info expired or host down)."""
         print(f"Lost cast device '{cast_info.friendly_name}' with UUID {uuid}")
         list_devices()
 
-    def update_cast(self, uuid, _service):
+    def update_cast(self, uuid: UUID, service: str) -> None:
         """Called when a cast has beeen updated (MDNS info renewed or changed)."""
         print(
             f"Updated cast device '{browser.services[uuid].friendly_name}' with UUID {uuid}"

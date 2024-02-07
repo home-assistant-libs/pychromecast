@@ -65,8 +65,8 @@ print()
 if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
-    t = 5
-    while cast.status.app_id is not None and t > 0:
+    t = 5.0
+    while cast.status.app_id is not None and t > 0:  # type: ignore[union-attr]
         time.sleep(0.1)
         t = t - 0.1
 

@@ -2,7 +2,7 @@
 Example on how to use the Yle Areena Controller
 
 """
-# pylint: disable=invalid-name, import-outside-toplevel
+# pylint: disable=invalid-name, import-outside-toplevel, too-many-locals
 
 import argparse
 import logging
@@ -46,7 +46,7 @@ if args.show_zeroconf_debug:
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
 
 
-def get_kaltura_id(program_id):
+def get_kaltura_id(program_id: str) -> str:
     """
     Dive into the yledl internals and fetch the kaltura player id.
     This can be used with Chromecast
@@ -74,7 +74,8 @@ def get_kaltura_id(program_id):
 
     info = extractor.program_info_for_pid(pid, url, title_formatter, ffprobe)
 
-    return info.media_id.split("-")[-1]
+    kaltura_id: str = info.media_id.split("-")[-1]
+    return kaltura_id
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(

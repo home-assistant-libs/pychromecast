@@ -25,7 +25,7 @@ PROGRAM = "aamulypsy"
 
 result = requests.get(f"https://www.supla.fi/ohjelmat/{PROGRAM}", timeout=10)
 soup = BeautifulSoup(result.content)
-MEDIA_ID = soup.select('a[title*="Koko Shitti"]')[0]["href"].split("/")[-1]
+MEDIA_ID = soup.select('a[title*="Koko Shitti"]')[0]["href"].split("/")[-1]  # type: ignore[union-attr]
 print(MEDIA_ID)
 
 
