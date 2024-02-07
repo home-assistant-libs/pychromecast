@@ -4,12 +4,12 @@ Use the media controller to play, pause etc.
 """
 
 import logging
-import requests
 import threading
 from typing import Any, cast
 
 from casttube import YouTubeSession  # type: ignore[import-untyped]
 from casttube.YouTubeSession import HEADERS  # type: ignore[import-untyped]
+import requests
 
 from . import QuickPlayController
 from ..const import MESSAGE_TYPE
@@ -54,7 +54,7 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
         :return: POST response
         """
         if headers:
-            headers = dict(**dict(HEADERS, **headers))
+            headers = {**HEADERS, **headers}
         else:
             headers = HEADERS
         response = requests.post(
@@ -63,9 +63,7 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
         # 404 resets the sid, session counters
         # 400 in session probably means bad sid
         # If user did a bad request (eg. remove an non-existing video from queue) bind restores the session.
-        if (
-            response.status_code == 404 or response.status_code == 400
-        ) and session_request:
+        if response.status_code in (404, 400) and session_request:
             self._bind()
         response.raise_for_status()
         if session_request:
