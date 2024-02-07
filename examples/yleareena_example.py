@@ -52,7 +52,6 @@ def get_kaltura_id(program_id: str) -> str:
     This can be used with Chromecast
     """
     # yledl is not available in CI, silence import warnings
-    # pylint: disable=import-error
     from yledl.extractors import extractor_factory  # type: ignore[import-untyped]
     from yledl.ffprobe import NullProbe  # type: ignore[import-untyped]
     from yledl.http import HttpClient  # type: ignore[import-untyped]

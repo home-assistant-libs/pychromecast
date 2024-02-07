@@ -23,7 +23,6 @@ class BbcIplayerController(BaseMediaPlayer):
         super().__init__(APP_BBCIPLAYER)
         self.logger = logging.getLogger(__name__)
 
-    # pylint: disable-next=arguments-differ
     def quick_play(
         self,
         *,
