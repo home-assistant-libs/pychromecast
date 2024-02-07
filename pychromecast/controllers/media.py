@@ -367,8 +367,11 @@ class MediaStatusListener(abc.ABC):
         """Updated media status."""
 
     @abc.abstractmethod
-    def load_media_failed(self, item: int, error_code: int) -> None:
-        """Called when load media failed."""
+    def load_media_failed(self, queue_item_id: int, error_code: int) -> None:
+        """Called when load media failed.
+
+        queue_item_id is the id of the queue item which failed to load
+        """
 
 
 class BaseMediaPlayer(QuickPlayController):
@@ -732,21 +735,21 @@ class MediaController(BaseMediaPlayer):
 
     def _process_load_failed(self, data: dict) -> None:
         """Processes a LOAD_FAILED message."""
-        item: int | None = data.get("itemId")
+        queue_item_id: int | None = data.get("itemId")
         error_code: int | None = data.get("detailedErrorCode")
 
         self.logger.debug(
-            "Media:Load failed with code %s(%s) for item %s",
+            "Media:Load failed with code %s(%s) for queue item id %s",
             error_code,
             MEDIA_PLAYER_ERROR_CODES.get(error_code, "unknown code"),
-            item,
+            queue_item_id,
         )
 
-        if item is None or error_code is None:
+        if queue_item_id is None or error_code is None:
             self.logger.debug("Media:Not firing load failed")
             return
 
-        self._fire_load_failed(item, error_code)
+        self._fire_load_failed(queue_item_id, error_code)
 
     def _fire_status_changed(self) -> None:
         """Tells listeners of a changed status."""
@@ -756,11 +759,11 @@ class MediaController(BaseMediaPlayer):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling media status callback")
 
-    def _fire_load_failed(self, item: int, error_code: int) -> None:
+    def _fire_load_failed(self, queue_item_id: int, error_code: int) -> None:
         """Tells listeners of a changed status."""
         for listener in self._status_listeners:
             try:
-                listener.load_media_failed(item, error_code)
+                listener.load_media_failed(queue_item_id, error_code)
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Exception thrown when calling load failed callback")
 

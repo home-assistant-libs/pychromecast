@@ -134,7 +134,7 @@ class Listener(
             for listener in list(casts[member_uuid]["listeners"]):
                 listener.multizone_new_media_status(self._group_uuid, status)
 
-    def load_media_failed(self, item: int, error_code: int) -> None:
+    def load_media_failed(self, queue_item_id: int, error_code: int) -> None:
         """Called when load media failed."""
 
     def new_connection_status(self, status: ConnectionStatus) -> None:

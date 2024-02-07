@@ -41,14 +41,14 @@ class MyMediaStatusListener(MediaStatusListener):
         print("[", time.ctime(), " - ", self.name, "] status media change:")
         print(status)
 
-    def load_media_failed(self, item: int, error_code: int) -> None:
+    def load_media_failed(self, queue_item_id: int, error_code: int) -> None:
         print(
             "[",
             time.ctime(),
             " - ",
             self.name,
-            "] load media filed for item: ",
-            item,
+            "] load media failed for queue item id: ",
+            queue_item_id,
             " with code: ",
             error_code,
         )
