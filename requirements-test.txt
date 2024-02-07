@@ -1,4 +1,10 @@
 black==23.12.1
 flake8==7.0.0
 mypy==1.8.0
+PlexAPI==4.15.7
 pylint==3.0.3
+types-beautifulsoup4==4.12.0.20240106
+types-html5lib==1.1.11.20240106
+types-protobuf==4.24.0.20240129
+types-requests==2.31.0.20240106
+yle-dl==20231214
