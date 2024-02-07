@@ -27,6 +27,7 @@ class BbcIplayerController(BaseMediaPlayer):
         self,
         *,
         media_id: str,
+        timeout: float,
         is_live: bool = False,
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
@@ -44,5 +45,6 @@ class BbcIplayerController(BaseMediaPlayer):
             stream_type=stream_type,
             metadata=metadata,
             media_info={"customData": {"secondary_title": subtitle}},
+            timeout=timeout,
             **kwargs,
         )

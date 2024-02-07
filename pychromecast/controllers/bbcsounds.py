@@ -25,6 +25,7 @@ class BbcSoundsController(BaseMediaPlayer):
         self,
         *,
         media_id: str,
+        timeout: float,
         is_live: bool = False,
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
@@ -39,5 +40,6 @@ class BbcSoundsController(BaseMediaPlayer):
             media_type=None,
             stream_type=stream_type,
             metadata=metadata,
+            timeout=timeout,
             **kwargs,
         )

@@ -61,12 +61,13 @@ class YleAreenaController(BaseMediaPlayer):
         self,
         *,
         media_id: str,
+        timeout: float,
         audio_lang: str = "",
         text_lang: str = "off",
         **kwargs: Any,
     ) -> None:
         """Quick Play"""
-        response_handler = WaitResponse(10)
+        response_handler = WaitResponse(timeout)
         self.play_areena_media(
             media_id,
             audio_language=audio_lang,

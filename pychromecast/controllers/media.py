@@ -544,12 +544,12 @@ class BaseMediaPlayer(QuickPlayController):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(self, *, media_id: str, **kwargs: Any) -> None:
+    def quick_play(self, *, media_id: str, timeout: float, **kwargs: Any) -> None:
         """Quick Play"""
 
         media_type = kwargs.pop("media_type", "video/mp4")
 
-        response_handler = WaitResponse(30)
+        response_handler = WaitResponse(timeout)
         self.play_media(
             media_id, media_type, **kwargs, callback_function=response_handler.callback
         )
