@@ -9,7 +9,7 @@ from time import sleep
 import sys
 
 import requests
-from bs4 import BeautifulSoup  # pylint: disable=import-error
+from bs4 import BeautifulSoup
 
 import pychromecast
 from pychromecast import quick_play

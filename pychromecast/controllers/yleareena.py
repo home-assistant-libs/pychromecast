@@ -57,7 +57,6 @@ class YleAreenaController(BaseMediaPlayer):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    # pylint: disable-next=arguments-differ
     def quick_play(
         self,
         *,
