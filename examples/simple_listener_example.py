@@ -11,7 +11,7 @@ import time
 import zeroconf
 
 import pychromecast
-from pychromecast.controllers.media import MediaStatusListener
+from pychromecast.controllers.media import MediaStatus, MediaStatusListener
 from pychromecast.controllers.receiver import CastStatusListener
 
 # Change to the friendly name of your Chromecast
@@ -21,11 +21,11 @@ CAST_NAME = "Living Room Speaker"
 class MyCastStatusListener(CastStatusListener):
     """Cast status listener"""
 
-    def __init__(self, name, cast):
+    def __init__(self, name: str | None, cast: pychromecast.Chromecast) -> None:
         self.name = name
         self.cast = cast
 
-    def new_cast_status(self, status):
+    def new_cast_status(self, status: pychromecast.CastStatus) -> None:
         print("[", time.ctime(), " - ", self.name, "] status chromecast change:")
         print(status)
 
@@ -33,15 +33,15 @@ class MyCastStatusListener(CastStatusListener):
 class MyMediaStatusListener(MediaStatusListener):
     """Status media listener"""
 
-    def __init__(self, name, cast):
+    def __init__(self, name: str | None, cast: pychromecast.Chromecast) -> None:
         self.name = name
         self.cast = cast
 
-    def new_media_status(self, status):
+    def new_media_status(self, status: MediaStatus) -> None:
         print("[", time.ctime(), " - ", self.name, "] status media change:")
         print(status)
 
-    def load_media_failed(self, item, error_code):
+    def load_media_failed(self, item: int, error_code: int) -> None:
         print(
             "[",
             time.ctime(),

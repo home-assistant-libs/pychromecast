@@ -60,7 +60,7 @@ cast.media_controller.play_media(args.url, "audio/mp3")
 
 # Wait for player_state PLAYING
 player_state = None
-t = 30
+t = 30.0
 has_played = False
 while True:
     try:

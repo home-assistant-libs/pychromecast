@@ -19,7 +19,7 @@ import pychromecast
 CAST_NAME = "Living Room"
 
 
-def your_main_loop():
+def your_main_loop() -> None:
     """
     Main loop example.
     Check for cast.socket_client.get_socket() and
@@ -29,7 +29,7 @@ def your_main_loop():
     t = 1
     cast = None
 
-    def callback(chromecast):
+    def callback(chromecast: pychromecast.Chromecast) -> None:
         if chromecast.name == args.cast:
             print("=> Discovered cast...")
             chromecast.connect()
@@ -59,7 +59,7 @@ def your_main_loop():
     browser.stop_discovery()
 
 
-def do_actions(cast, t):
+def do_actions(cast: pychromecast.Chromecast, t: int) -> None:
     """Your code which is called by main loop."""
     if t == 5:
         print()
