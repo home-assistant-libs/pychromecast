@@ -62,7 +62,8 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
         )
         # 404 resets the sid, session counters
         # 400 in session probably means bad sid
-        # If user did a bad request (eg. remove an non-existing video from queue) bind restores the session.
+        # If user did a bad request (eg. remove an non-existing video from queue)
+        # bind restores the session.
         if response.status_code in (404, 400) and session_request:
             self._bind()
         response.raise_for_status()
