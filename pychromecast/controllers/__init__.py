@@ -203,5 +203,5 @@ class QuickPlayController(BaseController, abc.ABC):
     """ABC for controller which supports quick play."""
 
     @abc.abstractmethod
-    def quick_play(self, *, media_id: str, **kwargs: Any) -> None:
+    def quick_play(self, *, media_id: str, timeout: float, **kwargs: Any) -> None:
         """Quick Play support for a controller."""

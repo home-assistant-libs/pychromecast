@@ -56,10 +56,10 @@ class SuplaController(QuickPlayController):
         )
 
     def quick_play(
-        self, *, media_id: str, is_live: bool = False, **kwargs: Any
+        self, *, media_id: str, timeout: float, is_live: bool = False, **kwargs: Any
     ) -> None:
         """Quick Play"""
-        response_handler = WaitResponse(10)
+        response_handler = WaitResponse(timeout)
         self.play_media(
             media_id,
             is_live=is_live,
