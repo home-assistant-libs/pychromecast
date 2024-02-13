@@ -73,6 +73,7 @@ time.sleep(1)
 
 requests_handled = threading.Event()
 
+
 def _first_request_handled(msg_sent: bool, response: dict | None) -> None:
     """Request to load first URL handled, load the second URL."""
     if not msg_sent:
@@ -98,7 +99,7 @@ warning_message = "If you see this on your TV then something is broken"
 print("Loading 1st URL")
 d.load_url(
     "https://home-assistant.io/? " + warning_message,
-    callback_function=_second_request_handled
+    callback_function=_second_request_handled,
 )
 
 print("Waiting for callbacks")
