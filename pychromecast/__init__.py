@@ -8,7 +8,7 @@ import logging
 import fnmatch
 from threading import Event
 import threading
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 from uuid import UUID
 
 import zeroconf
@@ -29,7 +29,7 @@ from .dial import get_cast_type
 from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED, MediaController  # noqa: F401
 from .controllers.receiver import CastStatus, CastStatusListener
-from .error import NotConnected
+from .error import NotConnected, RequestTimeout
 from .models import CastInfo, HostServiceInfo, MDNSServiceInfo
 from .response_handler import WaitResponse
 
@@ -501,7 +501,9 @@ class Chromecast(CastStatusListener):
         """
         if not self.socket_client.is_alive():
             self.socket_client.start()
-        self.status_event.wait(timeout=timeout)
+        ready = self.status_event.wait(timeout=timeout)
+        if not ready:
+            raise RequestTimeout("wait", cast(float, timeout))
 
     def disconnect(self, timeout: float | None = None) -> None:
         """
@@ -524,6 +526,8 @@ class Chromecast(CastStatusListener):
                         to block forever.
         """
         self.socket_client.join(timeout=timeout)
+        if self.socket_client.is_alive():
+            raise TimeoutError("join", timeout)
 
     def start(self) -> None:
         """
