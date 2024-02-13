@@ -7,24 +7,8 @@ class PyChromecastError(Exception):
     """Base error for PyChromecast."""
 
 
-class NoChromecastFoundError(PyChromecastError):
-    """
-    When a command has to auto-discover a Chromecast and cannot find one.
-    """
-
-
-class MultipleChromecastsFoundError(PyChromecastError):
-    """
-    When getting a singular chromecast results in getting multiple chromecasts.
-    """
-
-
 class ChromecastConnectionError(PyChromecastError):
     """When a connection error occurs within PyChromecast."""
-
-
-class LaunchError(PyChromecastError):
-    """When an app fails to launch."""
 
 
 class PyChromecastStopped(PyChromecastError):
