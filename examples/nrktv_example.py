@@ -4,14 +4,13 @@ Example on how to use the NRK TV Controller
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 from time import sleep
 
-import zeroconf
-
 import pychromecast
 from pychromecast import quick_play
+
+from .common import add_log_arguments, configure_logging
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -40,31 +39,14 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-discovery-debug", help="Enable discovery debug log", action="store_true"
-)
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--media_id", help='MediaID (default: "%(default)s")', default=MEDIA_ID
 )
 
 args = parser.parse_args()
 
-if args.show_debug:
-    fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
-    datefmt = "%Y-%m-%d %H:%M:%S"
-    logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
-    logging.getLogger("pychromecast.dial").setLevel(logging.INFO)
-    logging.getLogger("pychromecast.discovery").setLevel(logging.INFO)
-if args.show_discovery_debug:
-    logging.getLogger("pychromecast.dial").setLevel(logging.DEBUG)
-    logging.getLogger("pychromecast.discovery").setLevel(logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
