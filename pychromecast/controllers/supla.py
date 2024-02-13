@@ -6,7 +6,6 @@ from typing import Any
 
 from . import CallbackType, QuickPlayController
 from ..config import APP_SUPLA
-from ..error import PyChromecastError
 from ..response_handler import WaitResponse
 
 APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
@@ -59,15 +58,11 @@ class SuplaController(QuickPlayController):
         self, *, media_id: str, timeout: float, is_live: bool = False, **kwargs: Any
     ) -> None:
         """Quick Play"""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, f"supla quick play {media_id}")
         self.play_media(
             media_id,
             is_live=is_live,
             **kwargs,
             callback_function=response_handler.callback,
         )
-        request_completed = response_handler.wait_response()
-
-        if not request_completed or not response_handler.msg_sent:
-            self.logger.warning("Quick Play failed for %s:(%s)", media_id, kwargs)
-            raise PyChromecastError()  # pylint: disable=broad-exception-raised
+        response_handler.wait_response()

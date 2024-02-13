@@ -13,6 +13,7 @@ import requests
 
 from . import QuickPlayController
 from ..const import MESSAGE_TYPE
+from ..error import RequestTimeout
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
@@ -174,7 +175,10 @@ class YouTubeController(QuickPlayController):
         """Quick Play"""
         self._timeout = timeout
 
-        if enqueue:
-            self.add_to_queue(media_id, **kwargs)
-        else:
-            self.play_video(media_id, playlist_id=playlist_id, **kwargs)
+        try:
+            if enqueue:
+                self.add_to_queue(media_id, **kwargs)
+            else:
+                self.play_video(media_id, playlist_id=playlist_id, **kwargs)
+        except requests.Timeout as exc:
+            raise RequestTimeout(f"yleareena quick play {media_id}", timeout) from exc

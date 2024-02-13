@@ -247,7 +247,7 @@ class ReceiverController(BaseController):
         """
         volume = min(max(0, volume), 1)
         self.logger.info("Receiver:setting volume to %.2f", volume)
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "set volume")
         self.send_message(
             {MESSAGE_TYPE: "SET_VOLUME", "volume": {"level": volume}},
             callback_function=response_handler.callback,
@@ -257,7 +257,7 @@ class ReceiverController(BaseController):
 
     def set_volume_muted(self, muted: bool, timeout: float = REQUEST_TIMEOUT) -> None:
         """Allows to mute volume."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "mute volume")
         self.send_message(
             {MESSAGE_TYPE: "SET_VOLUME", "volume": {"muted": muted}},
             callback_function=response_handler.callback,
