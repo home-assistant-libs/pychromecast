@@ -352,7 +352,9 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.port,
                     )
                     self.socket.connect((self.host, self.port))
-                    context = ssl.SSLContext()
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
                     self.socket = context.wrap_socket(self.socket)
                     self.connecting = False
                     self._force_recon = False
