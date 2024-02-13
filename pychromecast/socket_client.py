@@ -441,23 +441,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         )
         raise ChromecastConnectionError("Failed to connect")
 
-    def connect(self) -> None:
-        """Connect socket connection to Chromecast device.
-
-        Must only be called if the worker thread will not be started.
-        """
-        try:
-            self.initialize_connection()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_DISCONNECTED,
-                    NetworkAddress(self.host, self.port),
-                    None,
-                )
-            )
-            return
-
     def disconnect(self) -> None:
         """Disconnect socket connection to Chromecast device"""
         self.stop.set()
@@ -544,7 +527,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.debug("Thread started...")
         while not self.stop.is_set():
             try:
-                if self.run_once(timeout=POLL_TIME_BLOCKING) == 1:
+                if self._run_once(timeout=POLL_TIME_BLOCKING) == 1:
                     break
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
@@ -559,11 +542,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         # Clean up
         self._cleanup()
 
-    def run_once(self, timeout: float = POLL_TIME_NON_BLOCKING) -> int:
-        """
-        Use run_once() in your own main loop after you
-        receive something on the socket (get_socket()).
-        """
+    def _run_once(self, timeout: float = POLL_TIME_NON_BLOCKING) -> int:
+        """Receive from the socket and handle data."""
         # pylint: disable=too-many-branches, too-many-statements, too-many-return-statements
 
         try:
@@ -658,13 +638,6 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._request_callbacks.pop(data[REQUEST_ID])(True, data)
 
         return 0
-
-    def get_socket(self) -> socket.socket | ssl.SSLSocket | None:
-        """
-        Returns the socket of the connection to use it in you own
-        main loop.
-        """
-        return self.socket
 
     def _check_connection(self) -> bool:
         """
