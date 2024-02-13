@@ -8,7 +8,7 @@ import logging
 import fnmatch
 from threading import Event
 import threading
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 from uuid import UUID
 
 import zeroconf
