@@ -1,6 +1,7 @@
 """
 Example that shows how to connect to all chromecasts.
 """
+
 # pylint: disable=invalid-name
 
 import argparse

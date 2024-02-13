@@ -1,6 +1,7 @@
 """
 Controller to interface with NRK TV.
 """
+
 # Note: Media ID for live programs can be found in the URL
 # e.g. for https://tv.nrk.no/direkte/nrk1, the media ID is nrk1
 # Media ID for non-live programs can be found by clicking the share button

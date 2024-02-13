@@ -2,6 +2,7 @@
 Example on how to use the Multizone (Audio Group) Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse

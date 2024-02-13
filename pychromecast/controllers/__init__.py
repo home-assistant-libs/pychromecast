@@ -1,6 +1,7 @@
 """
 Provides controllers to handle specific namespaces in Chromecast communication.
 """
+
 from __future__ import annotations
 
 import abc
@@ -29,8 +30,7 @@ class SendMessageFunc(Protocol):
         inc_session_id: bool = False,
         callback_function: CallbackType | None = None,
         no_add_request_id: bool = False,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class BaseController(abc.ABC):

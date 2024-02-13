@@ -2,6 +2,7 @@
 Example showing how to create a simple Chromecast event listener for
 device and media status events
 """
+
 # pylint: disable=invalid-name
 
 import argparse

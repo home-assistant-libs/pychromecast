@@ -2,6 +2,7 @@
 Example on how to use the Home Assistant Media app to play an URL.
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse

@@ -1,6 +1,7 @@
 """
 Controller to monitor audio group members.
 """
+
 from __future__ import annotations
 
 import abc

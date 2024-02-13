@@ -1,6 +1,7 @@
 """
 Controller to interface with Home Assistant
 """
+
 from collections.abc import Callable
 from functools import partial
 import threading

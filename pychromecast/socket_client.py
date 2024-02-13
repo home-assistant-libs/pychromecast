@@ -5,6 +5,7 @@ Big thanks goes out to Fred Clift <fred@clift.org> who build the first
 version of this code: https://github.com/minektur/chromecast-python-poc.
 Without him this would not have been possible.
 """
+
 # pylint: disable=too-many-lines
 from __future__ import annotations
 

@@ -1,6 +1,7 @@
 """
 Example that shows how to receive updates on discovered chromecasts.
 """
+
 # pylint: disable=invalid-name
 
 import argparse

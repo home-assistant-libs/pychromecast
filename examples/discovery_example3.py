@@ -1,6 +1,7 @@
 """
 Example that shows how to list chromecasts matching on name or uuid.
 """
+
 # pylint: disable=invalid-name
 
 import argparse
