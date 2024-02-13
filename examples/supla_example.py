@@ -15,6 +15,12 @@ import pychromecast
 from pychromecast import quick_play
 
 
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
+
 # Change to the name of your Chromecast
 CAST_NAME = "Kitchen Speaker"
 

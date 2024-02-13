@@ -5,6 +5,7 @@ Example that shows how to receive updates on discovered chromecasts.
 
 import argparse
 import logging
+import sys
 import time
 from uuid import UUID
 
@@ -12,6 +13,12 @@ import zeroconf
 
 import pychromecast
 from pychromecast import CastInfo
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 parser = argparse.ArgumentParser(
     description="Example on how to receive updates on discovered chromecasts."
@@ -28,6 +35,9 @@ parser.add_argument(
 )
 parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
+    "--show-discovery-debug", help="Enable discovery debug log", action="store_true"
+)
+parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
 )
 parser.add_argument(
@@ -36,7 +46,14 @@ parser.add_argument(
 args = parser.parse_args()
 
 if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
+    fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
+    logging.getLogger("pychromecast.dial").setLevel(logging.INFO)
+    logging.getLogger("pychromecast.discovery").setLevel(logging.INFO)
+if args.show_discovery_debug:
+    logging.getLogger("pychromecast.dial").setLevel(logging.DEBUG)
+    logging.getLogger("pychromecast.discovery").setLevel(logging.DEBUG)
 if args.show_zeroconf_debug:
     print("Zeroconf version: " + zeroconf.__version__)
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
