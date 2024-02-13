@@ -18,7 +18,10 @@ from .controllers.nrkradio import NrkRadioController
 
 
 def quick_play(  # pylint:disable=too-many-branches
-    cast: Chromecast, app_name: str, data: dict[str, Any], timeout: float = 30.0,
+    cast: Chromecast,
+    app_name: str,
+    data: dict[str, Any],
+    timeout: float = 30.0,
 ) -> None:
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
