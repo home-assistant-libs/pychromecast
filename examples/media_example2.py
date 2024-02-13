@@ -13,6 +13,12 @@ import zeroconf
 
 import pychromecast
 
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
+
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
 
@@ -32,9 +38,12 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--show-status-only", help="Show status, then exit", action="store_true"
+)
+parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
+parser.add_argument(
+    "--show-discovery-debug", help="Enable discovery debug log", action="store_true"
 )
 parser.add_argument(
     "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
@@ -48,6 +57,11 @@ if args.show_debug:
     fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
     logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
+    logging.getLogger("pychromecast.dial").setLevel(logging.INFO)
+    logging.getLogger("pychromecast.discovery").setLevel(logging.INFO)
+if args.show_discovery_debug:
+    logging.getLogger("pychromecast.dial").setLevel(logging.DEBUG)
+    logging.getLogger("pychromecast.discovery").setLevel(logging.DEBUG)
 if args.show_zeroconf_debug:
     print("Zeroconf version: " + zeroconf.__version__)
     logging.getLogger("zeroconf").setLevel(logging.DEBUG)
