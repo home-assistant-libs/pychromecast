@@ -445,7 +445,7 @@ class Chromecast(CastStatusListener):
     ) -> None:
         """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, f"start app {app_id}")
         self.socket_client.receiver_controller.launch_app(
             app_id,
             force_launch=force_launch,
@@ -457,7 +457,7 @@ class Chromecast(CastStatusListener):
         """Tells the Chromecast to quit current app_id."""
         self.logger.info("Quitting current app")
 
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "quit app")
         self.socket_client.receiver_controller.stop_app(
             callback_function=response_handler.callback
         )

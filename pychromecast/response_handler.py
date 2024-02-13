@@ -6,6 +6,8 @@ from collections.abc import Callable
 import threading
 from typing import Protocol
 
+from .error import RequestFailed, RequestTimeout
+
 CallbackType = Callable[[bool, dict | None], None]
 """Signature of optional callback functions supported by methods sending messages.
 
@@ -31,9 +33,10 @@ class WaitResponse:
     msg_sent: bool
     response: dict | None
 
-    def __init__(self, timeout: float) -> None:
+    def __init__(self, timeout: float, request: str) -> None:
         """Initialize."""
         self._event = threading.Event()
+        self._request = request
         self._timeout = timeout
 
     def callback(self, msg_sent: bool, response: dict | None) -> None:
@@ -42,9 +45,14 @@ class WaitResponse:
         self.msg_sent = msg_sent
         self._event.set()
 
-    def wait_response(self) -> bool:
+    def wait_response(self) -> None:
         """Wait for the request to finish."""
-        return self._event.wait(self._timeout)
+        request_completed = self._event.wait(self._timeout)
+        if not request_completed:
+            raise RequestTimeout(self._request, self._timeout)
+
+        if not self.msg_sent:
+            raise RequestFailed(self._request)
 
 
 def chain_on_success(

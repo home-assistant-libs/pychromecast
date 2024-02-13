@@ -11,7 +11,7 @@ from typing import Any
 
 from ..config import APP_MEDIA_RECEIVER
 from ..const import MESSAGE_TYPE
-from ..error import ControllerNotRegistered, PyChromecastError
+from ..error import ControllerNotRegistered
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
@@ -549,17 +549,11 @@ class BaseMediaPlayer(QuickPlayController):
 
         media_type = kwargs.pop("media_type", "video/mp4")
 
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, f"quick play {media_id}")
         self.play_media(
             media_id, media_type, **kwargs, callback_function=response_handler.callback
         )
-        request_completed = response_handler.wait_response()
-
-        if not request_completed or not response_handler.msg_sent:
-            self.logger.warning(
-                "Quick Play failed for %s:%s(%s)", media_id, media_type, kwargs
-            )
-            raise PyChromecastError()  # pylint: disable=broad-exception-raised
+        response_handler.wait_response()
 
 
 class MediaController(BaseMediaPlayer):
@@ -661,19 +655,19 @@ class MediaController(BaseMediaPlayer):
 
     def play(self, timeout: float = 10.0) -> None:
         """Send the PLAY command."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "play")
         self._send_command({MESSAGE_TYPE: TYPE_PLAY}, response_handler.callback)
         response_handler.wait_response()
 
     def pause(self, timeout: float = 10.0) -> None:
         """Send the PAUSE command."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "pause")
         self._send_command({MESSAGE_TYPE: TYPE_PAUSE}, response_handler.callback)
         response_handler.wait_response()
 
     def stop(self, timeout: float = 10.0) -> None:
         """Send the STOP command."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "stop")
         self._send_command({MESSAGE_TYPE: TYPE_STOP}, response_handler.callback)
         response_handler.wait_response()
 
@@ -689,7 +683,7 @@ class MediaController(BaseMediaPlayer):
 
     def seek(self, position: float, timeout: float = 10.0) -> None:
         """Seek the media to a specific location."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, f"seek {position}")
         self._send_command(
             {
                 MESSAGE_TYPE: TYPE_SEEK,
@@ -702,7 +696,7 @@ class MediaController(BaseMediaPlayer):
 
     def queue_next(self, timeout: float = 10.0) -> None:
         """Send the QUEUE_NEXT command."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "queue next")
         self._send_command(
             {MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1}, response_handler.callback
         )
@@ -710,7 +704,7 @@ class MediaController(BaseMediaPlayer):
 
     def queue_prev(self, timeout: float = 10.0) -> None:
         """Send the QUEUE_PREV command."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "queue prev")
         self._send_command(
             {MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1}, response_handler.callback
         )
@@ -718,7 +712,7 @@ class MediaController(BaseMediaPlayer):
 
     def enable_subtitle(self, track_id: int, timeout: float = 10.0) -> None:
         """Enable specific text track."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "enable subtitle")
         self._send_command(
             {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]},
             response_handler.callback,
@@ -727,7 +721,7 @@ class MediaController(BaseMediaPlayer):
 
     def disable_subtitle(self, timeout: float = 10.0) -> None:
         """Disable subtitle."""
-        response_handler = WaitResponse(timeout)
+        response_handler = WaitResponse(timeout, "disable subtitle")
         self._send_command(
             {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []},
             response_handler.callback,

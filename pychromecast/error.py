@@ -47,5 +47,14 @@ class RequestFailed(PyChromecastError):
         super().__init__(self.MSG.format(request=request))
 
 
+class RequestTimeout(PyChromecastError):
+    """Raised when a request timed out."""
+
+    MSG = "Execution of {request} timed out after {timeout} s."
+
+    def __init__(self, request: str, timeout: float) -> None:
+        super().__init__(self.MSG.format(request=request, timeout=timeout))
+
+
 class ZeroConfInstanceRequired(PyChromecastError):
     """Raised when a zeroconf instance is required."""
