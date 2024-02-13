@@ -503,26 +503,16 @@ class Chromecast(CastStatusListener):
             self.socket_client.start()
         self.status_event.wait(timeout=timeout)
 
-    def connect(self) -> None:
-        """Connect to the chromecast.
-
-        Must only be called if the worker thread will not be started.
-        """
-        self.socket_client.connect()
-
-    def disconnect(self, timeout: float | None = None, blocking: bool = False) -> None:
+    def disconnect(self, timeout: float | None = None) -> None:
         """
         Disconnects the chromecast and waits for it to terminate.
 
         :param timeout: A floating point number specifying a timeout for the
                         operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        :param blocking: If True it will block until the disconnection is
-                         complete, otherwise it will return immediately.
+                        to block forever. Set to 0 to not block.
         """
         self.socket_client.disconnect()
-        if blocking:
-            self.join(timeout=timeout)
+        self.join(timeout=timeout)
 
     def join(self, timeout: float | None = None) -> None:
         """
