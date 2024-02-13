@@ -624,41 +624,6 @@ class MediaController(BaseMediaPlayer):
             command, callback_function=callback_function, inc_session_id=True
         )
 
-    @property
-    def is_playing(self) -> bool:
-        """Deprecated as of June 8, 2015. Use self.status.player_is_playing.
-        Returns if the Chromecast is playing."""
-        return self.status is not None and self.status.player_is_playing
-
-    @property
-    def is_paused(self) -> bool:
-        """Deprecated as of June 8, 2015. Use self.status.player_is_paused.
-        Returns if the Chromecast is paused."""
-        return self.status is not None and self.status.player_is_paused
-
-    @property
-    def is_idle(self) -> bool:
-        """Deprecated as of June 8, 2015. Use self.status.player_is_idle.
-        Returns if the Chromecast is idle on a media supported app."""
-        return self.status is not None and self.status.player_is_idle
-
-    @property
-    def title(self) -> str | None:
-        """Deprecated as of June 8, 2015. Use self.status.title.
-        Return title of the current playing item."""
-        return None if not self.status else self.status.title
-
-    @property
-    def thumbnail(self) -> str | None:
-        """Deprecated as of June 8, 2015. Use self.status.images.
-        Return thumbnail url of current playing item."""
-        if not self.status:
-            return None
-
-        images = self.status.images
-
-        return images[0].url if images else None
-
     def play(self, timeout: float = 10.0) -> None:
         """Send the PLAY command."""
         response_handler = WaitResponse(timeout)
