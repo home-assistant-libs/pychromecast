@@ -74,7 +74,7 @@ time.sleep(1)
 requests_handled = threading.Event()
 
 
-def _first_request_handled(msg_sent: bool, response: dict | None) -> None:
+def _first_request_handled(msg_sent: bool, _response: dict | None) -> None:
     """Request to load first URL handled, load the second URL."""
     if not msg_sent:
         print("Failed to load first URL")
@@ -83,7 +83,7 @@ def _first_request_handled(msg_sent: bool, response: dict | None) -> None:
     d.load_url("https://home-assistant.io/", callback_function=_second_request_handled)
 
 
-def _second_request_handled(msg_sent: bool, response: dict | None) -> None:
+def _second_request_handled(msg_sent: bool, _response: dict | None) -> None:
     """Request to load second URL handled."""
     if not msg_sent:
         print("Failed to load second URL")
