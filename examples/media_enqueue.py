@@ -13,6 +13,12 @@ import zeroconf
 
 import pychromecast
 
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
+
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
 
