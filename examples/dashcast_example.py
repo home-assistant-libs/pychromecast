@@ -1,6 +1,7 @@
 """
 Example that shows how the DashCast controller can be used.
 """
+
 # pylint: disable=invalid-name
 
 import argparse

@@ -1,6 +1,7 @@
 """
 Example on how to use the NRK TV Controller
 """
+
 # pylint: disable=invalid-name
 
 import argparse

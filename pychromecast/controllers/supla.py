@@ -1,6 +1,7 @@
 """
 Controller to interface with Supla.
 """
+
 import logging
 from typing import Any
 

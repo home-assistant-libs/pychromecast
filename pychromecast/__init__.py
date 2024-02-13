@@ -1,6 +1,7 @@
 """
 PyChromecast: remote control your Chromecast
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -180,8 +181,7 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-) -> tuple[list[Chromecast], CastBrowser]:
-    ...
+) -> tuple[list[Chromecast], CastBrowser]: ...
 
 
 @overload
@@ -194,8 +194,7 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-) -> CastBrowser:
-    ...
+) -> CastBrowser: ...
 
 
 def get_chromecasts(  # pylint: disable=too-many-locals

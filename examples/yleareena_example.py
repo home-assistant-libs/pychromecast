@@ -2,6 +2,7 @@
 Example on how to use the Yle Areena Controller
 
 """
+
 # pylint: disable=invalid-name, import-outside-toplevel, too-many-locals
 
 import argparse

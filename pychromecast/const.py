@@ -1,6 +1,7 @@
 """
 Chromecast constants
 """
+
 # Regular chromecast, supports video/audio
 CAST_TYPE_CHROMECAST = "cast"
 # Cast Audio device, supports only audio

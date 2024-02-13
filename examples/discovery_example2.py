@@ -1,6 +1,7 @@
 """
 Example that shows how to list all available chromecasts.
 """
+
 # pylint: disable=invalid-name
 
 import argparse

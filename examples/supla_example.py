@@ -2,6 +2,7 @@
 Example on how to use the Supla Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import logging

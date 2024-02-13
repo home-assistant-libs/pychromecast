@@ -2,6 +2,7 @@
 Example on how to use queuing with Media Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse

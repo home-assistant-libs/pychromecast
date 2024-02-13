@@ -1,6 +1,7 @@
 """
 Data and methods to retrieve app specific configuration
 """
+
 import json
 from typing import cast
 

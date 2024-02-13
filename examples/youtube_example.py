@@ -2,6 +2,7 @@
 Example on how to use the YouTube Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse
