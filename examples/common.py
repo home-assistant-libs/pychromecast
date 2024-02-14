@@ -21,7 +21,8 @@ def configure_logging(args: argparse.Namespace) -> None:
     """Configure logging according to command line arguments."""
     fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
-    logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.INFO)
+    default_log_level = logging.DEBUG if args.show_debug else logging.INFO
+    logging.basicConfig(format=fmt, datefmt=datefmt, level=default_log_level)
 
     if args.show_debug:
         logging.getLogger("pychromecast.dial").setLevel(logging.INFO)
