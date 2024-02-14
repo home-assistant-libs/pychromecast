@@ -160,9 +160,10 @@ to the IGNORE\_CEC list in PyChromecast like in the example below.
 Networking requirements
 -----------------
 Pychromecast relies on mDNS to discover cast devices. The mDNS protocol relies on multicast UDP on port 5353 which comes with several implications for discovery to work:
-- Multicast UDP must be forwarded by WiFI routers; some WiFi routers are known to drop multicast UDP traffic.
-- The device running pychromecast must allow both inbound and outbound traffic on port 5353.
-- The device running pychromecast must be on the same subnet as the cast devices because mDNS packets are not routed across subnets.
+
+-  Multicast UDP must be forwarded by WiFI routers; some WiFi routers are known to drop multicast UDP traffic.
+-  The device running pychromecast must allow both inbound and outbound traffic on port 5353.
+-  The device running pychromecast must be on the same subnet as the cast devices because mDNS packets are not routed across subnets.
 
 If not all of these conditions are met, discovery will not work. In cases where these conditions are impossible to meet, it's possible to pass a list of known IP-addresses or host names to the discovery functions.
 
