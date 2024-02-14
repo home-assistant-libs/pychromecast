@@ -7,6 +7,7 @@ Example on how to use the YouTube Controller
 
 import argparse
 import sys
+from time import sleep
 
 import pychromecast
 from pychromecast.controllers.youtube import YouTubeController
@@ -61,6 +62,10 @@ cast.wait()
 yt = YouTubeController()
 cast.register_handler(yt)
 yt.play_video(VIDEO_ID)
+
+# If debugging, sleep after running so we can see any error messages.
+if args.show_debug:
+    sleep(10)
 
 # Shut down discovery
 browser.stop_discovery()
