@@ -7,6 +7,7 @@ Example that shows how the DashCast controller can be used.
 import argparse
 import sys
 import time
+import threading
 
 import pychromecast
 from pychromecast.controllers import dashcast
@@ -71,14 +72,39 @@ if not cast.is_idle:
 
 time.sleep(1)
 
+requests_handled = threading.Event()
+
+
+def _first_request_handled(msg_sent: bool, _response: dict | None) -> None:
+    """Request to load first URL handled, load the second URL."""
+    if not msg_sent:
+        print("Failed to load first URL")
+
+    print("Loaded 1st URL, loading 2nd URL")
+    d.load_url("https://home-assistant.io/", callback_function=_second_request_handled)
+
+
+def _second_request_handled(msg_sent: bool, _response: dict | None) -> None:
+    """Request to load second URL handled."""
+    if not msg_sent:
+        print("Failed to load second URL")
+    print("Loaded 2nd URL")
+    requests_handled.set()
+
+
 # Test that the callback chain works. This should send a message to
 # load the first url, but immediately after send a message load the
 # second url.
 warning_message = "If you see this on your TV then something is broken"
+
+print("Loading 1st URL")
 d.load_url(
     "https://home-assistant.io/? " + warning_message,
-    callback_function=lambda msg_sent, resp: d.load_url("https://home-assistant.io/"),
+    callback_function=_second_request_handled,
 )
+
+print("Waiting for callbacks")
+requests_handled.wait()
 
 # If debugging, sleep after running so we can see any error messages.
 if args.show_debug:
