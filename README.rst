@@ -47,6 +47,16 @@ How to use
     >> [cc.cast_info.friendly_name for cc in chromecasts]
     ['Living Room']
 
+    >> # Discover and connect to more than one device
+    >> chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Living Room","Bed Room","Kitchen"])
+    >> [cc.device.friendly_name for cc in chromecasts]
+    ["Living Room","Bed Room","Kitchen"]
+    
+    >> # If you are seeing less devices get discovered than expected add the below parameter. You can lessen or extend the timeout as needed.
+    >> chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Living Room","Bed Room","Kitchen"],discovery_timeout=30)
+    >> [cc.device.friendly_name for cc in chromecasts]
+    ["Living Room","Bed Room","Kitchen"]
+
     >> cast = chromecasts[0]
     >> # Start worker thread and wait for cast device to be ready
     >> cast.wait()
@@ -146,6 +156,15 @@ to the IGNORE\_CEC list in PyChromecast like in the example below.
 
     pychromecast.IGNORE_CEC.append('*')  # Ignore CEC on all devices
     pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
+
+Networking requirements
+-----------------
+Pychromecast relies on mDNS to discover cast devices. The mDNS protocol relies on multicast UDP on port 5353 which comes with several implications for discovery to work:
+- Multicast UDP must be forwarded by WiFI routers; some WiFi routers are known to drop multicast UDP traffic.
+- The device running pychromecast must allow both inbound and outbound traffic on port 5353.
+- The device running pychromecast must be on the same subnet as the cast devices because mDNS packets are not routed across subnets.
+
+If not all of these conditions are met, discovery will not work. In cases where these conditions are impossible to meet, it's possible to pass a list of known IP-addresses or host names to the discovery functions.
 
 Thanks
 ------
