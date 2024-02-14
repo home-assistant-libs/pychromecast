@@ -181,4 +181,4 @@ class YouTubeController(QuickPlayController):
             else:
                 self.play_video(media_id, playlist_id=playlist_id, **kwargs)
         except requests.Timeout as exc:
-            raise RequestTimeout(f"yleareena quick play {media_id}", timeout) from exc
+            raise RequestTimeout(f"youtube quick play {media_id}", timeout) from exc
