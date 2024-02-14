@@ -670,6 +670,7 @@ class MediaController(BaseMediaPlayer):
                 MESSAGE_TYPE: TYPE_SET_PLAYBACK_RATE,
                 "playbackRate": playback_rate,
             }
+            response_handler.callback,
         )
         response_handler.wait_response()
 
