@@ -2,19 +2,23 @@
 Example on how to use the Yle Areena Controller
 
 """
-# pylint: disable=invalid-name, import-outside-toplevel
+
+# pylint: disable=invalid-name, import-outside-toplevel, too-many-locals
 
 import argparse
-import logging
 import sys
 from time import sleep
-import zeroconf
 
 import pychromecast
 from pychromecast import quick_play
 
-logger = logging.getLogger(__name__)
+from .common import add_log_arguments, configure_logging
 
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the name of your Chromecast
 CAST_NAME = "My Chromecast"
@@ -30,47 +34,44 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument("--program", help="Areena Program ID", default="1-50649659")
 parser.add_argument("--audio_language", help="audio_language", default="")
 parser.add_argument("--text_language", help="text_language", default="off")
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 
-def get_kaltura_id(program_id):
+def get_kaltura_id(program_id: str) -> str:
     """
     Dive into the yledl internals and fetch the kaltura player id.
     This can be used with Chromecast
     """
     # yledl is not available in CI, silence import warnings
-    from yledl.streamfilters import StreamFilters  # pylint: disable=import-error
-    from yledl.http import HttpClient  # pylint: disable=import-error
-    from yledl.localization import TranslationChooser  # pylint: disable=import-error
-    from yledl.extractors import extractor_factory  # pylint: disable=import-error
-    from yledl.titleformatter import TitleFormatter  # pylint: disable=import-error
+    from yledl.extractors import extractor_factory  # type: ignore[import-untyped]
+    from yledl.ffprobe import NullProbe  # type: ignore[import-untyped]
+    from yledl.http import HttpClient  # type: ignore[import-untyped]
+    from yledl.io import IOContext  # type: ignore[import-untyped]
+    from yledl.localization import TranslationChooser  # type: ignore[import-untyped]
+    from yledl.titleformatter import TitleFormatter  # type: ignore[import-untyped]
 
     title_formatter = TitleFormatter()
     language_chooser = TranslationChooser("fin")
-    httpclient = HttpClient(None)
-    stream_filters = StreamFilters()
+    httpclient = HttpClient(IOContext())
 
     url = f"https://areena.yle.fi/{program_id}"
 
-    extractor = extractor_factory(url, stream_filters, language_chooser, httpclient)
+    ffprobe = NullProbe()
+    extractor = extractor_factory(
+        url, language_chooser, httpclient, title_formatter, ffprobe
+    )
     pid = extractor.program_id_from_url(url)
 
-    info = extractor.program_info_for_pid(pid, url, title_formatter, None)
+    info = extractor.program_info_for_pid(pid, url, title_formatter, ffprobe)
 
-    return info.media_id.split("-")[-1]
+    kaltura_id: str = info.media_id.split("-")[-1]
+    return kaltura_id
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(

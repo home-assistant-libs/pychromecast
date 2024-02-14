@@ -1,16 +1,22 @@
 """
 Example that shows how to list chromecasts matching on name or uuid.
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 from uuid import UUID
 
-import zeroconf
-
 import pychromecast
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 parser = argparse.ArgumentParser(
     description="Example that shows how to list chromecasts matching on name or uuid."
@@ -22,20 +28,13 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--verbose", help="Full display of discovered devices", action="store_true"
 )
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 if args.cast is None and args.uuid is None:
     print("Need to supply `cast` or `uuid`")

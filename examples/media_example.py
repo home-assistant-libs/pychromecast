@@ -2,16 +2,22 @@
 Example on how to use the Media Controller to play an URL.
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 import time
 
-import zeroconf
-
 import pychromecast
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
@@ -22,10 +28,7 @@ MEDIA_URL = "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/das
 parser = argparse.ArgumentParser(
     description="Example on how to use the Media Controller to play an URL."
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
 )
@@ -39,11 +42,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
@@ -60,7 +59,7 @@ cast.media_controller.play_media(args.url, "audio/mp3")
 
 # Wait for player_state PLAYING
 player_state = None
-t = 30
+t = 30.0
 has_played = False
 while True:
     try:

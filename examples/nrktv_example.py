@@ -1,18 +1,17 @@
 """
-Example on how to use the YouTube Controller
-
+Example on how to use the NRK TV Controller
 """
 
 # pylint: disable=invalid-name
 
 import argparse
 import sys
+from time import sleep
 
 import pychromecast
-from pychromecast.controllers.youtube import YouTubeController
+from pychromecast import quick_play
 
 from .common import add_log_arguments, configure_logging
-
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -20,16 +19,18 @@ if not sys.warnoptions:
 
     warnings.simplefilter("default")
 
-# Change to the name of your Chromecast
-CAST_NAME = "Living Room TV"
+# Change to the friendly name of your Chromecast
+CAST_NAME = "Living Room"
 
-# Change to the video id of the YouTube video
-# video id is the last part of the url http://youtube.com/watch?v=video_id
-VIDEO_ID = "dQw4w9WgXcQ"
-
+# Note: Media ID for live programs can be found in the URL
+# e.g. for https://tv.nrk.no/direkte/nrk1, the media ID is nrk1
+# Media ID for non-live programs can be found by clicking the share button
+# e.g. https://tv.nrk.no/serie/uti-vaar-hage/sesong/2/episode/2 shows:
+# "https://tv.nrk.no/se?v=OUHA43000207", the media ID is OUHA43000207
+MEDIA_ID = "OUHA43000207"
 
 parser = argparse.ArgumentParser(
-    description="Example on how to use the Youtube Controller."
+    description="Example on how to use the NRK TV Controller to play a media stream."
 )
 parser.add_argument(
     "--cast", help='Name of cast device (default: "%(default)s")', default=CAST_NAME
@@ -41,8 +42,9 @@ parser.add_argument(
 )
 add_log_arguments(parser)
 parser.add_argument(
-    "--videoid", help='Youtube video ID (default: "%(default)s")', default=VIDEO_ID
+    "--media_id", help='MediaID (default: "%(default)s")', default=MEDIA_ID
 )
+
 args = parser.parse_args()
 
 configure_logging(args)
@@ -57,10 +59,14 @@ if not chromecasts:
 cast = chromecasts[0]
 # Start socket client's worker thread and wait for initial status update
 cast.wait()
+print(f'Found chromecast with name "{args.cast}", attempting to play "{args.media_id}"')
 
-yt = YouTubeController()
-cast.register_handler(yt)
-yt.play_video(VIDEO_ID)
+app_name = "nrktv"
+app_data = {
+    "media_id": args.media_id,
+}
+quick_play.quick_play(cast, app_name, app_data)
 
-# Shut down discovery
+sleep(10)
+
 browser.stop_discovery()

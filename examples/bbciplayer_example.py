@@ -1,17 +1,24 @@
 """
 Example on how to use the BBC iPlayer Controller
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 from time import sleep
 import json
 
-import zeroconf
 import pychromecast
 from pychromecast import quick_play
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the name of your Chromecast
 CAST_NAME = "Lounge Video"
@@ -41,10 +48,7 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--media_id", help='MediaID (default: "%(default)s")', default=MEDIA_ID
 )
@@ -59,11 +63,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host

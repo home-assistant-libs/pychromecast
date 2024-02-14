@@ -2,18 +2,23 @@
 Example on how to use the BubbleUPNP Controller to play an URL.
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 from time import sleep
-
-import zeroconf
 
 import pychromecast
 from pychromecast import quick_play
 
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Kitchen speaker"
@@ -22,6 +27,7 @@ CAST_NAME = "Kitchen speaker"
 MEDIA_URL = (
     "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 )
+MEDIA_TYPE = "video/mp4"
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the BubbleUPNP Controller to play an URL."
@@ -34,22 +40,17 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
 )
+parser.add_argument(
+    "--media-type", help='Media type (default: "%(default)s")', default=MEDIA_TYPE
+)
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
-# pylint: disable=unbalanced-tuple-unpacking
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
 )
@@ -65,7 +66,7 @@ print(f'Found chromecast with name "{args.cast}", attempting to play "{args.url}
 app_name = "bubbleupnp"
 app_data = {
     "media_id": args.url,
-    "media_type": "audio/mp3",
+    "media_type": args.media_type,
     "stream_type": "LIVE",
 }
 quick_play.quick_play(cast, app_name, app_data)

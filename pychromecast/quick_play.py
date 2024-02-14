@@ -1,5 +1,9 @@
 """ Choose a controller and quick play """
 
+from typing import Any
+
+from . import Chromecast
+from .controllers import QuickPlayController
 from .controllers.bbciplayer import BbcIplayerController
 from .controllers.bbcsounds import BbcSoundsController
 from .controllers.bubbleupnp import BubbleUPNPController
@@ -8,9 +12,17 @@ from .controllers.media import DefaultMediaReceiverController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.youtube import YouTubeController
+from .controllers.shaka import ShakaController
+from .controllers.nrktv import NrkTvController
+from .controllers.nrkradio import NrkRadioController
 
 
-def quick_play(cast, app_name, data):
+def quick_play(  # pylint:disable=too-many-branches
+    cast: Chromecast,
+    app_name: str,
+    data: dict[str, Any],
+    timeout: float = 30.0,
+) -> None:
     """
     Given a Chromecast connection, launch the app `app_name` and start playing media
     based on parameters defined in `data`.
@@ -53,6 +65,7 @@ def quick_play(cast, app_name, data):
             "BUFFERED" or "LIVE"
     """
 
+    controller: QuickPlayController
     if app_name == "bbciplayer":
         controller = BbcIplayerController()
     elif app_name == "bbcsounds":
@@ -69,11 +82,18 @@ def quick_play(cast, app_name, data):
         controller = YleAreenaController()
     elif app_name == "youtube":
         controller = YouTubeController()
+    elif app_name == "shaka":
+        controller = ShakaController()
+    elif app_name == "nrktv":
+        controller = NrkTvController()
+    elif app_name == "nrkradio":
+        controller = NrkRadioController()
     else:
         raise NotImplementedError()
 
     cast.register_handler(controller)
 
-    controller.quick_play(**data)
-
-    cast.unregister_handler(controller)
+    try:
+        controller.quick_play(**data, timeout=timeout)
+    finally:
+        cast.unregister_handler(controller)

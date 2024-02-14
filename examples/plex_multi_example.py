@@ -15,17 +15,26 @@ This demo uses features that require the latest Python-PlexAPI
 pip install plexapi
 
 """
+
 # pylint: disable=invalid-name
+from __future__ import annotations
 
 import argparse
-import logging
 import sys
+from typing import Any
 
-import zeroconf
-from plexapi.server import PlexServer  # pylint: disable=import-error
+from plexapi.server import PlexServer  # type: ignore[import-untyped]
 
 import pychromecast
 from pychromecast.controllers.plex import PlexController
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 
 # Change to the friendly name of your Chromecast.
@@ -61,10 +70,7 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--url", help='URL of your Plex Server (default: "%(default)s").', default=PLEX_URL
 )
@@ -86,22 +92,18 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 startItem = None
 
 
-def media_info(_media, items):
+def media_info(_cast: pychromecast.Chromecast, _media: Any, items: Any) -> None:
     """Print media info."""
-    print(f"Cast Device: {cast.name}")
+    print(f"Cast Device: {_cast.name}")
     print(f"Media Type: {type(_media)}")
     print(f"Media Items: {items}")
 
 
-def start_item_info(_media):
+def start_item_info(_media: Any) -> None:
     """Print item info."""
     if args.startitem:
         print(f"Starting From: {_media}")
@@ -114,7 +116,9 @@ cast = next((cc for cc in chromecasts if cc.name == args.cast), None)
 
 if not cast:
     print(f"No chromecast with name '{args.cast}' found.")
-    foundCasts = ", ".join([cc.name for cc in pychromecast.get_chromecasts()[0]])
+    foundCasts = ", ".join(
+        [cc.name or "<unknown>" for cc in pychromecast.get_chromecasts()[0]]
+    )
     print(f"Chromecasts found: {foundCasts}")
     sys.exit(1)
 
@@ -128,14 +132,14 @@ libraryItems = plex_server.library.search(
 if args.demo == "single":
     # Use a single item as media.
     media = libraryItems[0]
-    media_info(media, libraryItems[0])
+    media_info(cast, media, libraryItems[0])
 elif args.demo == "list":
     # Use the unaltered list as media.
     media = libraryItems
     # Set starting position to the 2nd item if startItem demo.
     startItem = libraryItems[1] if args.startitem else None
     # Print info
-    media_info(libraryItems, libraryItems)
+    media_info(cast, libraryItems, libraryItems)
     start_item_info(libraryItems[1])
 elif args.demo == "playqueue":
     # Convert list into a playqueue for media.
@@ -143,7 +147,7 @@ elif args.demo == "playqueue":
     # Set starting position to the 3rd item if startItem demo.
     startItem = libraryItems[2] if args.startitem else None
     # Print info
-    media_info(media, media.items)
+    media_info(cast, media, media.items)
     start_item_info(libraryItems[2])
 elif args.demo == "playlist":
     # Convert list into a playlist for media.
@@ -151,7 +155,7 @@ elif args.demo == "playlist":
     # Set starting position to the 4th item if startItem demo.
     startItem = libraryItems[3] if args.startitem else None
     # Print info
-    media_info(media, media.items())
+    media_info(cast, media, media.items())
     start_item_info(libraryItems[2])
 
 plex_c = PlexController()

@@ -2,21 +2,27 @@
 Example on how to use the Multizone (Audio Group) Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 import time
-
-import zeroconf
 
 import pychromecast
 from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
 )
-from pychromecast.socket_client import ConnectionStatusListener
+from pychromecast.socket_client import ConnectionStatus, ConnectionStatusListener
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the name of your Chromecast
 CAST_NAME = "Whole house"
@@ -32,26 +38,19 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 
 class MyConnectionStatusListener(ConnectionStatusListener):
     """ConnectionStatusListener"""
 
-    def __init__(self, _mz):
+    def __init__(self, _mz: MultizoneController):
         self._mz = _mz
 
-    def new_connection_status(self, status):
+    def new_connection_status(self, status: ConnectionStatus) -> None:
         if status.status == "CONNECTED":
             self._mz.update_members()
 
@@ -59,13 +58,13 @@ class MyConnectionStatusListener(ConnectionStatusListener):
 class MyMultiZoneControllerListener(MultiZoneControllerListener):
     """MultiZoneControllerListener"""
 
-    def multizone_member_added(self, group_uuid):
+    def multizone_member_added(self, group_uuid: str) -> None:
         print(f"New member: {group_uuid}")
 
-    def multizone_member_removed(self, group_uuid):
+    def multizone_member_removed(self, group_uuid: str) -> None:
         print(f"Removed member: {group_uuid}")
 
-    def multizone_status_received(self):
+    def multizone_status_received(self) -> None:
         print(f"Members: {mz.members}")
 
 

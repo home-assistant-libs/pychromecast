@@ -7,24 +7,8 @@ class PyChromecastError(Exception):
     """Base error for PyChromecast."""
 
 
-class NoChromecastFoundError(PyChromecastError):
-    """
-    When a command has to auto-discover a Chromecast and cannot find one.
-    """
-
-
-class MultipleChromecastsFoundError(PyChromecastError):
-    """
-    When getting a singular chromecast results in getting multiple chromecasts.
-    """
-
-
 class ChromecastConnectionError(PyChromecastError):
     """When a connection error occurs within PyChromecast."""
-
-
-class LaunchError(PyChromecastError):
-    """When an app fails to launch."""
 
 
 class PyChromecastStopped(PyChromecastError):
@@ -52,3 +36,25 @@ class ControllerNotRegistered(PyChromecastError):
     Raised when trying to interact with a controller while it is
     not registered with a ChromeCast object.
     """
+
+
+class RequestFailed(PyChromecastError):
+    """Raised when a request failed to complete."""
+
+    MSG = "Failed to execute {request}."
+
+    def __init__(self, request: str) -> None:
+        super().__init__(self.MSG.format(request=request))
+
+
+class RequestTimeout(PyChromecastError):
+    """Raised when a request timed out."""
+
+    MSG = "Execution of {request} timed out after {timeout} s."
+
+    def __init__(self, request: str, timeout: float) -> None:
+        super().__init__(self.MSG.format(request=request, timeout=timeout))
+
+
+class ZeroConfInstanceRequired(PyChromecastError):
+    """Raised when a zeroconf instance is required."""

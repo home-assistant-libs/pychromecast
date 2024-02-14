@@ -2,6 +2,7 @@
 Example on how to use the Supla Controller
 
 """
+
 # pylint: disable=invalid-name
 
 import logging
@@ -9,11 +10,17 @@ from time import sleep
 import sys
 
 import requests
-from bs4 import BeautifulSoup  # pylint: disable=import-error
+from bs4 import BeautifulSoup
 
 import pychromecast
 from pychromecast import quick_play
 
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the name of your Chromecast
 CAST_NAME = "Kitchen Speaker"
@@ -23,9 +30,9 @@ CAST_NAME = "Kitchen Speaker"
 PROGRAM = "aamulypsy"
 
 
-result = requests.get(f"https://www.supla.fi/ohjelmat/{PROGRAM}")
+result = requests.get(f"https://www.supla.fi/ohjelmat/{PROGRAM}", timeout=10)
 soup = BeautifulSoup(result.content)
-MEDIA_ID = soup.select('a[title*="Koko Shitti"]')[0]["href"].split("/")[-1]
+MEDIA_ID = soup.select('a[title*="Koko Shitti"]')[0]["href"].split("/")[-1]  # type: ignore[union-attr]
 print(MEDIA_ID)
 
 

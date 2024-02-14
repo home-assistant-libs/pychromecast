@@ -2,16 +2,22 @@
 Example on how to use the Media Controller.
 
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 import time
 
-import zeroconf
-
 import pychromecast
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
@@ -32,25 +38,16 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
 parser.add_argument(
     "--show-status-only", help="Show status, then exit", action="store_true"
 )
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 parser.add_argument(
     "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
 )
 args = parser.parse_args()
 
-if args.show_debug:
-    fmt = "%(asctime)s %(levelname)s (%(threadName)s) [%(name)s] %(message)s"
-    datefmt = "%Y-%m-%d %H:%M:%S"
-    logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
@@ -79,8 +76,8 @@ if args.show_status_only:
 if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
-    t = 5
-    while cast.status.app_id is not None and t > 0:
+    t = 5.0
+    while cast.status.app_id is not None and t > 0:  # type: ignore[union-attr]
         time.sleep(0.1)
         t = t - 0.1
 

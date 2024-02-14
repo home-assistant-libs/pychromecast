@@ -1,7 +1,9 @@
 """
 Data and methods to retrieve app specific configuration
 """
+
 import json
+from typing import cast
 
 import requests
 
@@ -15,34 +17,42 @@ APP_HOMEASSISTANT_MEDIA = "B45F4572"
 APP_SUPLA = "A41B766D"
 APP_YLEAREENA = "A9BCCB7C"
 APP_BUBBLEUPNP = "3927FA74"
-APP_BBCSOUNDS = "03977A48"
+APP_BBCSOUNDS = "D350F6A9"
 APP_BBCIPLAYER = "5E81F6DB"
+APP_SHAKA = "07AEE832"
+APP_NRKTV = "3AEDF8D1"
+APP_NRKRADIO = "A49874B1"
 
 
-def get_possible_app_ids():
+def get_possible_app_ids() -> list[str]:
     """Returns all possible app ids."""
 
     try:
         req = requests.get(
-            "https://clients3.google.com/cast/chromecast/device/baseconfig"
+            "https://clients3.google.com/cast/chromecast/device/baseconfig",
+            timeout=10,
         )
         data = json.loads(req.text[4:])
 
-        return [app["app_id"] for app in data["applications"]] + data["enabled_app_ids"]
+        return cast(
+            list[str],
+            [app["app_id"] for app in data["applications"]] + data["enabled_app_ids"],
+        )
 
     except ValueError:
         # If json fails to parse
         return []
 
 
-def get_app_config(app_id):
+def get_app_config(app_id: str) -> dict:
     """Get specific configuration for 'app_id'."""
     try:
         req = requests.get(
-            f"https://clients3.google.com/cast/chromecast/device/app?a={app_id}"
+            f"https://clients3.google.com/cast/chromecast/device/app?a={app_id}",
+            timeout=10,
         )
 
-        return json.loads(req.text[4:]) if req.status_code == 200 else {}
+        return cast(dict, json.loads(req.text[4:])) if req.status_code == 200 else {}
 
     except ValueError:
         # If json fails to parse

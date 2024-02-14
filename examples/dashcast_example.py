@@ -1,17 +1,24 @@
 """
 Example that shows how the DashCast controller can be used.
 """
+
 # pylint: disable=invalid-name
 
 import argparse
-import logging
 import sys
 import time
-
-import zeroconf
+import threading
 
 import pychromecast
 from pychromecast.controllers import dashcast
+
+from .common import add_log_arguments, configure_logging
+
+# Enable deprecation warnings etc.
+if not sys.warnoptions:
+    import warnings
+
+    warnings.simplefilter("default")
 
 # Change to the friendly name of your Chromecast
 CAST_NAME = "Living Room"
@@ -27,17 +34,10 @@ parser.add_argument(
     help="Add known host (IP), can be used multiple times",
     action="append",
 )
-parser.add_argument("--show-debug", help="Enable debug log", action="store_true")
-parser.add_argument(
-    "--show-zeroconf-debug", help="Enable zeroconf debug log", action="store_true"
-)
+add_log_arguments(parser)
 args = parser.parse_args()
 
-if args.show_debug:
-    logging.basicConfig(level=logging.DEBUG)
-if args.show_zeroconf_debug:
-    print("Zeroconf version: " + zeroconf.__version__)
-    logging.getLogger("zeroconf").setLevel(logging.DEBUG)
+configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast], known_hosts=args.known_host
@@ -65,21 +65,46 @@ print()
 if not cast.is_idle:
     print("Killing current running app")
     cast.quit_app()
-    t = 5
-    while cast.status.app_id is not None and t > 0:
+    t = 5.0
+    while cast.status.app_id is not None and t > 0:  # type: ignore[union-attr]
         time.sleep(0.1)
         t = t - 0.1
 
 time.sleep(1)
 
+requests_handled = threading.Event()
+
+
+def _first_request_handled(msg_sent: bool, _response: dict | None) -> None:
+    """Request to load first URL handled, load the second URL."""
+    if not msg_sent:
+        print("Failed to load first URL")
+
+    print("Loaded 1st URL, loading 2nd URL")
+    d.load_url("https://home-assistant.io/", callback_function=_second_request_handled)
+
+
+def _second_request_handled(msg_sent: bool, _response: dict | None) -> None:
+    """Request to load second URL handled."""
+    if not msg_sent:
+        print("Failed to load second URL")
+    print("Loaded 2nd URL")
+    requests_handled.set()
+
+
 # Test that the callback chain works. This should send a message to
 # load the first url, but immediately after send a message load the
 # second url.
 warning_message = "If you see this on your TV then something is broken"
+
+print("Loading 1st URL")
 d.load_url(
     "https://home-assistant.io/? " + warning_message,
-    callback_function=lambda result: d.load_url("https://home-assistant.io/"),
+    callback_function=_second_request_handled,
 )
+
+print("Waiting for callbacks")
+requests_handled.wait()
 
 # If debugging, sleep after running so we can see any error messages.
 if args.show_debug:
