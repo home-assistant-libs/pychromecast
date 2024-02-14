@@ -1,5 +1,5 @@
 """
-Example on how to use the Home Assistant Media app to play an URL.
+Example on how to use the Default Media Controller app to play an URL.
 
 """
 
@@ -65,6 +65,8 @@ app_data = {
 }
 quick_play.quick_play(cast, app_name, app_data)
 
-sleep(10)
+# If debugging, sleep after running so we can see any error messages.
+if args.show_debug:
+    sleep(10)
 
 browser.stop_discovery()
