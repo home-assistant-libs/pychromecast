@@ -85,9 +85,13 @@ class BaseController(abc.ABC):
                 "%s: Can't launch app with no supporting app_id",
                 self.__class__.__name__,
             )
+            if callback_function:
+                callback_function(False, None)
             return
 
         if self._socket_client is None:
+            if callback_function:
+                callback_function(False, None)
             raise ControllerNotRegistered
 
         self._socket_client.receiver_controller.launch_app(
@@ -130,6 +134,8 @@ class BaseController(abc.ABC):
         Will raise a NotConnected exception if not connected.
         """
         if self._socket_client is None:
+            if callback_function:
+                callback_function(False, None)
             raise ControllerNotRegistered
 
         receiver_ctrl = self._socket_client.receiver_controller
