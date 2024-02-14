@@ -944,12 +944,16 @@ class SocketClient(threading.Thread, CastStatusListener):
     ) -> None:
         """Helper method to send a message to current running app."""
         if namespace not in self.app_namespaces:
+            if callback_function:
+                callback_function(False, None)
             raise UnsupportedNamespace(
                 f"Namespace {namespace} is not supported by current app. "
                 f"Supported are {', '.join(self.app_namespaces)}"
             )
 
         if self.destination_id is None:
+            if callback_function:
+                callback_function(False, None)
             raise NotConnected(
                 "Attempting send a message when destination_id is not set"
             )

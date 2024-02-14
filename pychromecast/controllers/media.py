@@ -613,6 +613,8 @@ class MediaController(BaseMediaPlayer):
             self.logger.warning(
                 "%s command requested but no session is active.", command[MESSAGE_TYPE]
             )
+            if callback_function:
+                callback_function(False, None)
             return
 
         command["mediaSessionId"] = self.status.media_session_id
