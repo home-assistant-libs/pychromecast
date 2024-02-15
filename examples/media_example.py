@@ -23,7 +23,7 @@ if not sys.warnoptions:
 CAST_NAME = "Living Room"
 
 # Change to an audio or video url
-MEDIA_URL = "https://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/ak/bbc_radio_fourfm.mpd"
+MEDIA_URL = "https://www.bensound.com/bensound-music/bensound-jazzyfrenchy.mp3"
 
 parser = argparse.ArgumentParser(
     description="Example on how to use the Media Controller to play an URL."
