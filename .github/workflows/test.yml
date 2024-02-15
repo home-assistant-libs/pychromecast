@@ -35,3 +35,6 @@ jobs:
       - name: Lint with pylint
         run: |
           pylint examples pychromecast
+      - name: Lint with rstcheck
+        run: |
+          rstcheck README.rst
