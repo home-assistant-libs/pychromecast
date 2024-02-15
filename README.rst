@@ -158,7 +158,7 @@ to the IGNORE\_CEC list in PyChromecast like in the example below.
     pychromecast.IGNORE_CEC.append('Living Room')  # Ignore CEC on Chromecasts named Living Room
 
 Networking requirements
------------------
+-----------------------
 Pychromecast relies on mDNS to discover cast devices. The mDNS protocol relies on multicast UDP on port 5353 which comes with several implications for discovery to work:
 
 -  Multicast UDP must be forwarded by WiFI routers; some WiFi routers are known to drop multicast UDP traffic.
@@ -174,7 +174,4 @@ I would like to thank `Fred Clift`_ for laying the socket client ground
 work. Without him it would not have been possible!
 
 .. _Linux style wildcard: http://tldp.org/LDP/GNU-Linux-Tools-Summary/html/x11655.htm
-.. _@am0s: https://github.com/am0s
-.. _@rmkraus: https://github.com/rmkraus
-.. _@balloob: https://github.com/balloob
 .. _Fred Clift: https://github.com/minektur
