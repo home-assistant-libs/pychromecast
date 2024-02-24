@@ -357,7 +357,16 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.host,
                         self.port,
                     )
-                    self.socket.connect((self.host, self.port))
+
+                    mapped_host = socket.getaddrinfo(
+                        self.host,
+                        self.port,
+                        self.socket.family,
+                        socket.SOCK_STREAM,
+                        flags=(socket.AI_ADDRCONFIG | socket.AI_V4MAPPED),
+                    )[0][4]
+
+                    self.socket.connect(mapped_host)
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
@@ -1094,7 +1103,13 @@ def new_socket() -> socket.socket:
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        new_sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        new_sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)  # ensuring dual-stack
+    except OSError:
+        # falling back to IPv4 on systems without IPv6
+        new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
     new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
