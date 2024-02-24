@@ -90,7 +90,8 @@ def _get_status(
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
 
-    headers = {"content-type": "application/json"}
+    # unsetting the host header, as requests with a domain would be blocked otherwise
+    headers = {"host": "", "content-type": "application/json"}
 
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
