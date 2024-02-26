@@ -3,7 +3,7 @@ black==24.2.0
 flake8==7.0.0
 mypy==1.8.0
 PlexAPI==4.15.10
-pylint==3.0.3
+pylint==3.1.0
 rstcheck==6.2.0
 types-beautifulsoup4==4.12.0.20240106
 types-html5lib==1.1.11.20240222
