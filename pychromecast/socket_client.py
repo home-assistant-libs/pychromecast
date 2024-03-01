@@ -10,31 +10,31 @@ Without him this would not have been possible.
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
 import errno
 import json
 import logging
-import select
+import selectors
 import socket
 import ssl
 import threading
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from struct import pack, unpack
 
 import zeroconf
 
-from .controllers import CallbackType, BaseController
+from .const import MESSAGE_TYPE, REQUEST_ID, SESSION_ID
+from .controllers import BaseController, CallbackType
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
-from .const import MESSAGE_TYPE, REQUEST_ID, SESSION_ID
 from .dial import get_host_from_service
 from .error import (
     ChromecastConnectionError,
     ControllerNotRegistered,
-    UnsupportedNamespace,
     NotConnected,
     PyChromecastStopped,
+    UnsupportedNamespace,
 )
 
 # pylint: disable-next=no-name-in-module
@@ -64,12 +64,11 @@ CONNECTION_STATUS_FAILED = "FAILED"
 CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
-# Check for select poll method
-SELECT_HAS_POLL = hasattr(select, "poll")
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-POLL_TIME_BLOCKING = 5.0
+# Try not to wake up too often
+POLL_TIME_BLOCKING = 300.0
 POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
@@ -215,6 +214,11 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.connecting = True
         self.first_connection = True
         self.socket: socket.socket | ssl.SSLSocket | None = None
+        self.selector = selectors.DefaultSelector()
+        self.self_selector_key = self.selector.register(
+            self.socketpair[0], selectors.EVENT_READ
+        )
+        self.socket_selector_key: selectors.SelectorKey | None = None
 
         # dict mapping namespace on Controller objects
         self._handlers: dict[str, set[BaseController]] = defaultdict(set)
@@ -238,8 +242,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         tries = self.tries
 
         if self.socket is not None:
+            self.selector.unregister(self.socket)
             self.socket.close()
             self.socket = None
+            self.socket_selector_key = None
 
         # Make sure nobody is blocking.
         for callback_function in self._request_callbacks.values():
@@ -288,10 +294,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                 try:
                     if self.socket is not None:
                         # If we retry connecting, we need to clean up the socket again
-                        self.socket.close()  # type: ignore[unreachable]
+                        self.selector.unregister(self.socket)  # type: ignore[unreachable]
+                        self.socket.close()
                         self.socket = None
+                        self.socket_selector_key = None
 
                     self.socket = new_socket()
+                    self.socket_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
@@ -559,20 +570,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         assert self.socket is not None
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
-        rlist = [self.socket, self.socketpair[0]]
         try:
-            if SELECT_HAS_POLL is True:
-                # Map file descriptors to socket objects because select.select does not support fd > 1024
-                # https://stackoverflow.com/questions/14250751/how-to-increase-filedescriptors-range-in-python-select
-                fd_to_socket = {rlist_item.fileno(): rlist_item for rlist_item in rlist}
-
-                poll_obj = select.poll()
-                for poll_fd in rlist:
-                    poll_obj.register(poll_fd, select.POLLIN)
-                poll_result = poll_obj.poll(timeout * 1000)  # timeout in milliseconds
-                can_read = [fd_to_socket[fd] for fd, _status in poll_result]
-            else:
-                can_read, _, _ = select.select(rlist, [], [], timeout)
+            ready = self.selector.select(timeout)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
@@ -584,9 +583,10 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._force_recon = True
             return 0
 
+        can_read = {key for key, _ in ready}
         # read message from chromecast
         message = None
-        if self.socket in can_read and not self._force_recon:
+        if self.socket_selector_key in can_read and not self._force_recon:
             try:
                 message = self._read_message()
             except InterruptLoop as exc:
@@ -622,7 +622,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             else:
                 data = _dict_from_message_payload(message)
 
-        if self.socketpair[0] in can_read:
+        if self.self_selector_key in can_read:
             # Clear the socket's buffer
             self.socketpair[0].recv(128)
 
@@ -767,6 +767,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.socketpair[0].close()
         self.socketpair[1].close()
+        self.selector.close()
 
         self.connecting = True
 
