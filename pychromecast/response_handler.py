@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 import threading
 from typing import Protocol
 
 from .error import RequestFailed, RequestTimeout
+
+_LOGGER = logging.getLogger(__name__)
 
 CallbackType = Callable[[bool, dict | None], None]
 """Signature of optional callback functions supported by methods sending messages.
@@ -61,6 +64,7 @@ def chain_on_success(
 
     def _callback(msg_sent: bool, response: dict | None) -> None:
         if not msg_sent:
+            _LOGGER.debug("Not calling on_success %s", on_success)
             if callback_function:
                 callback_function(msg_sent, response)
             return
