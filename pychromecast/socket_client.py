@@ -215,10 +215,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.first_connection = True
         self.socket: socket.socket | ssl.SSLSocket | None = None
         self.selector = selectors.DefaultSelector()
-        self.self_selector_key = self.selector.register(
+        self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
         )
-        self.socket_selector_key: selectors.SelectorKey | None = None
+        self.remote_selector_key: selectors.SelectorKey | None = None
 
         # dict mapping namespace on Controller objects
         self._handlers: dict[str, set[BaseController]] = defaultdict(set)
@@ -245,7 +245,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.selector.unregister(self.socket)
             self.socket.close()
             self.socket = None
-            self.socket_selector_key = None
+            self.remote_selector_key = None
 
         # Make sure nobody is blocking.
         for callback_function in self._request_callbacks.values():
@@ -297,10 +297,10 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.selector.unregister(self.socket)  # type: ignore[unreachable]
                         self.socket.close()
                         self.socket = None
-                        self.socket_selector_key = None
+                        self.remote_selector_key = None
 
                     self.socket = new_socket()
-                    self.socket_selector_key = self.selector.register(
+                    self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
                     )
                     self.socket.settimeout(self.timeout)
@@ -586,7 +586,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         can_read = {key for key, _ in ready}
         # read message from chromecast
         message = None
-        if self.socket_selector_key in can_read and not self._force_recon:
+        if self.remote_selector_key in can_read and not self._force_recon:
             try:
                 message = self._read_message()
             except InterruptLoop as exc:
@@ -622,7 +622,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             else:
                 data = _dict_from_message_payload(message)
 
-        if self.self_selector_key in can_read:
+        if self.wakeup_selector_key in can_read:
             # Clear the socket's buffer
             self.socketpair[0].recv(128)
 
