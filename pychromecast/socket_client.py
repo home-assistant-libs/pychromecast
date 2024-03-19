@@ -67,9 +67,6 @@ CONNECTION_STATUS_LOST = "LOST"
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-# Try not to wake up too often
-POLL_TIME_BLOCKING = 300.0
-POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -541,7 +538,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.debug("Thread started...")
         while not self.stop.is_set():
             try:
-                if self._run_once(timeout=POLL_TIME_BLOCKING) == 1:
+                if self._run_once() == 1:
                     break
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
@@ -556,7 +553,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         # Clean up
         self._cleanup()
 
-    def _run_once(self, timeout: float = POLL_TIME_NON_BLOCKING) -> int:
+    def _run_once(self) -> int:
         """Receive from the socket and handle data."""
         # pylint: disable=too-many-branches, too-many-statements, too-many-return-statements
 
@@ -571,7 +568,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         # poll the socket, as well as the socketpair to allow us to be interrupted
         try:
-            ready = self.selector.select(timeout)
+            ready = self.selector.select()
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
