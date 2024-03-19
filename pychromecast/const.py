@@ -14,6 +14,7 @@ REQUEST_TIMEOUT = 10.0
 
 MF_CANTON = "Canton Elektronik GmbH + Co. KG"
 MF_GOOGLE = "Google Inc."
+MF_HARMAN = "HARMAN International Industries"
 MF_JBL = "JBL"
 MF_LENOVO = "LENOVO"
 MF_LG = "LG"
@@ -47,6 +48,7 @@ CAST_TYPES = {
     "JBL Link 20": (CAST_TYPE_AUDIO, MF_JBL),
     "JBL Link 300": (CAST_TYPE_AUDIO, MF_JBL),
     "JBL Link 500": (CAST_TYPE_AUDIO, MF_JBL),
+    "JBL Link Portable": (CAST_TYPE_AUDIO, MF_HARMAN),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, MF_LENOVO),
     "Lenovo Smart Display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
     "LG WK7 ThinQ Speaker": (CAST_TYPE_AUDIO, MF_LG),
