@@ -67,6 +67,8 @@ CONNECTION_STATUS_LOST = "LOST"
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
+POLL_TIME_BLOCKING = 5.0
+POLL_TIME_NON_BLOCKING = 0.01
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -538,7 +540,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.debug("Thread started...")
         while not self.stop.is_set():
             try:
-                if self._run_once() == 1:
+                if self._run_once(timeout=POLL_TIME_BLOCKING) == 1:
                     break
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
@@ -553,7 +555,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         # Clean up
         self._cleanup()
 
-    def _run_once(self) -> int:
+    def _run_once(self, timeout: float = POLL_TIME_NON_BLOCKING) -> int:
         """Receive from the socket and handle data."""
         # pylint: disable=too-many-branches, too-many-statements, too-many-return-statements
 
