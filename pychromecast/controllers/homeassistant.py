@@ -4,6 +4,7 @@ Controller to interface with Home Assistant
 
 from collections.abc import Callable
 from functools import partial
+import logging
 import threading
 from typing import Any
 
@@ -29,6 +30,8 @@ ERR_WRONG_INSTANCE = 20
 ERR_NOT_CONNECTED = 21
 ERR_FETCH_CONFIG_FAILED = 22
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class HomeAssistantController(BaseController):
     """Controller to interact with Home Assistant."""
@@ -45,6 +48,7 @@ class HomeAssistantController(BaseController):
         app_id: str = APP_HOMEASSISTANT_LOVELACE,
         hass_connect_timeout: float = DEFAULT_HASS_CONNECT_TIMEOUT,
     ) -> None:
+        _LOGGER.debug("HomeAssistantController.__init__")
         super().__init__(app_namespace, app_id)
         self.hass_url = hass_url
         self.hass_uuid = hass_uuid
@@ -77,16 +81,19 @@ class HomeAssistantController(BaseController):
     def channel_connected(self) -> None:
         """Called when a channel has been openend that supports the
         namespace of this controller."""
+        _LOGGER.debug("HomeAssistantController.channel_connected")
         self.get_status()
 
     def channel_disconnected(self) -> None:
         """Called when a channel is disconnected."""
+        _LOGGER.debug("HomeAssistantController.channel_disconnected")
         self.status = None
         self._hass_connecting_event.set()
 
     def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """Called when a message is received."""
         if data.get("type") == "receiver_status":
+            _LOGGER.debug("HomeAssistantController.receive_message %s", data)
             if data["hassUrl"] != self.hass_url or data["hassUUID"] != self.hass_uuid:
                 self.logger.info("Received status for another instance")
                 self.unregister()
@@ -96,6 +103,9 @@ class HomeAssistantController(BaseController):
             self.status = data
 
             if was_connected or not self.hass_connected:
+                _LOGGER.debug(
+                    "HomeAssistantController.receive_message already connected"
+                )
                 return True
 
             # We just got connected, call the callbacks.
@@ -104,6 +114,7 @@ class HomeAssistantController(BaseController):
             return True
 
         if data.get("type") == "receiver_error":
+            _LOGGER.debug("HomeAssistantController.receive_message %s", data)
             if data.get("error_code") == ERR_WRONG_INSTANCE:
                 self.logger.info("Received ERR_WRONG_INSTANCE")
                 self.unregister()
@@ -113,14 +124,19 @@ class HomeAssistantController(BaseController):
 
     def _call_on_connect_callbacks(self, msg_sent: bool) -> None:
         """Call on connect callbacks."""
+        _LOGGER.debug("HomeAssistantController._call_on_connect_callbacks %s", msg_sent)
         while self._on_connect:
             self._on_connect.pop()(msg_sent, None)
 
     def _connect_hass(self, callback_function: CallbackType) -> None:
         """Connect to Home Assistant and call the provided callback."""
+        _LOGGER.debug("HomeAssistantController._connect_hass")
         self._on_connect.append(callback_function)
 
         if not self._hass_connecting_event.is_set():
+            _LOGGER.debug(
+                "HomeAssistantController._connect_hass _hass_connecting_event not set"
+            )
             return
 
         self._hass_connecting_event.clear()
@@ -135,6 +151,9 @@ class HomeAssistantController(BaseController):
                 }
             )
         except Exception:  # pylint: disable=broad-except
+            _LOGGER.debug(
+                "HomeAssistantController._connect_hass failed to send connect message"
+            )
             self._hass_connecting_event.set()
             self._call_on_connect_callbacks(False)
             raise
@@ -154,6 +173,7 @@ class HomeAssistantController(BaseController):
 
     def get_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Get status of Home Assistant Cast."""
+        _LOGGER.debug("HomeAssistantController.get_status")
         self._send_connected_message(
             {
                 "type": "get_status",
@@ -171,6 +191,7 @@ class HomeAssistantController(BaseController):
         callback_function: CallbackType | None = None,
     ) -> None:
         """Show a Lovelace UI."""
+        _LOGGER.debug("HomeAssistantController.show_lovelace_view")
         self._send_connected_message(
             {
                 "type": "show_lovelace_view",
@@ -186,10 +207,17 @@ class HomeAssistantController(BaseController):
         self, data: dict[str, Any], callback_function: CallbackType | None
     ) -> None:
         """Send a message to a connected Home Assistant Cast"""
+        _LOGGER.debug("HomeAssistantController._send_connected_message %s", data)
         if self.hass_connected:
+            _LOGGER.debug(
+                "HomeAssistantController._send_connected_message already connected"
+            )
             self.send_message_nocheck(data, callback_function=callback_function)
             return
 
+        _LOGGER.debug(
+            "HomeAssistantController._send_connected_message not yet connected"
+        )
         self._connect_hass(
             chain_on_success(
                 partial(self.send_message_nocheck, data), callback_function
