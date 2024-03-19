@@ -143,10 +143,10 @@ class HomeAssistantController(BaseController):
         try:
             if not self._hass_connecting_event.is_set():
                 self.logger.warning("_connect_hass failed for %s", self.hass_url)
+                self._call_on_connect_callbacks(False)
                 raise PyChromecastError()  # pylint: disable=broad-exception-raised
         finally:
             self._hass_connecting_event.set()
-            self._call_on_connect_callbacks(False)
 
     def show_demo(self) -> None:
         """Show the demo."""
