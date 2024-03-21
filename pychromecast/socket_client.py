@@ -1105,7 +1105,8 @@ def new_socket() -> socket.socket:
     """
     try:
         new_sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        new_sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)  # ensuring dual-stack
+        # ensuring dual-stack
+        new_sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
     except OSError:
         # falling back to IPv4 on systems without IPv6
         new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
