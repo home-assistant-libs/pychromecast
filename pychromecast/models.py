@@ -23,6 +23,7 @@ class CastInfo:
     services: set[HostServiceInfo | MDNSServiceInfo]
     uuid: UUID
     model_name: str | None
+    product_name: str | None
     friendly_name: str | None
     host: str
     port: int

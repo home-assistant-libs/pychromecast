@@ -212,6 +212,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         cast_type = CAST_TYPE_CHROMECAST
         display_supported = True
         friendly_name = status.get("name", "Unknown Chromecast")
+        product_name = "Unknown product name"
         manufacturer = "Unknown manufacturer"
         model_name = "Unknown model name"
         multizone_supported = False
@@ -224,6 +225,7 @@ def get_device_info(  # pylint: disable=too-many-locals
             display_supported = capabilities.get("display_supported", True)
             multizone_supported = capabilities.get("multizone_supported", True)
             friendly_name = device_info.get("name", friendly_name)
+            product_name = device_info.get("product_name", product_name)
             model_name = device_info.get("model_name", model_name)
             manufacturer = device_info.get("manufacturer", manufacturer)
             udn = device_info.get("ssdp_udn", None)
@@ -239,6 +241,7 @@ def get_device_info(  # pylint: disable=too-many-locals
 
         return DeviceStatus(
             friendly_name,
+            product_name,
             model_name,
             manufacturer,
             uuid,
@@ -332,6 +335,7 @@ class DeviceStatus:
     """Device status container."""
 
     friendly_name: str
+    product_name: str
     model_name: str
     manufacturer: str
     uuid: UUID | None
