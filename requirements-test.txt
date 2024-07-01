@@ -1,7 +1,7 @@
 beautifulsoup4==4.12.3
 black==24.4.2
 flake8==7.1.0
-mypy==1.10.0
+mypy==1.10.1
 PlexAPI==4.15.14
 pylint==3.1.0
 rstcheck==6.2.1
