@@ -489,6 +489,11 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = status.transport_id
         self.session_id = status.session_id
 
+        # When a new cast status is received, give Audible time to load
+        if status.app_id == "25456794":
+            self.logger.debug("Detected Audible connection. Sleeping for 1s")
+            time.sleep(1)
+
         if new_channel and self.destination_id is not None:
             # If any of the namespaces of the new app are supported
             # we will automatically connect to it to receive updates
