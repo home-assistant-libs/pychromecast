@@ -77,13 +77,14 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
 class YouTubeController(QuickPlayController):
     """Controller to interact with Youtube."""
 
-    _session: YouTubeSession | None = None
+    _session: YouTubeSession
     _screen_id: str | None = None
 
     def __init__(self, timeout: float = 10) -> None:
         super().__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
         self.status_update_event = threading.Event()
         self._timeout = timeout
+        self._session = None
 
     def start_session_if_none(self) -> None:
         """
