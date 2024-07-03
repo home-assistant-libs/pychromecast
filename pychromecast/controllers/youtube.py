@@ -77,7 +77,7 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
 class YouTubeController(QuickPlayController):
     """Controller to interact with Youtube."""
 
-    _session: YouTubeSession
+    _session: YouTubeSession | None = None
     _screen_id: str | None = None
 
     def __init__(self, timeout: float = 10) -> None:
