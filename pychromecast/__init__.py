@@ -395,12 +395,28 @@ class Chromecast(CastStatusListener):
         return f"{self.socket_client.host}:{self.socket_client.port}"
 
     @property
+    def manufacturer(self) -> str:
+        """Returns the manufacturer of the Chromecast device."""
+        if TYPE_CHECKING:
+            # get_cast_type is guaranteed to return a CastInfo with a non-None model
+            assert self.cast_info.manufacturer is not None
+        return self.cast_info.manufacturer
+
+    @property
     def model_name(self) -> str:
         """Returns the model name of the Chromecast device."""
         if TYPE_CHECKING:
             # get_cast_type is guaranteed to return a CastInfo with a non-None model
             assert self.cast_info.model_name is not None
         return self.cast_info.model_name
+
+    @property
+    def product_name(self) -> str:
+        """Returns the product name of the Chromecast device."""
+        if TYPE_CHECKING:
+            # get_cast_type is guaranteed to return a CastInfo with a non-None model
+            assert self.cast_info.product_name is not None
+        return self.cast_info.product_name
 
     @property
     def cast_type(self) -> str:
