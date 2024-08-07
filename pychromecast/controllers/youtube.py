@@ -84,6 +84,7 @@ class YouTubeController(QuickPlayController):
         super().__init__(YOUTUBE_NAMESPACE, APP_YOUTUBE)
         self.status_update_event = threading.Event()
         self._timeout = timeout
+        self._session = None
 
     def start_session_if_none(self) -> None:
         """
