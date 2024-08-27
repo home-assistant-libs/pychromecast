@@ -9,4 +9,4 @@ types-beautifulsoup4==4.12.0.20240511
 types-html5lib==1.1.11.20240806
 types-protobuf==5.27.0.20240626
 types-requests==2.32.0.20240712
-yle-dl==20240706
+yle-dl==20240806
