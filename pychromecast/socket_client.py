@@ -615,7 +615,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.fn or "",
                     self.host,
                     self.port,
-                    exc
+                    exc,
                 )
             else:
                 data = _dict_from_message_payload(message)
@@ -907,7 +907,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.fn or "",
                     self.host,
                     self.port,
-                    exc
+                    exc,
                 )
         else:
             if callback_function:
