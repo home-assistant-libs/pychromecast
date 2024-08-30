@@ -659,7 +659,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.debug(
+            self.logger.info(
                 "[%s(%s):%s] Heartbeat timeout, resetting connection",
                 self.fn or "",
                 self.host,
