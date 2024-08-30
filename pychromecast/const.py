@@ -43,6 +43,7 @@ CAST_TYPES = {
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "bravia 4k vh2": (CAST_TYPE_CHROMECAST, MF_SONY),
+    "bravia 4k vh21": (CAST_TYPE_CHROMECAST, MF_SONY),
     "C4A": (CAST_TYPE_AUDIO, MF_SONY),
     "JBL Link 10": (CAST_TYPE_AUDIO, MF_JBL),
     "JBL Link 20": (CAST_TYPE_AUDIO, MF_JBL),
