@@ -108,6 +108,8 @@ def media_to_chromecast_command(  # pylint: disable=invalid-name, too-many-local
         dict: Returs a dict formatted correctly to start playback on a Chromecast.
     """
 
+    machineIdentifier = None
+    token = None
     if media is not None:
         # Lets set some params for the user if they use plexapi.
         server: PlexServer = (

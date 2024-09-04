@@ -613,16 +613,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                     if self.stop.is_set():
                         return 1
                 raise
-            except socket.error:
+            except socket.error as exc:
                 self._force_recon = True
                 self.logger.error(
-                    "[%s(%s):%s] Error reading from socket.",
+                    "[%s(%s):%s] Error reading from socket: %s",
                     self.fn or "",
                     self.host,
                     self.port,
+                    exc,
                 )
-            else:
-                data = _dict_from_message_payload(message)
 
         if self.wakeup_selector_key in can_read:
             # Clear the socket's buffer
@@ -637,6 +636,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             return 0
 
         # See if any handlers will accept this message
+        data = _dict_from_message_payload(message)
         self._route_message(message, data)
 
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
@@ -654,8 +654,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         # check if connection is expired
         reset = False
         if self._force_recon:
-            self.logger.warning(
-                "[%s(%s):%s] Error communicating with socket, resetting connection",
+            self.logger.debug(
+                "[%s(%s):%s] Forced reconnection",
                 self.fn or "",
                 self.host,
                 self.port,
@@ -663,7 +663,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.warning(
+            self.logger.info(
                 "[%s(%s):%s] Heartbeat timeout, resetting connection",
                 self.fn or "",
                 self.host,
@@ -900,17 +900,18 @@ class SocketClient(threading.Thread, CastStatusListener):
                     else:
                         callback_function(True, None)
                 self.socket.sendall(be_size + msg.SerializeToString())
-            except socket.error:
+            except socket.error as exc:
                 if callback_function:
                     callback_function(False, None)
                 if not no_add_request_id:
                     self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
-                self.logger.info(
-                    "[%s(%s):%s] Error writing to socket.",
+                self.logger.warning(
+                    "[%s(%s):%s] Error writing to socket: %s",
                     self.fn or "",
                     self.host,
                     self.port,
+                    exc,
                 )
         else:
             if callback_function:
