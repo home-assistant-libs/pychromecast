@@ -633,6 +633,10 @@ class SocketClient(threading.Thread, CastStatusListener):
             return 0
 
         # See if any handlers will accept this message
+
+        # Pylint says data is possibly unassigned. That's not the case though,
+        # because if it is, message is None and we've returned just above
+        # pylint: disable-next=possibly-used-before-assignment
         self._route_message(message, data)
 
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
