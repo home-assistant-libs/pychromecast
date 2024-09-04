@@ -617,8 +617,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.port,
                     exc,
                 )
-            else:
-                data = _dict_from_message_payload(message)
 
         if self.wakeup_selector_key in can_read:
             # Clear the socket's buffer
@@ -633,6 +631,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             return 0
 
         # See if any handlers will accept this message
+        data = _dict_from_message_payload(message)
         self._route_message(message, data)
 
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
