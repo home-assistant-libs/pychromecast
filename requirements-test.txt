@@ -7,6 +7,6 @@ pylint==3.2.7
 rstcheck==6.2.4
 types-beautifulsoup4==4.12.0.20240907
 types-html5lib==1.1.11.20240806
-types-protobuf==5.27.0.20240626
+types-protobuf==5.27.0.20240920
 types-requests==2.32.0.20240914
 yle-dl==20240806
