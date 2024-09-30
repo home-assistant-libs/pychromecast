@@ -175,3 +175,9 @@ work. Without him it would not have been possible!
 
 .. _Linux style wildcard: http://tldp.org/LDP/GNU-Linux-Tools-Summary/html/x11655.htm
 .. _Fred Clift: https://github.com/minektur
+
+|ohf-logo|
+
+.. |ohf-logo| image:: https://www.openhomefoundation.org/badges/pychromecast.png
+   :alt: PyChromecast - A library from the Open Home Foundation
+   :target: https://www.openhomefoundation.org/
