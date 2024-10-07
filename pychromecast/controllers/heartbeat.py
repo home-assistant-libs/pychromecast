@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from . import BaseController
@@ -28,6 +29,7 @@ class HeartbeatController(BaseController):
         super().__init__(NS_HEARTBEAT, target_platform=True)
         self.last_ping = 0.0
         self.last_pong = time.time()
+        self.logger = logging.getLogger(__name__)
 
     def receive_message(self, _message: CastMessage, data: dict) -> bool:
         """
