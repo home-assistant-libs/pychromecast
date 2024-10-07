@@ -686,7 +686,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         # route message to handlers
         if message.namespace in self._handlers:
             # debug messages
-            if message.namespace != NS_HEARTBEAT:
+            if (
+                message.namespace != NS_HEARTBEAT
+                or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
+            ):
                 self.logger.debug(
                     "[%s(%s):%s] Received: %s",
                     self.fn or "",
@@ -870,7 +873,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if msg.namespace != NS_HEARTBEAT:
+        if (
+            msg.namespace != NS_HEARTBEAT
+            or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
+        ):
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
