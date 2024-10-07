@@ -67,8 +67,7 @@ CONNECTION_STATUS_LOST = "LOST"
 
 HB_PING_TIME = 10
 HB_PONG_TIME = 10
-POLL_TIME_BLOCKING = 5.0
-POLL_TIME_NON_BLOCKING = 0.01
+SELECT_TIMEOUT = 5.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -540,7 +539,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.debug("Thread started...")
         while not self.stop.is_set():
             try:
-                if self._run_once(timeout=POLL_TIME_BLOCKING) == 1:
+                if self._run_once() == 1:
                     break
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
@@ -555,7 +554,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         # Clean up
         self._cleanup()
 
-    def _run_once(self, timeout: float = POLL_TIME_NON_BLOCKING) -> int:
+    def _run_once(self) -> int:
         """Receive from the socket and handle data."""
         # pylint: disable=too-many-branches, too-many-statements, too-many-return-statements
 
@@ -568,9 +567,13 @@ class SocketClient(threading.Thread, CastStatusListener):
         # A connection has been established at this point by self._check_connection
         assert self.socket is not None
 
-        # poll the socket, as well as the socketpair to allow us to be interrupted
+        # Poll the socket and the socketpair, with a timeout of SELECT_TIMEOUT
+        # The timeout ensures we call _check_connection often enough to avoid
+        # the HeartbeatController from detecting a timeout
+        # The socketpair allow us to be interrupted on shutdown without waiting
+        # for the SELECT_TIMEOUT timout to expire
         try:
-            ready = self.selector.select(timeout)
+            ready = self.selector.select(SELECT_TIMEOUT)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
