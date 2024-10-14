@@ -348,7 +348,7 @@ class HostBrowser(threading.Thread):
         # Iterate over a copy because other threads may modify the known_hosts list
         known_hosts = list(self._known_hosts.keys())
         for host in known_hosts:
-            devices: list[tuple[int, str, str, UUID, str, str]] = []
+            devices: list[tuple[int, str, str, str, UUID, str, str]] = []
             uuids: list[UUID] = []
             if self.stop.is_set():
                 break
@@ -396,6 +396,7 @@ class HostBrowser(threading.Thread):
                 (
                     8009,
                     device_status.friendly_name,
+                    device_status.product_name,
                     device_status.model_name,
                     device_status.uuid,
                     device_status.cast_type,
@@ -425,6 +426,7 @@ class HostBrowser(threading.Thread):
                             group.port,
                             group.friendly_name,
                             "Google Cast Group",
+                            "Google Cast Group",
                             group.uuid,
                             CAST_TYPE_GROUP,
                             "Google Inc.",
@@ -437,7 +439,7 @@ class HostBrowser(threading.Thread):
     def _update_devices(
         self,
         host: str,
-        devices: list[tuple[int, str, str, UUID, str, str]],
+        devices: list[tuple[int, str, str, str, UUID, str, str]],
         host_uuids: list[UUID],
     ) -> None:
         callbacks: list[Callable[[], None]] = []
@@ -447,6 +449,7 @@ class HostBrowser(threading.Thread):
             for (
                 port,
                 friendly_name,
+                product_name,
                 model_name,
                 uuid,
                 cast_type,
@@ -456,6 +459,7 @@ class HostBrowser(threading.Thread):
                     host,
                     port,
                     friendly_name,
+                    product_name,
                     model_name,
                     uuid,
                     callbacks,
@@ -481,6 +485,7 @@ class HostBrowser(threading.Thread):
         host: str,
         port: int,
         friendly_name: str,
+        product_name: str,
         model_name: str,
         uuid: UUID,
         callbacks: list[Callable[[], None]],
@@ -496,6 +501,7 @@ class HostBrowser(threading.Thread):
             if (
                 service_info in cast_info.services
                 and cast_info.model_name == model_name
+                and cast_info.product_name == product_name
                 and cast_info.friendly_name == friendly_name
             ):
                 # No changes, return
@@ -506,6 +512,7 @@ class HostBrowser(threading.Thread):
                 {service_info},
                 uuid,
                 model_name,
+                product_name,
                 friendly_name,
                 host,
                 port,
@@ -520,6 +527,7 @@ class HostBrowser(threading.Thread):
                 services,
                 uuid,
                 model_name,
+                product_name,
                 friendly_name,
                 host,
                 port,
