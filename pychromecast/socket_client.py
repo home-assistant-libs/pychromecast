@@ -489,8 +489,13 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = status.transport_id
         self.session_id = status.session_id
 
-        # When a new cast status is received, give Audible time to load
-        if status.app_id == "25456794":
+        # App quirk: when a new cast status is received, give Audible time to load
+        if (
+            any(namespace in self._handlers for namespace in self.app_namespaces)
+                and self.destination_id not in self._open_channels
+                and status.app_id == "25456794"
+            ):
+
             self.logger.debug("Detected Audible connection. Sleeping for 1s")
             time.sleep(1)
 
