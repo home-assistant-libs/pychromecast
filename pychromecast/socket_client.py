@@ -489,7 +489,9 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = status.transport_id
         self.session_id = status.session_id
 
-        # App quirk: when a new cast status is received, give Audible time to load
+        # App quirk: If the Audible app is running, wait 1s after receiving cast status
+        # before connecting to the media player channel. This is a workaround for 
+        # https://github.com/home-assistant-libs/pychromecast/issues/738
         if (
             any(namespace in self._handlers for namespace in self.app_namespaces)
                 and self.destination_id not in self._open_channels
