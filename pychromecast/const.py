@@ -70,3 +70,5 @@ CAST_TYPES = {
 MESSAGE_TYPE = "type"
 REQUEST_ID = "requestId"
 SESSION_ID = "sessionId"
+
+PLATFORM_DESTINATION_ID = "receiver-0"

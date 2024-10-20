@@ -25,8 +25,9 @@ from struct import pack, unpack
 import zeroconf
 
 from .config import APP_AUDIBLE
-from .const import MESSAGE_TYPE, REQUEST_ID, SESSION_ID
+from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
 from .controllers import BaseController, CallbackType
+from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
 from .dial import get_host_from_service
@@ -43,12 +44,7 @@ from .generated.cast_channel_pb2 import CastMessage
 from .models import HostServiceInfo, MDNSServiceInfo
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
-NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat"
 
-PLATFORM_DESTINATION_ID = "receiver-0"
-
-TYPE_PING = "PING"
-TYPE_PONG = "PONG"
 TYPE_CONNECT = "CONNECT"
 TYPE_CLOSE = "CLOSE"
 TYPE_LOAD = "LOAD"
@@ -66,8 +62,7 @@ CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 
-HB_PING_TIME = 10
-HB_PONG_TIME = 10
+SELECT_TIMEOUT = 5.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -579,9 +574,13 @@ class SocketClient(threading.Thread, CastStatusListener):
         # A connection has been established at this point by self._check_connection
         assert self.socket is not None
 
-        # poll the socket, as well as the socketpair to allow us to be interrupted
+        # Poll the socket and the socketpair, with a timeout of SELECT_TIMEOUT
+        # The timeout ensures we call _check_connection often enough to avoid
+        # the HeartbeatController from detecting a timeout
+        # The socketpair allow us to be interrupted on shutdown without waiting
+        # for the SELECT_TIMEOUT timout to expire
         try:
-            ready = self.selector.select()
+            ready = self.selector.select(SELECT_TIMEOUT)
         except (ValueError, OSError) as exc:
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
@@ -700,7 +699,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         # route message to handlers
         if message.namespace in self._handlers:
             # debug messages
-            if message.namespace != NS_HEARTBEAT:
+            if (
+                message.namespace != NS_HEARTBEAT
+                or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
+            ):
                 self.logger.debug(
                     "[%s(%s):%s] Received: %s",
                     self.fn or "",
@@ -884,7 +886,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if msg.namespace != NS_HEARTBEAT:
+        if (
+            msg.namespace != NS_HEARTBEAT
+            or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
+        ):
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
@@ -1071,73 +1076,6 @@ class ConnectionController(BaseController):
             return True
 
         return False
-
-
-class HeartbeatController(BaseController):
-    """Controller to respond to heartbeat messages."""
-
-    def __init__(self) -> None:
-        super().__init__(NS_HEARTBEAT, target_platform=True)
-        self.last_ping = 0.0
-        self.last_pong = time.time()
-
-    def receive_message(self, _message: CastMessage, data: dict) -> bool:
-        """
-        Called when a heartbeat message is received.
-
-        data is message.payload_utf8 interpreted as a JSON dict.
-        """
-        if self._socket_client is None:
-            raise ControllerNotRegistered
-
-        if self._socket_client.is_stopped:
-            return True
-
-        if data[MESSAGE_TYPE] == TYPE_PING:
-            try:
-                self._socket_client.send_message(
-                    PLATFORM_DESTINATION_ID,
-                    self.namespace,
-                    {MESSAGE_TYPE: TYPE_PONG},
-                    no_add_request_id=True,
-                )
-            except PyChromecastStopped:
-                self._socket_client.logger.debug(
-                    "Heartbeat error when sending response, "
-                    "Chromecast connection has stopped"
-                )
-
-            return True
-
-        if data[MESSAGE_TYPE] == TYPE_PONG:
-            self.reset()
-            return True
-
-        return False
-
-    def ping(self) -> None:
-        """Send a ping message."""
-        if self._socket_client is None:
-            raise ControllerNotRegistered
-
-        self.last_ping = time.time()
-        try:
-            self.send_message({MESSAGE_TYPE: TYPE_PING})
-        except NotConnected:
-            self._socket_client.logger.error(
-                "Chromecast is disconnected. Cannot ping until reconnected."
-            )
-
-    def reset(self) -> None:
-        """Reset expired counter."""
-        self.last_pong = time.time()
-
-    def is_expired(self) -> bool:
-        """Indicates if connection has expired."""
-        if time.time() - self.last_ping > HB_PING_TIME:
-            self.ping()
-
-        return (time.time() - self.last_pong) > HB_PING_TIME + HB_PONG_TIME
 
 
 def new_socket() -> socket.socket:
