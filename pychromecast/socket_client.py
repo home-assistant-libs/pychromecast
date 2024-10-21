@@ -494,7 +494,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                 and self.destination_id not in self._open_channels
                 and status.app_id == APP_AUDIBLE
             ):
-
                 self.logger.debug("Detected Audible connection. Sleeping for 1s")
                 time.sleep(1)
 
