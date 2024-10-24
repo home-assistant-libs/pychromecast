@@ -22,6 +22,7 @@ APP_BBCIPLAYER = "5E81F6DB"
 APP_SHAKA = "07AEE832"
 APP_NRKTV = "3AEDF8D1"
 APP_NRKRADIO = "A49874B1"
+APP_AUDIBLE = "25456794"
 
 
 def get_possible_app_ids() -> list[str]:
