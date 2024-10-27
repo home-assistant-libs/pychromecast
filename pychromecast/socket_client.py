@@ -24,6 +24,7 @@ from struct import pack, unpack
 
 import zeroconf
 
+from .config import APP_AUDIBLE
 from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
 from .controllers import BaseController, CallbackType
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
@@ -485,6 +486,17 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.session_id = status.session_id
 
         if new_channel and self.destination_id is not None:
+            # App quirk: If the Audible app is running, wait 1s after receiving cast status
+            # before connecting to the media player channel. This is a workaround for
+            # https://github.com/home-assistant-libs/pychromecast/issues/738
+            if (
+                any(namespace in self._handlers for namespace in self.app_namespaces)
+                and self.destination_id not in self._open_channels
+                and status.app_id == APP_AUDIBLE
+            ):
+                self.logger.debug("Detected Audible connection. Sleeping for 1s")
+                time.sleep(1)
+
             # If any of the namespaces of the new app are supported
             # we will automatically connect to it to receive updates
             for namespace in self.app_namespaces:
