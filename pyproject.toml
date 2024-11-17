@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name         = "PyChromecast"
 version      = "14.0.5"
+license      = {text = "MIT"}
 description  = "Python module to talk to Google Chromecast."
 readme       = "README.rst"
 authors      = [
