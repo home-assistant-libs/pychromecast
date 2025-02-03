@@ -1,4 +1,4 @@
-""" Choose a controller and quick play """
+"""Choose a controller and quick play"""
 
 from typing import Any
 
