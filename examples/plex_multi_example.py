@@ -2,12 +2,12 @@
 Examples of the Plex controller playing on a Chromecast.
 
 DEMO TYPES:
-  * simple: Picks the first item it finds in your libray and plays it.
+  * single: Picks the first item it finds in your library and plays it.
   * list: Creates a list of items from your library and plays them.
   * playqueue: Creates a playqueue and plays it.
   * playlist: Creates a playlist, plays it, then deletes it.
 
-All demos with the exception of 'simple' can use startItem.
+All demos with the exception of 'single' can use startItem.
 startItem lets you start playback anywhere in the list of items.
 turning this option on will pick an item in the middle of the list to start from.
 
