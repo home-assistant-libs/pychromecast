@@ -287,7 +287,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 try:
                     if self.socket is not None:
                         # If we retry connecting, we need to clean up the socket again
-                        self.selector.unregister(self.socket)  # type: ignore[unreachable]
+                        self.selector.unregister(self.socket)
                         self.socket.close()
                         self.socket = None
                         self.remote_selector_key = None
