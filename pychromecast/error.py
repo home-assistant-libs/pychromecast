@@ -11,6 +11,10 @@ class ChromecastConnectionError(PyChromecastError):
     """When a connection error occurs within PyChromecast."""
 
 
+class ChromecastConnectionClosed(PyChromecastError):
+    """When a connection was closed by remote device."""
+
+
 class PyChromecastStopped(PyChromecastError):
     """Raised when a command is invoked while the Chromecast's socket_client
     is stopped.
