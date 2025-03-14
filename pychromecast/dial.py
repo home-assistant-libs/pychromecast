@@ -107,8 +107,9 @@ def _get_status(
     except urllib.error.HTTPError as err:
         if err.code != HTTPStatus.FORBIDDEN:
             raise
-        # We may be blocked because we're connecting to a hostname not matching the hostname
-        # published by the chromecast device via mDNS. Do another attempt with an empty
+        # We may be blocked because we're connecting to a hostname specified directly
+        # instead of to an IP address resolved by mDNS, cast devices will reject the 
+        # request when the address is set to the hostname. Do another attempt with an empty
         # host header.
         # Note: This is a simplified approach to not have to deal with name resolution
         # in pychromecast. If devices reject the empty host header we need to do name
