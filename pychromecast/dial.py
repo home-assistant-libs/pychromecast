@@ -327,6 +327,7 @@ def get_multizone_status(
         _LOGGER.debug(
             "Failed to get multizone status for %s: %s (%s)", host, err, type(err)
         )
+        return None
 
 
 @dataclass(frozen=True)
