@@ -263,7 +263,7 @@ def get_device_info(  # pylint: disable=too-many-locals
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
         _LOGGER.debug(
-            "Failed to get device info for %s: %s (%s),
+            "Failed to get device info for %s: %s (%s)",
             host,
             err,
             type(err)
@@ -328,7 +328,7 @@ def get_multizone_status(
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         _LOGGER.debug(
-            "Failed to get multizone status for %s: %s (%s),
+            "Failed to get multizone status for %s: %s (%s)",
             host,
             err,
             type(err)
