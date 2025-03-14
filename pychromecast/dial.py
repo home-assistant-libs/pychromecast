@@ -91,6 +91,8 @@ def _get_status(
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
 
+    headers = {"content-type": "application/json"}
+
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
     else:
@@ -321,7 +323,7 @@ def get_multizone_status(
 
         return MultizoneStatus(dynamic_groups, groups)
 
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
         _LOGGER.debug(
             "Failed to get multizone status for %s: %s (%s)", host, err, type(err)
         )
