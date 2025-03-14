@@ -5,6 +5,7 @@ Implements the DIAL-protocol to communicate with the Chromecast
 from __future__ import annotations
 
 from dataclasses import dataclass
+from http import HTTPStatus
 import json
 import logging
 import socket
@@ -90,9 +91,6 @@ def _get_status(
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
 
-    # unsetting the host header, as requests with a domain would be blocked otherwise
-    headers = {"host": "", "content-type": "application/json"}
-
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
     else:
@@ -102,9 +100,24 @@ def _get_status(
     if secure and not has_context:
         context = get_ssl_context()
 
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
-        data = response.read()
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
+            data = response.read()
+    except urllib.error.HTTPError as err:
+        if err.code != HTTPStatus.FORBIDDEN:
+            raise
+        # We may be blocked because we're connecting to a hostname not matching the hostname
+        # published by the chromecast device via mDNS. Do another attempt with an empty
+        # host header.
+        # Note: This is a simplified approach to not have to deal with name resolution
+        # in pychromecast. If devices reject the empty host header we need to do name
+        # resolution and instead set the host header to the string version of the IP.
+        _LOGGER.debug("Failed to fetch %s, retrying with empty host header, url)
+        headers["host"] = ""
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
+            data = response.read()
     return (host, json.loads(data.decode("utf-8")))
 
 
@@ -247,7 +260,13 @@ def get_device_info(  # pylint: disable=too-many-locals
             multizone_supported,
         )
 
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
+        _LOGGER.debug(
+            "Failed to get device info for %s: %s (%s),
+            host,
+            err,
+            type(err)
+        )
         return None
 
 
@@ -307,7 +326,12 @@ def get_multizone_status(
         return MultizoneStatus(dynamic_groups, groups)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        return None
+        _LOGGER.debug(
+            "Failed to get multizone status for %s: %s (%s),
+            host,
+            err,
+            type(err)
+        )
 
 
 @dataclass(frozen=True)
