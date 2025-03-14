@@ -108,9 +108,9 @@ def _get_status(
         if err.code != HTTPStatus.FORBIDDEN:
             raise
         # We may be blocked because we're connecting to a hostname specified directly
-        # instead of to an IP address resolved by mDNS, cast devices will reject the 
-        # request when the address is set to the hostname. Do another attempt with an empty
-        # host header.
+        # instead of to an IP address resolved by mDNS, cast devices will reject the
+        # request when the address is set to the hostname. Do another attempt with an
+        # empty host header.
         # Note: This is a simplified approach to not have to deal with name resolution
         # in pychromecast. If devices reject the empty host header we need to do name
         # resolution and instead set the host header to the string version of the IP.
@@ -262,12 +262,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         )
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
-        _LOGGER.debug(
-            "Failed to get device info for %s: %s (%s)",
-            host,
-            err,
-            type(err)
-        )
+        _LOGGER.debug("Failed to get device info for %s: %s (%s)", host, err, type(err))
         return None
 
 
@@ -327,12 +322,7 @@ def get_multizone_status(
         return MultizoneStatus(dynamic_groups, groups)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        _LOGGER.debug(
-            "Failed to get multizone status for %s: %s (%s)",
-            host,
-            err,
-            type(err)
-        )
+        _LOGGER.debug("Failed to get multizone status for %s: %s (%s)", host, err, type(err))
 
 
 @dataclass(frozen=True)
