@@ -4,6 +4,8 @@ Implements the DIAL-protocol to communicate with the Chromecast
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http import HTTPStatus
 import json
@@ -75,6 +77,31 @@ def _get_host_from_zc_service_info(
     return (host, port)
 
 
+@contextmanager
+def _urlopen(
+    url: str, timeout: float, context: ssl.SSLContext | None
+) -> Generator[Any, None, None]:
+    """Help open an URL."""
+    headers = {"content-type": "application/json"}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        yield urllib.request.urlopen(req, timeout=timeout, context=context)
+    except urllib.error.HTTPError as err:
+        if err.code != HTTPStatus.FORBIDDEN:
+            raise
+        # We may be blocked because we're connecting to a hostname specified directly
+        # instead of to an IP address resolved by mDNS, cast devices will reject the
+        # request when the address is set to the hostname. Do another attempt with an
+        # empty host header.
+        # Note: This is a simplified approach to not have to deal with name resolution
+        # in pychromecast. If devices reject the empty host header we need to do name
+        # resolution and instead set the host header to the string version of the IP.
+        _LOGGER.debug("Failed to fetch %s, retrying with empty host header", url)
+        headers["host"] = ""
+        req = urllib.request.Request(url, headers=headers)
+        yield urllib.request.urlopen(req, timeout=timeout, context=context)
+
+
 def _get_status(
     services: set[HostServiceInfo | MDNSServiceInfo],
     zconf: zeroconf.Zeroconf | None,
@@ -102,25 +129,8 @@ def _get_status(
     if secure and not has_context:
         context = get_ssl_context()
 
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
-            data = response.read()
-    except urllib.error.HTTPError as err:
-        if err.code != HTTPStatus.FORBIDDEN:
-            raise
-        # We may be blocked because we're connecting to a hostname specified directly
-        # instead of to an IP address resolved by mDNS, cast devices will reject the
-        # request when the address is set to the hostname. Do another attempt with an
-        # empty host header.
-        # Note: This is a simplified approach to not have to deal with name resolution
-        # in pychromecast. If devices reject the empty host header we need to do name
-        # resolution and instead set the host header to the string version of the IP.
-        _LOGGER.debug("Failed to fetch %s, retrying with empty host header", url)
-        headers["host"] = ""
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
-            data = response.read()
+    with _urlopen(url, timeout, context) as response:
+        data = response.read()
     return (host, json.loads(data.decode("utf-8")))
 
 
