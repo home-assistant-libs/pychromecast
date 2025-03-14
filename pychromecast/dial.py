@@ -114,7 +114,7 @@ def _get_status(
         # Note: This is a simplified approach to not have to deal with name resolution
         # in pychromecast. If devices reject the empty host header we need to do name
         # resolution and instead set the host header to the string version of the IP.
-        _LOGGER.debug("Failed to fetch %s, retrying with empty host header, url)
+        _LOGGER.debug("Failed to fetch %s, retrying with empty host header", url)
         headers["host"] = ""
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
