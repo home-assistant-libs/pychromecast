@@ -322,7 +322,9 @@ def get_multizone_status(
         return MultizoneStatus(dynamic_groups, groups)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        _LOGGER.debug("Failed to get multizone status for %s: %s (%s)", host, err, type(err))
+        _LOGGER.debug(
+            "Failed to get multizone status for %s: %s (%s)", host, err, type(err)
+        )
 
 
 @dataclass(frozen=True)
