@@ -4,8 +4,6 @@ Implements the DIAL-protocol to communicate with the Chromecast
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from http import HTTPStatus
 import json
@@ -77,7 +75,6 @@ def _get_host_from_zc_service_info(
     return (host, port)
 
 
-@contextmanager
 def _urlopen(url: str, timeout: float, context: ssl.SSLContext | None) -> Any:
     """Help open an URL."""
     headers = {"content-type": "application/json"}
@@ -115,8 +112,6 @@ def _get_status(
         if host:
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
-
-    headers = {"content-type": "application/json"}
 
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
