@@ -78,14 +78,12 @@ def _get_host_from_zc_service_info(
 
 
 @contextmanager
-def _urlopen(
-    url: str, timeout: float, context: ssl.SSLContext | None
-) -> Generator[Any, None, None]:
+def _urlopen(url: str, timeout: float, context: ssl.SSLContext | None) -> Any:
     """Help open an URL."""
     headers = {"content-type": "application/json"}
     try:
         req = urllib.request.Request(url, headers=headers)
-        yield urllib.request.urlopen(req, timeout=timeout, context=context)
+        return urllib.request.urlopen(req, timeout=timeout, context=context)
     except urllib.error.HTTPError as err:
         if err.code != HTTPStatus.FORBIDDEN:
             raise
@@ -99,7 +97,7 @@ def _urlopen(
         _LOGGER.debug("Failed to fetch %s, retrying with empty host header", url)
         headers["host"] = ""
         req = urllib.request.Request(url, headers=headers)
-        yield urllib.request.urlopen(req, timeout=timeout, context=context)
+        return urllib.request.urlopen(req, timeout=timeout, context=context)
 
 
 def _get_status(
