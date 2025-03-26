@@ -12,6 +12,7 @@ CAST_TYPE_GROUP = "group"
 # Default command timeout
 REQUEST_TIMEOUT = 10.0
 
+MF_BOSE = "Bose"
 MF_CANTON = "Canton Elektronik GmbH + Co. KG"
 MF_GOOGLE = "Google Inc."
 MF_HARMAN = "HARMAN International Industries"
@@ -44,6 +45,7 @@ CAST_TYPES = {
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "bravia 4k vh2": (CAST_TYPE_CHROMECAST, MF_SONY),
     "bravia 4k vh21": (CAST_TYPE_CHROMECAST, MF_SONY),
+    "Bose Smart Ultra Soundbar": (CAST_TYPE_AUDIO, MF_BOSE),
     "C4A": (CAST_TYPE_AUDIO, MF_SONY),
     "JBL Link 10": (CAST_TYPE_AUDIO, MF_JBL),
     "JBL Link 20": (CAST_TYPE_AUDIO, MF_JBL),
