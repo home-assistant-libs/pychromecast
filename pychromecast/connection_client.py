@@ -253,7 +253,16 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         asyncio.create_task(self._handle_response(message, data))
 
     async def _handle_response(self, message: CastMessage, data: dict):
-        self._route_message(message, data)
+        try:
+            self._route_message(message, data)
+        except Exception as ex:
+            self.logger.error(
+                "[%s(%s):%s] Error handling response message :%s",
+                self.fn or "",
+                self.host,
+                self.port,
+                ex
+            )
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
             self._request_callbacks.pop(data[REQUEST_ID])(True, data)
 
