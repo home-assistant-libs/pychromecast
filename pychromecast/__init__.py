@@ -9,14 +9,14 @@ import logging
 import fnmatch
 from threading import Event
 import threading
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, overload
 from uuid import UUID
 
 import zeroconf
 
 from .config import *  # noqa: F403
 from .error import *  # noqa: F403
-from . import socket_client
+from . import connection_client
 from .discovery import (  # noqa: F401
     DISCOVER_TIMEOUT,
     CastBrowser,
@@ -30,7 +30,7 @@ from .dial import get_cast_type
 from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED, MediaController  # noqa: F401
 from .controllers.receiver import CastStatus, CastStatusListener
-from .error import NotConnected, RequestTimeout
+from .error import NotConnected
 from .models import CastInfo, HostServiceInfo, MDNSServiceInfo
 from .response_handler import WaitResponse
 
@@ -329,7 +329,7 @@ class Chromecast(CastStatusListener):
         self.status: CastStatus | None = None
         self.status_event = threading.Event()
 
-        self.socket_client = socket_client.SocketClient(
+        self.connection_client = connection_client.ConnectionClient(
             cast_type=cast_info.cast_type,
             tries=tries,
             timeout=timeout,
@@ -338,21 +338,21 @@ class Chromecast(CastStatusListener):
             zconf=zconf,
         )
 
-        receiver_controller = self.socket_client.receiver_controller
+        receiver_controller = self.connection_client.receiver_controller
         receiver_controller.register_status_listener(self)
 
         # Forward these methods
         self.set_volume = receiver_controller.set_volume
         self.set_volume_muted = receiver_controller.set_volume_muted
-        self.play_media = self.socket_client.media_controller.play_media
-        self.register_handler = self.socket_client.register_handler
-        self.unregister_handler = self.socket_client.unregister_handler
+        self.play_media = self.connection_client.media_controller.play_media
+        self.register_handler = self.connection_client.register_handler
+        self.unregister_handler = self.connection_client.unregister_handler
         self.register_status_listener = receiver_controller.register_status_listener
         self.register_launch_error_listener = (
             receiver_controller.register_launch_error_listener
         )
         self.register_connection_listener = (
-            self.socket_client.register_connection_listener
+            self.connection_client.register_connection_listener
         )
 
     @property
@@ -392,7 +392,7 @@ class Chromecast(CastStatusListener):
     @property
     def uri(self) -> str:
         """Returns the device URI (ip:port)"""
-        return f"{self.socket_client.host}:{self.socket_client.port}"
+        return f"{self.connection_client.host}:{self.connection_client.port}"
 
     @property
     def model_name(self) -> str:
@@ -431,7 +431,7 @@ class Chromecast(CastStatusListener):
     @property
     def media_controller(self) -> MediaController:
         """Returns the media controller."""
-        return self.socket_client.media_controller
+        return self.connection_client.media_controller
 
     def new_cast_status(self, status: CastStatus) -> None:
         """Called when a new status received from the Chromecast."""
@@ -445,7 +445,7 @@ class Chromecast(CastStatusListener):
         """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
         response_handler = WaitResponse(timeout, f"start app {app_id}")
-        self.socket_client.receiver_controller.launch_app(
+        self.connection_client.receiver_controller.launch_app(
             app_id,
             force_launch=force_launch,
             callback_function=response_handler.callback,
@@ -457,7 +457,7 @@ class Chromecast(CastStatusListener):
         self.logger.info("Quitting current app")
 
         response_handler = WaitResponse(timeout, "quit app")
-        self.socket_client.receiver_controller.stop_app(
+        self.connection_client.receiver_controller.stop_app(
             callback_function=response_handler.callback
         )
         response_handler.wait_response()
@@ -484,7 +484,7 @@ class Chromecast(CastStatusListener):
             raise NotConnected
         return self.set_volume(self.status.volume_level - delta, timeout=timeout)
 
-    def wait(self, timeout: float | None = None) -> None:
+    async def connect(self, timeout: float | None = None) -> None:
         """
         Waits until the cast device is ready for communication. The device
         is ready as soon a status message has been received.
@@ -498,57 +498,30 @@ class Chromecast(CastStatusListener):
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        if not self.socket_client.is_alive():
-            self.socket_client.start()
-        ready = self.status_event.wait(timeout=timeout)
-        if not ready:
-            raise RequestTimeout("wait", cast(float, timeout))
+        if timeout:
+            self.connection_client.timeout = timeout
 
-    def disconnect(self, timeout: float | None = None) -> None:
-        """
-        Disconnects the chromecast and waits for it to terminate.
+        if not self.connection_client.connected:
+            await self.connection_client.connect()
 
-        :param timeout: A floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever. Set to 0 to not block.
+    def disconnect(self) -> None:
         """
-        self.socket_client.disconnect()
-        self.join(timeout=timeout)
-
-    def join(self, timeout: float | None = None) -> None:
+        Disconnects the chromecast.
         """
-        Blocks the thread of the caller until the chromecast connection is
-        stopped.
-
-        :param timeout: a floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        """
-        self.socket_client.join(timeout=timeout)
-        if self.socket_client.is_alive():
-            raise TimeoutError("join", timeout)
-
-    def start(self) -> None:
-        """
-        Start the chromecast connection's worker thread.
-        """
-        self.socket_client.start()
+        self.connection_client.disconnect()
 
     def __del__(self) -> None:
-        try:
-            self.socket_client.stop.set()
-        except AttributeError:
-            pass
+        self.disconnect()
 
     def __repr__(self) -> str:
         return (
-            f"Chromecast({self.socket_client.host!r}, port={self.socket_client.port!r}, "
+            f"Chromecast({self.connection_client.host!r}, port={self.connection_client.port!r}, "
             f"cast_info={self.cast_info!r})"
         )
 
     def __unicode__(self) -> str:
         return (
-            f"Chromecast({self.socket_client.host}, {self.socket_client.port}, "
+            f"Chromecast({self.connection_client.host}, {self.connection_client.port}, "
             f"{self.cast_info.friendly_name}, {self.cast_info.model_name}, "
             f"{self.cast_info.manufacturer})"
         )
