@@ -225,6 +225,8 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         # print('Connection from {}'.format(peername))
         self._transport = transport
         self._connected = True
+        self.logger.debug("[%s(%s):%s] Connection made",self.fn or "", self.host, self.port)
+        self.heartbeat_controller.ping()
 
     def data_received(self, data: bytes):
         if len(data) == 0:
@@ -248,10 +250,13 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         if not message:
             return
         data = _dict_from_message_payload(message)
-        self._route_message(message, data)
+        asyncio.create_task(self._handle_response(message, data))
 
+    async def _handle_response(self, message: CastMessage, data: dict):
+        self._route_message(message, data)
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
             self._request_callbacks.pop(data[REQUEST_ID])(True, data)
+
 
     async def _connection_task(self):
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -600,9 +605,9 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         )
 
     async def _connection_deamon(self):
-        """Checks connection every 30 seconds and reconnects if lost."""
+        """Checks connection every 10 seconds and reconnects if lost."""
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(10)
             await self._check_connection()
 
     async def _check_connection(self) -> bool:
