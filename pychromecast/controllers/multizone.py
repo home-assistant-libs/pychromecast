@@ -9,13 +9,6 @@ import logging
 from typing import TYPE_CHECKING, TypedDict
 from uuid import UUID
 
-from . import BaseController
-from .media import MediaController, MediaStatusListener, MediaStatus
-from .receiver import CastStatus, CastStatusListener
-from ..const import MESSAGE_TYPE
-
-# pylint: disable-next=no-name-in-module
-from ..generated.cast_channel_pb2 import CastMessage
 from ..connection_client import (
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_DISCONNECTED,
@@ -23,6 +16,13 @@ from ..connection_client import (
     ConnectionStatus,
     ConnectionStatusListener,
 )
+from ..const import MESSAGE_TYPE
+
+# pylint: disable-next=no-name-in-module
+from ..generated.cast_channel_pb2 import CastMessage
+from . import BaseController
+from .media import MediaController, MediaStatus, MediaStatusListener
+from .receiver import CastStatus, CastStatusListener
 
 if TYPE_CHECKING:
     from .. import Chromecast
@@ -82,15 +82,11 @@ class MultiZoneManagerListener(abc.ABC):
         """The cast has been removed from group identified by group_uuid."""
 
     @abc.abstractmethod
-    def multizone_new_media_status(
-        self, group_uuid: str, media_status: MediaStatus
-    ) -> None:
+    def multizone_new_media_status(self, group_uuid: str, media_status: MediaStatus) -> None:
         """The group identified by group_uuid, of which the cast is a member, has new media status."""
 
     @abc.abstractmethod
-    def multizone_new_cast_status(
-        self, group_uuid: str, cast_status: CastStatus
-    ) -> None:
+    def multizone_new_cast_status(self, group_uuid: str, cast_status: CastStatus) -> None:
         """The group identified by group_uuid, of which the cast is a member, has new status."""
 
 
@@ -102,9 +98,7 @@ class Listener(
 ):
     """Callback handler."""
 
-    def __init__(
-        self, group_cast: Chromecast, casts: dict[str, GroupMemberInfo]
-    ) -> None:
+    def __init__(self, group_cast: Chromecast, casts: dict[str, GroupMemberInfo]) -> None:
         """Initialize the listener."""
         self._casts = casts
         group_cast.register_status_listener(self)
@@ -196,9 +190,7 @@ class MultizoneManager:
         for member in self._casts.values():
             member["group_memberships"].discard(group_uuid_str)
 
-    def register_listener(
-        self, member_uuid: UUID, listener: MultiZoneManagerListener
-    ) -> None:
+    def register_listener(self, member_uuid: UUID, listener: MultiZoneManagerListener) -> None:
         """Register a listener for audio group changes of cast uuid.
         On update will call:
         listener.added_to_multizone(group_uuid)
@@ -215,9 +207,7 @@ class MultizoneManager:
             self._casts[member_uuid_str] = {"listeners": [], "group_memberships": set()}
         self._casts[member_uuid_str]["listeners"].append(listener)
 
-    def deregister_listener(
-        self, member_uuid: UUID, listener: MultiZoneManagerListener
-    ) -> None:
+    def deregister_listener(self, member_uuid: UUID, listener: MultiZoneManagerListener) -> None:
         """Deregister listener for audio group changes of cast uuid."""
         self._casts[str(member_uuid)]["listeners"].remove(listener)
 
@@ -290,9 +280,7 @@ class MultizoneController(BaseController):
         """Send GET_CASTING_GROUPS message."""
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
 
-    def receive_message(  # pylint: disable=too-many-return-statements
-        self, _message: CastMessage, data: dict
-    ) -> bool:
+    def receive_message(self, _message: CastMessage, data: dict) -> bool:  # pylint: disable=too-many-return-statements
         """Called when a multizone message is received."""
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
             uuid = data["device"]["deviceId"]

@@ -9,12 +9,12 @@ from .controllers.bbcsounds import BbcSoundsController
 from .controllers.bubbleupnp import BubbleUPNPController
 from .controllers.homeassistant_media import HomeAssistantMediaController
 from .controllers.media import DefaultMediaReceiverController
+from .controllers.nrkradio import NrkRadioController
+from .controllers.nrktv import NrkTvController
+from .controllers.shaka import ShakaController
 from .controllers.supla import SuplaController
 from .controllers.yleareena import YleAreenaController
 from .controllers.youtube import YouTubeController
-from .controllers.shaka import ShakaController
-from .controllers.nrktv import NrkTvController
-from .controllers.nrkradio import NrkRadioController
 
 
 def quick_play(  # pylint:disable=too-many-branches

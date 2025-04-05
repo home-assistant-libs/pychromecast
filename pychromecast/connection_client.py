@@ -14,9 +14,9 @@ import asyncio
 import json
 import logging
 import ssl
-import time
 import struct
-from asyncio import Transport, BaseTransport, Task, CancelledError
+import time
+from asyncio import BaseTransport, CancelledError, Task, Transport
 from collections import defaultdict
 from dataclasses import dataclass
 from struct import pack
@@ -225,7 +225,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         # print('Connection from {}'.format(peername))
         self._transport = transport
         self._connected = True
-        self.logger.debug("[%s(%s):%s] Connection made",self.fn or "", self.host, self.port)
+        self.logger.debug("[%s(%s):%s] Connection made", self.fn or "", self.host, self.port)
         self.heartbeat_controller.ping()
 
     def data_received(self, data: bytes):
@@ -257,15 +257,10 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             self._route_message(message, data)
         except Exception as ex:
             self.logger.error(
-                "[%s(%s):%s] Error handling response message :%s",
-                self.fn or "",
-                self.host,
-                self.port,
-                ex
+                "[%s(%s):%s] Error handling response message :%s", self.fn or "", self.host, self.port, ex
             )
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
             self._request_callbacks.pop(data[REQUEST_ID])(True, data)
-
 
     async def _connection_task(self):
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -325,16 +320,10 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
 
         while tries is None or tries > 0:  # pylint:disable=too-many-nested-blocks
             # Prune retries dict
-            retries = {
-                key: retries[key]
-                for key in self.services.copy()
-                if (key is not None and key in retries)
-            }
+            retries = {key: retries[key] for key in self.services.copy() if (key is not None and key in retries)}
             for service in self.services.copy():
                 now = time.time()
-                retry = retries.get(
-                    service, {"delay": self.retry_wait, "next_retry": now}
-                )
+                retry = retries.get(service, {"delay": self.retry_wait, "next_retry": now})
                 self.logger.debug(
                     "[%s(%s):%s] Connection try %s",
                     self.host,
@@ -356,9 +345,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                     # Resolve the service name.
                     host = None
                     port = None
-                    host, port, service_info = get_host_from_service(
-                        service, self.zconf
-                    )
+                    host, port, service_info = get_host_from_service(service, self.zconf)
                     if host and port:
                         if service_info:
                             try:
@@ -406,9 +393,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                         self.port,
                     )
 
-                    await asyncio.wait_for(
-                        self._connection_task(), timeout=self.timeout
-                    )
+                    await asyncio.wait_for(self._connection_task(), timeout=self.timeout)
                     self.logger.debug(
                         "[%s(%s):%s] Resolved service %s to %s:%s",
                         self.fn or "",
@@ -420,9 +405,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                     )
                     self.heartbeat_controller.reset()
                     if self._connection_daemon_task is None:
-                        self._connection_daemon_task = asyncio.create_task(
-                            self._connection_deamon()
-                        )
+                        self._connection_daemon_task = asyncio.create_task(self._connection_deamon())
 
                     self.connecting = False
                     self._force_recon = False
@@ -534,10 +517,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
 
     def unregister_handler(self, handler: BaseController) -> None:
         """Register a new namespace handler."""
-        if (
-            handler.namespace in self._handlers
-            and handler in self._handlers[handler.namespace]
-        ):
+        if handler.namespace in self._handlers and handler in self._handlers[handler.namespace]:
             self._handlers[handler.namespace].remove(handler)
 
         handler.unregistered()
@@ -606,9 +586,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             )
             return
 
-        self.logger.debug(
-            "[%s(%s):%s] Connection established", self.fn or "", self.host, self.port
-        )
+        self.logger.debug("[%s(%s):%s] Connection established", self.fn or "", self.host, self.port)
 
     async def _connection_deamon(self):
         """Checks connection every 10 seconds and reconnects if lost."""
@@ -648,9 +626,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             for channel in self._open_channels:
                 self.disconnect_channel(channel)
             self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
-                )
+                ConnectionStatus(CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None)
             )
             try:
                 await self.initialize_connection()
@@ -669,10 +645,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         # route message to handlers
         if message.namespace in self._handlers:
             # debug messages
-            if (
-                message.namespace != NS_HEARTBEAT
-                or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
-            ):
+            if message.namespace != NS_HEARTBEAT or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug(
                     "[%s(%s):%s] Received: %s",
                     self.fn or "",
@@ -697,10 +670,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                             )
                 except Exception:  # pylint: disable=broad-except
                     self.logger.exception(
-                        (
-                            "[%s(%s):%s] Exception caught while sending message to "
-                            "controller %s: %s"
-                        ),
+                        ("[%s(%s):%s] Exception caught while sending message to " "controller %s: %s"),
                         self.fn or "",
                         self.host,
                         self.port,
@@ -805,10 +775,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if (
-            msg.namespace != NS_HEARTBEAT
-            or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
-        ):
+        if msg.namespace != NS_HEARTBEAT or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
@@ -889,9 +856,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         if self.destination_id is None:
             if callback_function:
                 callback_function(False, None)
-            raise NotConnected(
-                "Attempting send a message when destination_id is not set"
-            )
+            raise NotConnected("Attempting send a message when destination_id is not set")
 
         return self.send_message(
             self.destination_id,
@@ -946,9 +911,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             except NotConnected:
                 pass
             except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    "[%s(%s):%s] Exception", self.fn or "", self.host, self.port
-                )
+                self.logger.exception("[%s(%s):%s] Exception", self.fn or "", self.host, self.port)
 
             self._open_channels.remove(destination_id)
 

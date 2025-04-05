@@ -4,10 +4,10 @@ Controller to interface with the Yle Areena app namespace.
 
 from typing import Any
 
-from . import CallbackType
-from .media import BaseMediaPlayer, STREAM_TYPE_BUFFERED, TYPE_LOAD, MESSAGE_TYPE
 from ..config import APP_YLEAREENA
 from ..response_handler import WaitResponse
+from . import CallbackType
+from .media import MESSAGE_TYPE, STREAM_TYPE_BUFFERED, TYPE_LOAD, BaseMediaPlayer
 
 
 class YleAreenaController(BaseMediaPlayer):
@@ -56,7 +56,7 @@ class YleAreenaController(BaseMediaPlayer):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(
+    async def quick_play(
         self,
         *,
         media_id: str,
@@ -74,4 +74,4 @@ class YleAreenaController(BaseMediaPlayer):
             **kwargs,
             callback_function=response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()

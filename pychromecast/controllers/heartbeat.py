@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 import time
 
-from . import BaseController
-
 from ..const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID
 from ..error import ControllerNotRegistered, NotConnected, PyChromecastStopped
 
 # pylint: disable-next=no-name-in-module
 from ..generated.cast_channel_pb2 import CastMessage
+from . import BaseController
 
 NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat"
 
@@ -53,8 +52,7 @@ class HeartbeatController(BaseController):
                 )
             except PyChromecastStopped:
                 self._socket_client.logger.debug(
-                    "Heartbeat error when sending response, "
-                    "Chromecast connection has stopped"
+                    "Heartbeat error when sending response, " "Chromecast connection has stopped"
                 )
 
             return True
@@ -74,9 +72,7 @@ class HeartbeatController(BaseController):
         try:
             self.send_message({MESSAGE_TYPE: TYPE_PING})
         except NotConnected:
-            self._socket_client.logger.error(
-                "Chromecast is disconnected. Cannot ping until reconnected."
-            )
+            self._socket_client.logger.error("Chromecast is disconnected. Cannot ping until reconnected.")
 
     def reset(self) -> None:
         """Reset expired counter."""

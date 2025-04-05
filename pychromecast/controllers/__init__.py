@@ -5,11 +5,11 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 from __future__ import annotations
 
 import abc
-from functools import partial
 import logging
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
-from ..error import UnsupportedNamespace, ControllerNotRegistered
+from ..error import ControllerNotRegistered, UnsupportedNamespace
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
@@ -68,10 +68,7 @@ class BaseController(abc.ABC):
     def is_active(self) -> bool:
         """True if the controller is connected to a socket client and the
         Chromecast is running an app that supports this controller."""
-        return (
-            self._socket_client is not None
-            and self.namespace in self._socket_client.app_namespaces
-        )
+        return self._socket_client is not None and self.namespace in self._socket_client.app_namespaces
 
     def launch(
         self,
@@ -160,9 +157,7 @@ class BaseController(abc.ABC):
 
             if callback_function:
                 callback_function(False, None)
-            raise UnsupportedNamespace(
-                f"Namespace {self.namespace} is not supported by running application."
-            )
+            raise UnsupportedNamespace(f"Namespace {self.namespace} is not supported by running application.")
 
         self.send_message_nocheck(
             data,

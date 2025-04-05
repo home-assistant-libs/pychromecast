@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Callable
 import functools
 import itertools
 import logging
 import ssl
 import threading
 import time
+from collections.abc import Callable
 from uuid import UUID
 
 import zeroconf
@@ -59,9 +59,7 @@ class AbstractCastListener(abc.ABC):
         """
 
 
-def _is_blocked_from_host_browser(
-    item: str, block_list: list[str], item_type: str
-) -> bool:
+def _is_blocked_from_host_browser(item: str, block_list: list[str], item_type: str) -> bool:
     for blocked_prefix in block_list:
         if item.startswith(blocked_prefix):
             _LOGGER.debug("%s %s is blocked from host based polling", item_type, item)
@@ -70,9 +68,7 @@ def _is_blocked_from_host_browser(
 
 
 def _is_model_blocked_from_host_browser(model: str) -> bool:
-    return _is_blocked_from_host_browser(
-        model, HOST_BROWSER_BLOCKED_MODEL_PREFIXES, "Model"
-    )
+    return _is_blocked_from_host_browser(model, HOST_BROWSER_BLOCKED_MODEL_PREFIXES, "Model")
 
 
 class SimpleCastListener(AbstractCastListener):
@@ -204,9 +200,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
         host = addresses[0] if addresses else service.server
 
         if host is None:
-            _LOGGER.debug(
-                "_add_update_service failed to get host for %s, %s", typ, name
-            )
+            _LOGGER.debug("_add_update_service failed to get host for %s, %s", typ, name)
             return
 
         # Store the host, in case mDNS stops working
@@ -217,9 +211,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
         uuid_str = get_value("id")
 
         if not uuid_str:
-            _LOGGER.debug(
-                "_add_update_service failed to get uuid for %s, %s", typ, name
-            )
+            _LOGGER.debug("_add_update_service failed to get uuid for %s, %s", typ, name)
             return
 
         # Ignore incorrect UUIDs from third-party Chromecast emulators
@@ -244,9 +236,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                 cast_type = CAST_TYPE_GROUP
                 manufacturer = MF_GOOGLE
             else:
-                cast_type, manufacturer = CAST_TYPES.get(
-                    model_name.lower(), (None, None)
-                )
+                cast_type, manufacturer = CAST_TYPES.get(model_name.lower(), (None, None))
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
                     {service_info},
@@ -369,18 +359,15 @@ class HostBrowser(threading.Thread):
                 if hoststatus.failcount == HOSTLISTENER_MAX_FAIL:
                     # We can't contact the host, drop all its devices and UUIDs
                     self._update_devices(host, devices, uuids)
-                hoststatus.failcount = min(
-                    hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1
-                )
+                hoststatus.failcount = min(hoststatus.failcount, HOSTLISTENER_MAX_FAIL + 1)
                 continue
 
             if not device_status.uuid:
                 _LOGGER.debug("host %s does not report UUID", host)
                 continue
 
-            if (
-                device_status.cast_type != CAST_TYPE_AUDIO
-                or _is_model_blocked_from_host_browser(device_status.model_name)
+            if device_status.cast_type != CAST_TYPE_AUDIO or _is_model_blocked_from_host_browser(
+                device_status.model_name
             ):
                 # Polling causes frame drops on some Android TVs,
                 # https://github.com/home-assistant/core/issues/55435
@@ -405,15 +392,11 @@ class HostBrowser(threading.Thread):
             uuids.append(device_status.uuid)
 
             multizone_status = (
-                get_multizone_status(host, context=self._context)
-                if device_status.multizone_supported
-                else None
+                get_multizone_status(host, context=self._context) if device_status.multizone_supported else None
             )
 
             if multizone_status:
-                for group in itertools.chain(
-                    multizone_status.dynamic_groups, multizone_status.groups
-                ):
+                for group in itertools.chain(multizone_status.dynamic_groups, multizone_status.groups):
                     # Note: This is currently (2021-02) not working for dynamic_groups, the
                     # ports of dynamic groups are not present in the eureka_info reply.
                     if group.host and group.host not in self._known_hosts:
@@ -465,11 +448,7 @@ class HostBrowser(threading.Thread):
 
             for uuid in self._devices:
                 for service in self._devices[uuid].services.copy():
-                    if (
-                        isinstance(service, HostServiceInfo)
-                        and service.host == host
-                        and uuid not in host_uuids
-                    ):
+                    if isinstance(service, HostServiceInfo) and service.host == host and uuid not in host_uuids:
                         self._remove_host_service(host, uuid, callbacks)
 
         # Handle callbacks after releasing the lock
@@ -528,9 +507,7 @@ class HostBrowser(threading.Thread):
             )
 
         name = f"{host}:{port}"
-        _LOGGER.debug(
-            "Host %s (%s) up, adding or updating host based service", name, uuid
-        )
+        _LOGGER.debug("Host %s (%s) up, adding or updating host based service", name, uuid)
         callbacks.append(functools.partial(callback, uuid, name))
 
     def _remove_host_service(
@@ -554,15 +531,9 @@ class HostBrowser(threading.Thread):
                     uuid,
                 )
                 if len(info_for_uuid.services) == 0:
-                    callbacks.append(
-                        functools.partial(
-                            self._cast_listener.remove_cast, uuid, name, info_for_uuid
-                        )
-                    )
+                    callbacks.append(functools.partial(self._cast_listener.remove_cast, uuid, name, info_for_uuid))
                 else:
-                    callbacks.append(
-                        functools.partial(self._cast_listener.update_cast, uuid, name)
-                    )
+                    callbacks.append(functools.partial(self._cast_listener.update_cast, uuid, name))
                 break
 
 
@@ -589,9 +560,7 @@ class CastBrowser:
         self.devices: dict[UUID, CastInfo] = {}
         self.services = self.devices  # For backwards compatibility
         self._services_lock = threading.Lock()
-        self.host_browser = HostBrowser(
-            self._cast_listener, self.devices, self._services_lock
-        )
+        self.host_browser = HostBrowser(self._cast_listener, self.devices, self._services_lock)
         self.zeroconf_listener = ZeroConfListener(
             self._cast_listener, self.devices, self.host_browser, self._services_lock
         )
@@ -653,16 +622,12 @@ class CastListener(CastBrowser):
         remove_callback: Callable[[UUID, str, CastInfo], None] | None = None,
         update_callback: Callable[[UUID, str], None] | None = None,
     ):
-        _LOGGER.info(
-            "CastListener is deprecated and will be removed in June 2024, update to use CastBrowser instead"
-        )
+        _LOGGER.info("CastListener is deprecated and will be removed in June 2024, update to use CastBrowser instead")
         listener = SimpleCastListener(add_callback, remove_callback, update_callback)
         super().__init__(listener)
 
 
-def start_discovery(
-    cast_browser: CastBrowser, zeroconf_instance: zeroconf.Zeroconf
-) -> CastBrowser:
+def start_discovery(cast_browser: CastBrowser, zeroconf_instance: zeroconf.Zeroconf) -> CastBrowser:
     """Start discovering chromecasts on the network.
 
     Deprecated as of February 2021, will be removed in June 2024.

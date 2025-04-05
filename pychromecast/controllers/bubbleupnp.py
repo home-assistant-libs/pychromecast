@@ -2,8 +2,8 @@
 Simple Controller to use BubbleUPNP as a media controller.
 """
 
-from .media import BaseMediaPlayer
 from ..config import APP_BUBBLEUPNP
+from .media import BaseMediaPlayer
 
 
 class BubbleUPNPController(BaseMediaPlayer):

@@ -9,8 +9,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import chain_on_success
-from . import CallbackType, BaseController
-
+from . import BaseController, CallbackType
 
 APP_NAMESPACE = "urn:x-cast:com.madmod.dashcast"
 
@@ -18,9 +17,7 @@ APP_NAMESPACE = "urn:x-cast:com.madmod.dashcast"
 class DashCastController(BaseController):
     """Controller to interact with DashCast app namespace."""
 
-    def __init__(
-        self, appNamespace: str = APP_NAMESPACE, appId: str = APP_DASHCAST
-    ) -> None:
+    def __init__(self, appNamespace: str = APP_NAMESPACE, appId: str = APP_DASHCAST) -> None:
         super().__init__(appNamespace, appId)
 
     def receive_message(self, _message: CastMessage, _data: dict) -> bool:
@@ -64,10 +61,6 @@ class DashCastController(BaseController):
                 "reload_time": reload_milliseconds,
             }
 
-            self.send_message(
-                msg, inc_session_id=True, callback_function=callback_function
-            )
+            self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-        self.launch(
-            callback_function=chain_on_success(launch_callback, callback_function)
-        )
+        self.launch(callback_function=chain_on_success(launch_callback, callback_function))

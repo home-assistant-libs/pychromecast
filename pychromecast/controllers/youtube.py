@@ -7,17 +7,17 @@ import logging
 import threading
 from typing import Any, cast
 
+import requests
 from casttube import YouTubeSession  # type: ignore[import-untyped]
 from casttube.YouTubeSession import HEADERS  # type: ignore[import-untyped]
-import requests
 
-from . import QuickPlayController
+from ..config import APP_YOUTUBE
 from ..const import MESSAGE_TYPE
 from ..error import RequestTimeout
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
-from ..config import APP_YOUTUBE
+from . import QuickPlayController
 
 YOUTUBE_NAMESPACE = "urn:x-cast:com.google.youtube.mdx"
 TYPE_GET_SCREEN_ID = "getMdxSessionStatus"
@@ -58,9 +58,7 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
             headers = {**HEADERS, **headers}
         else:
             headers = HEADERS
-        response = requests.post(
-            url, headers=headers, data=data, params=params, timeout=self.__timeout
-        )
+        response = requests.post(url, headers=headers, data=data, params=params, timeout=self.__timeout)
         # 404 resets the sid, session counters
         # 400 in session probably means bad sid
         # If user did a bad request (eg. remove an non-existing video from queue)
@@ -92,9 +90,7 @@ class YouTubeController(QuickPlayController):
         """
         if not (self._screen_id and self._session):
             self.update_screen_id()
-            self._session = TimeoutYouTubeSession(
-                screen_id=cast(str, self._screen_id), timeout=self._timeout
-            )
+            self._session = TimeoutYouTubeSession(screen_id=cast(str, self._screen_id), timeout=self._timeout)
 
     def play_video(self, video_id: str, playlist_id: str | None = None) -> None:
         """

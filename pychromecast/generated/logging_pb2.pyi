@@ -1,8 +1,13 @@
-from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from typing import ClassVar as _ClassVar
+from typing import Iterable as _Iterable
+from typing import Mapping as _Mapping
+from typing import Optional as _Optional
+from typing import Union as _Union
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -120,6 +125,7 @@ class ChallengeReplyErrorType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper)
     CHALLENGE_REPLY_ERROR_TLS_CERT_EXPIRED: _ClassVar[ChallengeReplyErrorType]
     CHALLENGE_REPLY_ERROR_CRL_INVALID: _ClassVar[ChallengeReplyErrorType]
     CHALLENGE_REPLY_ERROR_CERT_REVOKED: _ClassVar[ChallengeReplyErrorType]
+
 EVENT_TYPE_UNKNOWN: EventType
 CAST_SOCKET_CREATED: EventType
 READY_STATE_CHANGED: EventType
@@ -213,7 +219,20 @@ CHALLENGE_REPLY_ERROR_CRL_INVALID: ChallengeReplyErrorType
 CHALLENGE_REPLY_ERROR_CERT_REVOKED: ChallengeReplyErrorType
 
 class SocketEvent(_message.Message):
-    __slots__ = ("type", "timestamp_micros", "details", "net_return_value", "message_namespace", "ready_state", "connection_state", "read_state", "write_state", "error_state", "challenge_reply_error_type", "nss_error_code")
+    __slots__ = (
+        "type",
+        "timestamp_micros",
+        "details",
+        "net_return_value",
+        "message_namespace",
+        "ready_state",
+        "connection_state",
+        "read_state",
+        "write_state",
+        "error_state",
+        "challenge_reply_error_type",
+        "nss_error_code",
+    )
     TYPE_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_MICROS_FIELD_NUMBER: _ClassVar[int]
     DETAILS_FIELD_NUMBER: _ClassVar[int]
@@ -238,7 +257,21 @@ class SocketEvent(_message.Message):
     error_state: ErrorState
     challenge_reply_error_type: ChallengeReplyErrorType
     nss_error_code: int
-    def __init__(self, type: _Optional[_Union[EventType, str]] = ..., timestamp_micros: _Optional[int] = ..., details: _Optional[str] = ..., net_return_value: _Optional[int] = ..., message_namespace: _Optional[str] = ..., ready_state: _Optional[_Union[ReadyState, str]] = ..., connection_state: _Optional[_Union[ConnectionState, str]] = ..., read_state: _Optional[_Union[ReadState, str]] = ..., write_state: _Optional[_Union[WriteState, str]] = ..., error_state: _Optional[_Union[ErrorState, str]] = ..., challenge_reply_error_type: _Optional[_Union[ChallengeReplyErrorType, str]] = ..., nss_error_code: _Optional[int] = ...) -> None: ...
+    def __init__(
+        self,
+        type: _Optional[_Union[EventType, str]] = ...,
+        timestamp_micros: _Optional[int] = ...,
+        details: _Optional[str] = ...,
+        net_return_value: _Optional[int] = ...,
+        message_namespace: _Optional[str] = ...,
+        ready_state: _Optional[_Union[ReadyState, str]] = ...,
+        connection_state: _Optional[_Union[ConnectionState, str]] = ...,
+        read_state: _Optional[_Union[ReadState, str]] = ...,
+        write_state: _Optional[_Union[WriteState, str]] = ...,
+        error_state: _Optional[_Union[ErrorState, str]] = ...,
+        challenge_reply_error_type: _Optional[_Union[ChallengeReplyErrorType, str]] = ...,
+        nss_error_code: _Optional[int] = ...,
+    ) -> None: ...
 
 class AggregatedSocketEvent(_message.Message):
     __slots__ = ("id", "endpoint_id", "channel_auth_type", "socket_event", "bytes_read", "bytes_written")
@@ -254,7 +287,15 @@ class AggregatedSocketEvent(_message.Message):
     socket_event: _containers.RepeatedCompositeFieldContainer[SocketEvent]
     bytes_read: int
     bytes_written: int
-    def __init__(self, id: _Optional[int] = ..., endpoint_id: _Optional[int] = ..., channel_auth_type: _Optional[_Union[ChannelAuth, str]] = ..., socket_event: _Optional[_Iterable[_Union[SocketEvent, _Mapping]]] = ..., bytes_read: _Optional[int] = ..., bytes_written: _Optional[int] = ...) -> None: ...
+    def __init__(
+        self,
+        id: _Optional[int] = ...,
+        endpoint_id: _Optional[int] = ...,
+        channel_auth_type: _Optional[_Union[ChannelAuth, str]] = ...,
+        socket_event: _Optional[_Iterable[_Union[SocketEvent, _Mapping]]] = ...,
+        bytes_read: _Optional[int] = ...,
+        bytes_written: _Optional[int] = ...,
+    ) -> None: ...
 
 class Log(_message.Message):
     __slots__ = ("aggregated_socket_event", "num_evicted_aggregated_socket_events", "num_evicted_socket_events")
@@ -264,4 +305,9 @@ class Log(_message.Message):
     aggregated_socket_event: _containers.RepeatedCompositeFieldContainer[AggregatedSocketEvent]
     num_evicted_aggregated_socket_events: int
     num_evicted_socket_events: int
-    def __init__(self, aggregated_socket_event: _Optional[_Iterable[_Union[AggregatedSocketEvent, _Mapping]]] = ..., num_evicted_aggregated_socket_events: _Optional[int] = ..., num_evicted_socket_events: _Optional[int] = ...) -> None: ...
+    def __init__(
+        self,
+        aggregated_socket_event: _Optional[_Iterable[_Union[AggregatedSocketEvent, _Mapping]]] = ...,
+        num_evicted_aggregated_socket_events: _Optional[int] = ...,
+        num_evicted_socket_events: _Optional[int] = ...,
+    ) -> None: ...

@@ -9,8 +9,8 @@ Controller to interface with NRK Radio.
 # For the on-demand program https://radio.nrk.no/serie/radiodokumentaren/sesong/201011/MDUP01004510,
 # the media id is MDUP01004510
 
-from .media import BaseMediaPlayer
 from ..config import APP_NRKRADIO
+from .media import BaseMediaPlayer
 
 APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 
