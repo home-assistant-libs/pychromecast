@@ -521,9 +521,6 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                 pass
             self._connection_daemon_task = None
 
-        # Clean up
-        self._cleanup()
-
     @property
     def connected(self) -> bool:
         """Connection status."""
