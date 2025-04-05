@@ -8,8 +8,8 @@ Controller to interface with NRK TV.
 # e.g. https://tv.nrk.no/serie/uti-vaar-hage/sesong/2/episode/2 shows:
 # "https://tv.nrk.no/se?v=OUHA43000207", the media ID is OUHA43000207
 
-from .media import BaseMediaPlayer
 from ..config import APP_NRKTV
+from .media import BaseMediaPlayer
 
 APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 

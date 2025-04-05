@@ -2,10 +2,10 @@
 Controller to interface with Home Assistant
 """
 
-from collections.abc import Callable
-from functools import partial
 import logging
 import threading
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from ..config import APP_HOMEASSISTANT_LOVELACE
@@ -14,8 +14,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import chain_on_success
-from . import CallbackType, BaseController
-
+from . import BaseController, CallbackType
 
 APP_NAMESPACE = "urn:x-cast:com.nabucasa.hast"
 DEFAULT_HASS_CONNECT_TIMEOUT = 30
@@ -103,9 +102,7 @@ class HomeAssistantController(BaseController):
             self.status = data
 
             if was_connected or not self.hass_connected:
-                _LOGGER.debug(
-                    "HomeAssistantController.receive_message already connected"
-                )
+                _LOGGER.debug("HomeAssistantController.receive_message already connected")
                 return True
 
             # We just got connected, call the callbacks.
@@ -134,9 +131,7 @@ class HomeAssistantController(BaseController):
         self._on_connect.append(callback_function)
 
         if not self._hass_connecting_event.is_set():
-            _LOGGER.debug(
-                "HomeAssistantController._connect_hass _hass_connecting_event not set"
-            )
+            _LOGGER.debug("HomeAssistantController._connect_hass _hass_connecting_event not set")
             return
 
         self._hass_connecting_event.clear()
@@ -151,9 +146,7 @@ class HomeAssistantController(BaseController):
                 }
             )
         except Exception:  # pylint: disable=broad-except
-            _LOGGER.debug(
-                "HomeAssistantController._connect_hass failed to send connect message"
-            )
+            _LOGGER.debug("HomeAssistantController._connect_hass failed to send connect message")
             self._hass_connecting_event.set()
             self._call_on_connect_callbacks(False)
             raise
@@ -203,23 +196,13 @@ class HomeAssistantController(BaseController):
             callback_function=callback_function,
         )
 
-    def _send_connected_message(
-        self, data: dict[str, Any], callback_function: CallbackType | None
-    ) -> None:
+    def _send_connected_message(self, data: dict[str, Any], callback_function: CallbackType | None) -> None:
         """Send a message to a connected Home Assistant Cast"""
         _LOGGER.debug("HomeAssistantController._send_connected_message %s", data)
         if self.hass_connected:
-            _LOGGER.debug(
-                "HomeAssistantController._send_connected_message already connected"
-            )
+            _LOGGER.debug("HomeAssistantController._send_connected_message already connected")
             self.send_message_nocheck(data, callback_function=callback_function)
             return
 
-        _LOGGER.debug(
-            "HomeAssistantController._send_connected_message not yet connected"
-        )
-        self._connect_hass(
-            chain_on_success(
-                partial(self.send_message_nocheck, data), callback_function
-            )
-        )
+        _LOGGER.debug("HomeAssistantController._send_connected_message not yet connected")
+        self._connect_hass(chain_on_success(partial(self.send_message_nocheck, data), callback_function))

@@ -5,18 +5,18 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 from __future__ import annotations
 
 import abc
-from functools import partial
 import logging
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
-from ..error import UnsupportedNamespace, ControllerNotRegistered
+from ..error import ControllerNotRegistered, UnsupportedNamespace
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
-    from ..socket_client import SocketClient
+    from ..connection_client import ConnectionClient
 
 
 class SendMessageFunc(Protocol):
@@ -59,7 +59,7 @@ class BaseController(abc.ABC):
         self.supporting_app_id = supporting_app_id
         self.target_platform = target_platform
 
-        self._socket_client: SocketClient | None = None
+        self._socket_client: ConnectionClient | None = None
         self._message_func: SendMessageFunc | None = None
 
         self.logger = logging.getLogger(__name__)
@@ -68,10 +68,7 @@ class BaseController(abc.ABC):
     def is_active(self) -> bool:
         """True if the controller is connected to a socket client and the
         Chromecast is running an app that supports this controller."""
-        return (
-            self._socket_client is not None
-            and self.namespace in self._socket_client.app_namespaces
-        )
+        return self._socket_client is not None and self.namespace in self._socket_client.app_namespaces
 
     def launch(
         self,
@@ -100,7 +97,7 @@ class BaseController(abc.ABC):
             callback_function=callback_function,
         )
 
-    def registered(self, socket_client: SocketClient) -> None:
+    def registered(self, socket_client: ConnectionClient) -> None:
         """Called when a controller is registered."""
         self._socket_client = socket_client
 
@@ -160,9 +157,7 @@ class BaseController(abc.ABC):
 
             if callback_function:
                 callback_function(False, None)
-            raise UnsupportedNamespace(
-                f"Namespace {self.namespace} is not supported by running application."
-            )
+            raise UnsupportedNamespace(f"Namespace {self.namespace} is not supported by running application.")
 
         self.send_message_nocheck(
             data,

@@ -4,21 +4,21 @@ Controller to interface with the Plex-app.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from functools import partial
 import json
 import threading
+from copy import deepcopy
+from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
-from . import CallbackType, BaseController
-from .media import MediaStatus
 from ..const import MESSAGE_TYPE
 from ..error import ControllerNotRegistered, RequestFailed
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import chain_on_success
+from . import BaseController, CallbackType
+from .media import MediaStatus
 
 if TYPE_CHECKING:
     from plexapi.base import Playable  # type: ignore[import-untyped]
@@ -112,9 +112,7 @@ def media_to_chromecast_command(  # pylint: disable=invalid-name, too-many-local
     token = None
     if media is not None:
         # Lets set some params for the user if they use plexapi.
-        server: PlexServer = (
-            media[0]._server if isinstance(media, list) else media._server
-        )
+        server: PlexServer = media[0]._server if isinstance(media, list) else media._server
         server_url = urlparse(server._baseurl)
         protocol = server_url.scheme
         address = server_url.hostname
@@ -253,9 +251,7 @@ class PlexController(BaseController):
             finally:
                 self.namespace = old
         else:
-            self.send_message(
-                msg, inc_session_id=inc_session_id, callback_function=callback_function
-            )
+            self.send_message(msg, inc_session_id=inc_session_id, callback_function=callback_function)
 
     def _inc_request(self) -> int:
         # Is this getting passed to Plex?
@@ -289,9 +285,7 @@ class PlexController(BaseController):
 
     def update_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Send message to update status."""
-        self.send_message(
-            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
-        )
+        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function)
 
     def stop(self) -> None:
         """Send stop command."""
@@ -320,9 +314,7 @@ class PlexController(BaseController):
             position (int): Offset in seconds.
             resume_state (str, default): PLAYBACK_START
         """
-        self._send_cmd(
-            {MESSAGE_TYPE: TYPE_SEEK, SEEK_KEY: position, "resumeState": resume_state}
-        )
+        self._send_cmd({MESSAGE_TYPE: TYPE_SEEK, SEEK_KEY: position, "resumeState": resume_state})
 
     def rewind(self) -> None:
         """Rewind back to the start."""
@@ -371,18 +363,14 @@ class PlexController(BaseController):
 
     def show_media(self, media: Playable | None = None, **kwargs: Any) -> None:
         """Show media item's info on screen."""
-        msg = media_to_chromecast_command(
-            media, type=TYPE_DETAILS, requestId=self._inc_request(), **kwargs
-        )
+        msg = media_to_chromecast_command(media, type=TYPE_DETAILS, requestId=self._inc_request(), **kwargs)
 
         def callback(msg_sent: bool, _response: dict | None) -> None:
             if not msg_sent:
                 raise RequestFailed("PlexController.show_media")
 
         self.launch(
-            callback_function=chain_on_success(
-                partial(self._send_cmd, msg, inc_session_id=True, inc=False), callback
-            )
+            callback_function=chain_on_success(partial(self._send_cmd, msg, inc_session_id=True, inc=False), callback)
         )
 
     def quit_app(self) -> None:
@@ -419,9 +407,7 @@ class PlexController(BaseController):
             offset_now = self.status.adjusted_current_time
             msg = deepcopy(self._last_play_msg)
 
-            msg["media"]["customData"]["offset"] = (
-                offset_now if offset is None else offset
-            )
+            msg["media"]["customData"]["offset"] = offset_now if offset is None else offset
             msg["current_time"] = offset_now
 
             self._send_cmd(
@@ -431,10 +417,7 @@ class PlexController(BaseController):
                 inc=False,
             )
         else:
-            self.logger.debug(
-                "Can not reset the stream, _last_play_msg "
-                "was not set with _send_start_play."
-            )
+            self.logger.debug("Can not reset the stream, _last_play_msg " "was not set with _send_start_play.")
 
     def _send_start_play(self, media: Playable | None = None, **kwargs: Any) -> None:
         """Helper to send a playback command.
@@ -443,9 +426,7 @@ class PlexController(BaseController):
             media (None, optional): :class:`~plexapi.base.Playable
             **kwargs: media_to_chromecast_command docs string.
         """
-        msg = media_to_chromecast_command(
-            media, requestiId=self._inc_request(), **kwargs
-        )
+        msg = media_to_chromecast_command(media, requestiId=self._inc_request(), **kwargs)
         self.logger.debug("Create command: \n%r\n", json.dumps(msg, indent=4))
         self._last_play_msg = msg
         self._send_cmd(
@@ -455,9 +436,7 @@ class PlexController(BaseController):
             inc=False,
         )
 
-    def block_until_playing(
-        self, media: Playable | None = None, timeout: float | None = None, **kwargs: Any
-    ) -> None:
+    def block_until_playing(self, media: Playable | None = None, timeout: float | None = None, **kwargs: Any) -> None:
         """Block until media is playing, typically useful in a script.
 
         Another way to do the same is to check if the
@@ -538,9 +517,7 @@ class PlexApiController(PlexController):
 
         return media_item, media, part
 
-    def _change_track(
-        self, track: Any, type_: str = "subtitle", reset_playback: bool = True
-    ) -> None:
+    def _change_track(self, track: Any, type_: str = "subtitle", reset_playback: bool = True) -> None:
         """Sets a new default audio/subtitle track.
 
         Args:

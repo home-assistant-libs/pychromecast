@@ -5,9 +5,9 @@ Controller to interface with Supla.
 import logging
 from typing import Any
 
-from . import CallbackType, QuickPlayController
 from ..config import APP_SUPLA
 from ..response_handler import WaitResponse
+from . import CallbackType, QuickPlayController
 
 APP_NAMESPACE = "urn:x-cast:fi.ruutu.chromecast"
 
@@ -55,9 +55,7 @@ class SuplaController(QuickPlayController):
             no_add_request_id=True,
         )
 
-    def quick_play(
-        self, *, media_id: str, timeout: float, is_live: bool = False, **kwargs: Any
-    ) -> None:
+    async def quick_play(self, *, media_id: str, timeout: float, is_live: bool = False, **kwargs: Any) -> None:
         """Quick Play"""
         response_handler = WaitResponse(timeout, f"supla quick play {media_id}")
         self.play_media(
@@ -66,4 +64,4 @@ class SuplaController(QuickPlayController):
             **kwargs,
             callback_function=response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()

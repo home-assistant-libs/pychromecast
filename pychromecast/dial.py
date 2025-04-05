@@ -4,15 +4,15 @@ Implements the DIAL-protocol to communicate with the Chromecast
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from http import HTTPStatus
 import json
 import logging
 import socket
 import ssl
 import urllib.request
-from uuid import UUID
+from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Any
+from uuid import UUID
 
 import zeroconf
 
@@ -327,9 +327,7 @@ def get_multizone_status(
         return MultizoneStatus(dynamic_groups, groups)
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
-        _LOGGER.debug(
-            "Failed to get multizone status for %s: %s (%s)", host, err, type(err)
-        )
+        _LOGGER.debug("Failed to get multizone status for %s: %s (%s)", host, err, type(err))
         return None
 
 

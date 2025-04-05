@@ -11,8 +11,8 @@ Controller to interface with BBC iPlayer.
 import logging
 from typing import Any
 
-from .media import STREAM_TYPE_BUFFERED, STREAM_TYPE_LIVE, BaseMediaPlayer
 from ..config import APP_BBCIPLAYER
+from .media import STREAM_TYPE_BUFFERED, STREAM_TYPE_LIVE, BaseMediaPlayer
 
 APP_NAMESPACE = "urn:x-cast:com.google.cast.media"
 
