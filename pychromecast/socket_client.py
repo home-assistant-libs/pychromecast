@@ -517,10 +517,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
 
     def unregister_handler(self, handler: BaseController) -> None:
         """Register a new namespace handler."""
-        if (
-            handler.namespace in self._handlers
-            and handler in self._handlers[handler.namespace]
-        ):
+        if handler.namespace in self._handlers and handler in self._handlers[handler.namespace]:
             self._handlers[handler.namespace].remove(handler)
 
         handler.unregistered()
@@ -624,9 +621,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
             for channel in self._open_channels:
                 self.disconnect_channel(channel)
             self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
-                )
+                ConnectionStatus(CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None)
             )
             if self._transport:
                 self._transport.close()
@@ -649,10 +644,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
         # route message to handlers
         if message.namespace in self._handlers:
             # debug messages
-            if (
-                message.namespace != NS_HEARTBEAT
-                or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
-            ):
+            if message.namespace != NS_HEARTBEAT or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug(
                     "[%s(%s):%s] Received: %s",
                     self.fn or "",
@@ -677,10 +669,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
                             )
                 except Exception:  # pylint: disable=broad-except
                     self.logger.exception(
-                        (
-                            "[%s(%s):%s] Exception caught while sending message to "
-                            "controller %s: %s"
-                        ),
+                        ("[%s(%s):%s] Exception caught while sending message to " "controller %s: %s"),
                         self.fn or "",
                         self.host,
                         self.port,
@@ -785,10 +774,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
         be_size = pack(">I", msg.ByteSize())
 
         # Log all messages except heartbeat
-        if (
-            msg.namespace != NS_HEARTBEAT
-            or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
-        ):
+        if msg.namespace != NS_HEARTBEAT or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
@@ -869,9 +855,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
         if self.destination_id is None:
             if callback_function:
                 callback_function(False, None)
-            raise NotConnected(
-                "Attempting send a message when destination_id is not set"
-            )
+            raise NotConnected("Attempting send a message when destination_id is not set")
 
         return self.send_message(
             self.destination_id,
@@ -926,9 +910,7 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
             except NotConnected:
                 pass
             except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    "[%s(%s):%s] Exception", self.fn or "", self.host, self.port
-                )
+                self.logger.exception("[%s(%s):%s] Exception", self.fn or "", self.host, self.port)
 
             self._open_channels.remove(destination_id)
 
