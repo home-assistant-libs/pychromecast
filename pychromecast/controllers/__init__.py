@@ -16,7 +16,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
 from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
-    from ..connection_client import ConnectionClient
+    from ..socket_client import SocketClient
 
 
 class SendMessageFunc(Protocol):
@@ -59,7 +59,7 @@ class BaseController(abc.ABC):
         self.supporting_app_id = supporting_app_id
         self.target_platform = target_platform
 
-        self._socket_client: ConnectionClient | None = None
+        self._socket_client: SocketClient | None = None
         self._message_func: SendMessageFunc | None = None
 
         self.logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class BaseController(abc.ABC):
             callback_function=callback_function,
         )
 
-    def registered(self, socket_client: ConnectionClient) -> None:
+    def registered(self, socket_client: SocketClient) -> None:
         """Called when a controller is registered."""
         self._socket_client = socket_client
 

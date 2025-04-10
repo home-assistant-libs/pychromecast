@@ -547,7 +547,7 @@ class BaseMediaPlayer(QuickPlayController):
 
         self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-    def quick_play(self, *, media_id: str, timeout: float, **kwargs: Any) -> None:
+    async def quick_play(self, *, media_id: str, timeout: float, **kwargs: Any) -> None:
         """Quick Play"""
 
         media_type = kwargs.pop("media_type", "video/mp4")
@@ -556,7 +556,7 @@ class BaseMediaPlayer(QuickPlayController):
         self.play_media(
             media_id, media_type, **kwargs, callback_function=response_handler.callback
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
 
 class MediaController(BaseMediaPlayer):
@@ -623,35 +623,35 @@ class MediaController(BaseMediaPlayer):
             command, callback_function=callback_function, inc_session_id=True
         )
 
-    def play(self, timeout: float = 10.0) -> None:
+    async def play(self, timeout: float = 10.0) -> None:
         """Send the PLAY command."""
         response_handler = WaitResponse(timeout, "play")
         self._send_command({MESSAGE_TYPE: TYPE_PLAY}, response_handler.callback)
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def pause(self, timeout: float = 10.0) -> None:
+    async def pause(self, timeout: float = 10.0) -> None:
         """Send the PAUSE command."""
         response_handler = WaitResponse(timeout, "pause")
         self._send_command({MESSAGE_TYPE: TYPE_PAUSE}, response_handler.callback)
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def stop(self, timeout: float = 10.0) -> None:
+    async def stop(self, timeout: float = 10.0) -> None:
         """Send the STOP command."""
         response_handler = WaitResponse(timeout, "stop")
         self._send_command({MESSAGE_TYPE: TYPE_STOP}, response_handler.callback)
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def rewind(self, timeout: float = 10.0) -> None:
+    async def rewind(self, timeout: float = 10.0) -> None:
         """Starts playing the media from the beginning."""
-        self.seek(0, timeout)
+        await self.seek(0, timeout)
 
-    def skip(self, timeout: float = 10.0) -> None:
+    async def skip(self, timeout: float = 10.0) -> None:
         """Skips rest of the media. Values less then -5 behaved flaky."""
         if not self.status.duration or self.status.duration < 5:
             return
-        self.seek(int(self.status.duration) - 5, timeout)
+        await self.seek(int(self.status.duration) - 5, timeout)
 
-    def seek(self, position: float, timeout: float = 10.0) -> None:
+    async def seek(self, position: float, timeout: float = 10.0) -> None:
         """Seek the media to a specific location."""
         response_handler = WaitResponse(timeout, f"seek {position}")
         self._send_command(
@@ -662,9 +662,9 @@ class MediaController(BaseMediaPlayer):
             },
             response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def set_playback_rate(self, playback_rate: float, timeout: float = 10.0) -> None:
+    async def set_playback_rate(self, playback_rate: float, timeout: float = 10.0) -> None:
         """Set the playback rate. 1.0 is regular time, 0.5 is slow motion."""
         response_handler = WaitResponse(timeout, "set playback rate")
         self._send_command(
@@ -674,55 +674,41 @@ class MediaController(BaseMediaPlayer):
             },
             response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def queue_next(self, timeout: float = 10.0) -> None:
+    async def queue_next(self, timeout: float = 10.0) -> None:
         """Send the QUEUE_NEXT command."""
         response_handler = WaitResponse(timeout, "queue next")
         self._send_command(
             {MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": 1}, response_handler.callback
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def queue_prev(self, timeout: float = 10.0) -> None:
+    async def queue_prev(self, timeout: float = 10.0) -> None:
         """Send the QUEUE_PREV command."""
         response_handler = WaitResponse(timeout, "queue prev")
         self._send_command(
             {MESSAGE_TYPE: TYPE_QUEUE_UPDATE, "jump": -1}, response_handler.callback
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def enable_subtitle(self, track_id: int, timeout: float = 10.0) -> None:
+    async def enable_subtitle(self, track_id: int, timeout: float = 10.0) -> None:
         """Enable specific text track."""
         response_handler = WaitResponse(timeout, "enable subtitle")
         self._send_command(
             {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": [track_id]},
             response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def disable_subtitle(self, timeout: float = 10.0) -> None:
+    async def disable_subtitle(self, timeout: float = 10.0) -> None:
         """Disable subtitle."""
         response_handler = WaitResponse(timeout, "disable subtitle")
         self._send_command(
             {MESSAGE_TYPE: TYPE_EDIT_TRACKS_INFO, "activeTrackIds": []},
             response_handler.callback,
         )
-        response_handler.wait_response()
-
-    def block_until_active(self, timeout: float | None = None) -> None:
-        """
-        Blocks thread until the media controller session is active on the
-        chromecast. The media controller only accepts playback control
-        commands when a media session is active.
-
-        If a session is already active then the method returns immediately.
-
-        :param timeout: a floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        """
-        self.session_active_event.wait(timeout=timeout)
+        await response_handler.wait_response()
 
     def _process_media_status(self, data: dict) -> None:
         """Processes a STATUS message."""

@@ -68,11 +68,7 @@ while True:
             print("Player state:", player_state)
         if player_state == "PLAYING":
             has_played = True
-        if (
-            cast.connection_client.connected
-            and has_played
-            and player_state != "PLAYING"
-        ):
+        if cast.socket_client.is_connected and has_played and player_state != "PLAYING":
             has_played = False
             cast.media_controller.play_media(args.url, "audio/mp3")
 

@@ -16,7 +16,7 @@ from ..const import MESSAGE_TYPE
 
 # pylint: disable-next=no-name-in-module
 from ..generated.cast_channel_pb2 import CastMessage
-from ..connection_client import (
+from ..socket_client import (
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_DISCONNECTED,
     CONNECTION_STATUS_LOST,

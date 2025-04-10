@@ -14,7 +14,7 @@ from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
 )
-from pychromecast.connection_client import ConnectionStatus, ConnectionStatusListener
+from pychromecast.socket_client import ConnectionStatus, ConnectionStatusListener
 
 from .common import add_log_arguments, configure_logging
 

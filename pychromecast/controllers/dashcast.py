@@ -64,10 +64,6 @@ class DashCastController(BaseController):
                 "reload_time": reload_milliseconds,
             }
 
-            self.send_message(
-                msg, inc_session_id=True, callback_function=callback_function
-            )
+            self.send_message(msg, inc_session_id=True, callback_function=callback_function)
 
-        self.launch(
-            callback_function=chain_on_success(launch_callback, callback_function)
-        )
+        self.launch(callback_function=chain_on_success(launch_callback, callback_function))

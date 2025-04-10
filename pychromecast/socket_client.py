@@ -14,9 +14,9 @@ import asyncio
 import json
 import logging
 import ssl
-import time
 import struct
-from asyncio import Transport, BaseTransport, Task, CancelledError
+import time
+from asyncio import BaseTransport, CancelledError, Task, Transport
 from collections import defaultdict
 from dataclasses import dataclass
 from struct import pack
@@ -133,7 +133,7 @@ class ConnectionStatusListener(abc.ABC):
 
 
 # pylint: disable-next=too-many-instance-attributes
-class ConnectionClient(asyncio.Protocol, CastStatusListener):
+class SocketClient(asyncio.Protocol, CastStatusListener):
     """
     Class to interact with a Chromecast through a socket.
 
@@ -225,7 +225,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
         # print('Connection from {}'.format(peername))
         self._transport = transport
         self._connected = True
-        self.logger.debug("[%s(%s):%s] Connection made",self.fn or "", self.host, self.port)
+        self.logger.debug("[%s(%s):%s] Connection made", self.fn or "", self.host, self.port)
         self.heartbeat_controller.ping()
 
     def data_received(self, data: bytes):
@@ -257,15 +257,10 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             self._route_message(message, data)
         except Exception as ex:
             self.logger.error(
-                "[%s(%s):%s] Error handling response message :%s",
-                self.fn or "",
-                self.host,
-                self.port,
-                ex
+                "[%s(%s):%s] Error handling response message :%s", self.fn or "", self.host, self.port, ex
             )
         if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
             self._request_callbacks.pop(data[REQUEST_ID])(True, data)
-
 
     async def _connection_task(self):
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -325,16 +320,10 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
 
         while tries is None or tries > 0:  # pylint:disable=too-many-nested-blocks
             # Prune retries dict
-            retries = {
-                key: retries[key]
-                for key in self.services.copy()
-                if (key is not None and key in retries)
-            }
+            retries = {key: retries[key] for key in self.services.copy() if (key is not None and key in retries)}
             for service in self.services.copy():
                 now = time.time()
-                retry = retries.get(
-                    service, {"delay": self.retry_wait, "next_retry": now}
-                )
+                retry = retries.get(service, {"delay": self.retry_wait, "next_retry": now})
                 self.logger.debug(
                     "[%s(%s):%s] Connection try %s",
                     self.host,
@@ -356,9 +345,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                     # Resolve the service name.
                     host = None
                     port = None
-                    host, port, service_info = get_host_from_service(
-                        service, self.zconf
-                    )
+                    host, port, service_info = get_host_from_service(service, self.zconf)
                     if host and port:
                         if service_info:
                             try:
@@ -406,9 +393,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                         self.port,
                     )
 
-                    await asyncio.wait_for(
-                        self._connection_task(), timeout=self.timeout
-                    )
+                    await asyncio.wait_for(self._connection_task(), timeout=self.timeout)
                     self.logger.debug(
                         "[%s(%s):%s] Resolved service %s to %s:%s",
                         self.fn or "",
@@ -420,9 +405,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                     )
                     self.heartbeat_controller.reset()
                     if self._connection_daemon_task is None:
-                        self._connection_daemon_task = asyncio.create_task(
-                            self._connection_deamon()
-                        )
+                        self._connection_daemon_task = asyncio.create_task(self._connection_deamon())
 
                     self.connecting = False
                     self._force_recon = False
@@ -521,9 +504,6 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                 pass
             self._connection_daemon_task = None
 
-        # Clean up
-        self._cleanup()
-
     @property
     def connected(self) -> bool:
         """Connection status."""
@@ -565,12 +545,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                 and self.destination_id not in self._open_channels
                 and status.app_id == APP_AUDIBLE
             ):
-                self.logger.debug(
-                    "[%s(%s):%s] Detected Audible connection. Sleeping for 1s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                )
+                self.logger.debug("Detected Audible connection. Sleeping for 1s")
                 time.sleep(1)
 
             # If any of the namespaces of the new app are supported
@@ -609,9 +584,7 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
             )
             return
 
-        self.logger.debug(
-            "[%s(%s):%s] Connection established", self.fn or "", self.host, self.port
-        )
+        self.logger.debug("[%s(%s):%s] Connection established", self.fn or "", self.host, self.port)
 
     async def _connection_deamon(self):
         """Checks connection every 10 seconds and reconnects if lost."""
@@ -655,6 +628,10 @@ class ConnectionClient(asyncio.Protocol, CastStatusListener):
                     CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
                 )
             )
+            if self._transport:
+                self._transport.close()
+                self._transport = None
+
             try:
                 await self.initialize_connection()
             except ChromecastConnectionError:
