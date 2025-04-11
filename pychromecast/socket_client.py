@@ -228,6 +228,21 @@ class SocketClient(asyncio.Protocol, CastStatusListener):
         self.logger.debug("[%s(%s):%s] Connection made", self.fn or "", self.host, self.port)
         self.heartbeat_controller.ping()
 
+
+    def connection_lost(self, exc):
+        self.logger.warning("[%s(%s):%s] Connection lost with the server, reconnect... (%s)",
+                            self.fn or "", self.host, self.port, exc)
+        if self._transport:
+            self._transport.close()
+            self._transport = None
+            self._report_connection_status(
+                ConnectionStatus(
+                    CONNECTION_STATUS_LOST,
+                    NetworkAddress(self.host, self.port),
+                    None,
+                )
+            )
+
     def data_received(self, data: bytes):
         if len(data) == 0:
             self._transport.close()
