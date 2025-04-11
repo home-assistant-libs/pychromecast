@@ -241,7 +241,7 @@ class ReceiverController(BaseController):
             callback_function=callback_function,
         )
 
-    def set_volume(self, volume: float, timeout: float = REQUEST_TIMEOUT) -> float:
+    async def set_volume(self, volume: float, timeout: float = REQUEST_TIMEOUT) -> float:
         """Allows to set volume. Should be value between 0..1.
         Returns the new volume.
 
@@ -253,17 +253,17 @@ class ReceiverController(BaseController):
             {MESSAGE_TYPE: "SET_VOLUME", "volume": {"level": volume}},
             callback_function=response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
         return volume
 
-    def set_volume_muted(self, muted: bool, timeout: float = REQUEST_TIMEOUT) -> None:
+    async def set_volume_muted(self, muted: bool, timeout: float = REQUEST_TIMEOUT) -> None:
         """Allows to mute volume."""
         response_handler = WaitResponse(timeout, "mute volume")
         self.send_message(
             {MESSAGE_TYPE: "SET_VOLUME", "volume": {"muted": muted}},
             callback_function=response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
     @staticmethod
     def _parse_status(data: dict, cast_type: str) -> CastStatus:

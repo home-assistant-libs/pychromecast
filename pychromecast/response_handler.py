@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+import contextlib
 import logging
-import threading
+from collections.abc import Callable
 from typing import Protocol
 
 from .error import RequestFailed, RequestTimeout
@@ -37,7 +38,7 @@ class WaitResponse:
 
     def __init__(self, timeout: float, request: str) -> None:
         """Initialize."""
-        self._event = threading.Event()
+        self._event = asyncio.Event()
         self._request = request
         self._timeout = timeout
 
@@ -47,9 +48,12 @@ class WaitResponse:
         self.msg_sent = msg_sent
         self._event.set()
 
-    def wait_response(self) -> None:
+    async def wait_response(self) -> None:
         """Wait for the request to finish."""
-        request_completed = self._event.wait(self._timeout)
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(self._event.wait(), self._timeout)
+
+        request_completed = self._event.is_set()
         if not request_completed:
             raise RequestTimeout(self._request, self._timeout)
 
