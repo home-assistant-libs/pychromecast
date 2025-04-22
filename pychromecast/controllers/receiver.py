@@ -286,8 +286,8 @@ class ReceiverController(BaseController):
         is_audio = cast_type in (CAST_TYPE_AUDIO, CAST_TYPE_GROUP)
 
         status = CastStatus(
-            data.get("isActiveInput", None if is_audio else False),
-            data.get("isStandBy", None if is_audio else True),
+            status_data.get("isActiveInput", None if is_audio else False),
+            status_data.get("isStandBy", None if is_audio else True),
             volume_data.get("level", 1.0),
             volume_data.get("muted", False),
             app_data.get(APP_ID),
