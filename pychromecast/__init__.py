@@ -439,9 +439,7 @@ class Chromecast(CastStatusListener):
         if status:
             self.status_event.set()
 
-    def start_app(
-        self, app_id: str, force_launch: bool = False, timeout: float = REQUEST_TIMEOUT
-    ) -> None:
+    async def start_app(self, app_id: str, force_launch: bool = False, timeout: float = REQUEST_TIMEOUT) -> None:
         """Start an app on the Chromecast."""
         self.logger.info("Starting app %s", app_id)
         response_handler = WaitResponse(timeout, f"start app {app_id}")
@@ -450,9 +448,9 @@ class Chromecast(CastStatusListener):
             force_launch=force_launch,
             callback_function=response_handler.callback,
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def quit_app(self, timeout: float = REQUEST_TIMEOUT) -> None:
+    async def quit_app(self, timeout: float = REQUEST_TIMEOUT) -> None:
         """Tells the Chromecast to quit current app_id."""
         self.logger.info("Quitting current app")
 
@@ -460,9 +458,9 @@ class Chromecast(CastStatusListener):
         self.socket_client.receiver_controller.stop_app(
             callback_function=response_handler.callback
         )
-        response_handler.wait_response()
+        await response_handler.wait_response()
 
-    def volume_up(self, delta: float = 0.1, timeout: float = REQUEST_TIMEOUT) -> float:
+    async def volume_up(self, delta: float = 0.1, timeout: float = REQUEST_TIMEOUT) -> float:
         """Increment volume by 0.1 (or delta) unless it is already maxed.
         Returns the new volume.
         """
@@ -470,9 +468,9 @@ class Chromecast(CastStatusListener):
             raise ValueError(f"volume delta must be greater than zero, not {delta}")
         if not self.status:
             raise NotConnected
-        return self.set_volume(self.status.volume_level + delta, timeout=timeout)
+        return await self.set_volume(self.status.volume_level + delta, timeout=timeout)
 
-    def volume_down(
+    async def volume_down(
         self, delta: float = 0.1, timeout: float = REQUEST_TIMEOUT
     ) -> float:
         """Decrement the volume by 0.1 (or delta) unless it is already 0.
@@ -482,9 +480,9 @@ class Chromecast(CastStatusListener):
             raise ValueError(f"volume delta must be greater than zero, not {delta}")
         if not self.status:
             raise NotConnected
-        return self.set_volume(self.status.volume_level - delta, timeout=timeout)
+        return await self.set_volume(self.status.volume_level - delta, timeout=timeout)
 
-    def wait(self, timeout: float | None = None) -> None:
+    async def connect(self, timeout: float | None = None) -> None:
         """
         Waits until the cast device is ready for communication. The device
         is ready as soon a status message has been received.
@@ -498,47 +496,20 @@ class Chromecast(CastStatusListener):
                         operation in seconds (or fractions thereof). Or None
                         to block forever.
         """
-        if not self.socket_client.is_alive():
-            self.socket_client.start()
-        ready = self.status_event.wait(timeout=timeout)
-        if not ready:
-            raise RequestTimeout("wait", cast(float, timeout))
+        if timeout:
+            self.socket_client.timeout = timeout
 
-    def disconnect(self, timeout: float | None = None) -> None:
+        if not self.socket_client.connected:
+            await self.socket_client.connect()
+
+    def disconnect(self) -> None:
         """
-        Disconnects the chromecast and waits for it to terminate.
-
-        :param timeout: A floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever. Set to 0 to not block.
+        Disconnects the chromecast.
         """
         self.socket_client.disconnect()
-        self.join(timeout=timeout)
-
-    def join(self, timeout: float | None = None) -> None:
-        """
-        Blocks the thread of the caller until the chromecast connection is
-        stopped.
-
-        :param timeout: a floating point number specifying a timeout for the
-                        operation in seconds (or fractions thereof). Or None
-                        to block forever.
-        """
-        self.socket_client.join(timeout=timeout)
-        if self.socket_client.is_alive():
-            raise TimeoutError("join", timeout)
-
-    def start(self) -> None:
-        """
-        Start the chromecast connection's worker thread.
-        """
-        self.socket_client.start()
 
     def __del__(self) -> None:
-        try:
-            self.socket_client.stop.set()
-        except AttributeError:
-            pass
+        self.disconnect()
 
     def __repr__(self) -> str:
         return (
