@@ -8,5 +8,5 @@ rstcheck==6.2.4
 types-beautifulsoup4==4.12.0.20250516
 types-html5lib==1.1.11.20250516
 types-protobuf==5.29.1.20250403
-types-requests==2.32.0.20250328
+types-requests==2.32.0.20250515
 yle-dl==20240927
