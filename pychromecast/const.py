@@ -29,6 +29,9 @@ MF_VIZIO = "Vizio"
 MF_WNC = "wnc"
 MF_XIAOMI = "Xiaomi"
 
+# Map model names to cast types and manufacturers
+# Note: The keys should be in lowercase to ensure case-insensitive matching
+# when checking against device names.
 CAST_TYPES = {
     "chromecast audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "chromecast": (CAST_TYPE_CHROMECAST, MF_GOOGLE),
@@ -45,27 +48,27 @@ CAST_TYPES = {
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "bravia 4k vh2": (CAST_TYPE_CHROMECAST, MF_SONY),
     "bravia 4k vh21": (CAST_TYPE_CHROMECAST, MF_SONY),
-    "Bose Smart Ultra Soundbar": (CAST_TYPE_AUDIO, MF_BOSE),
-    "C4A": (CAST_TYPE_AUDIO, MF_SONY),
-    "JBL Link 10": (CAST_TYPE_AUDIO, MF_JBL),
-    "JBL Link 20": (CAST_TYPE_AUDIO, MF_JBL),
-    "JBL Link 300": (CAST_TYPE_AUDIO, MF_JBL),
-    "JBL Link 500": (CAST_TYPE_AUDIO, MF_JBL),
-    "JBL Link Portable": (CAST_TYPE_AUDIO, MF_HARMAN),
+    "bose smart ultra soundbar": (CAST_TYPE_AUDIO, MF_BOSE),
+    "c4a": (CAST_TYPE_AUDIO, MF_SONY),
+    "jbl link 10": (CAST_TYPE_AUDIO, MF_JBL),
+    "jbl link 20": (CAST_TYPE_AUDIO, MF_JBL),
+    "jbl link 300": (CAST_TYPE_AUDIO, MF_JBL),
+    "jbl link 500": (CAST_TYPE_AUDIO, MF_JBL),
+    "jbl link portable": (CAST_TYPE_AUDIO, MF_HARMAN),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, MF_LENOVO),
-    "Lenovo Smart Display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
-    "LG WK7 ThinQ Speaker": (CAST_TYPE_AUDIO, MF_LG),
+    "lenovo smart display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
+    "lg wk7 thinq speaker": (CAST_TYPE_AUDIO, MF_LG),
     "marshall stanmore ii": (CAST_TYPE_AUDIO, MF_MARSHALL),
     "mitv-mssp2": (CAST_TYPE_CHROMECAST, MF_XIAOMI),
-    "Pioneer VSX-831": (CAST_TYPE_AUDIO, MF_PIONEER),
-    "Pioneer VSX-1131": (CAST_TYPE_AUDIO, MF_PIONEER),
-    "Pioneer VSX-LX305": (CAST_TYPE_AUDIO, MF_PIONEER),
+    "pioneer vsx-831": (CAST_TYPE_AUDIO, MF_PIONEER),
+    "pioneer vsx-1131": (CAST_TYPE_AUDIO, MF_PIONEER),
+    "pioneer vsx-lx305": (CAST_TYPE_AUDIO, MF_PIONEER),
     "shield android tv": (CAST_TYPE_CHROMECAST, MF_NVIDIA),
-    "Smart Soundbar 10": (CAST_TYPE_AUDIO, MF_CANTON),
-    "Stream TV": (CAST_TYPE_CHROMECAST, MF_WNC),
-    "SVS Pro SoundBase": (CAST_TYPE_AUDIO, MF_SVS),
-    "TPM191E": (CAST_TYPE_CHROMECAST, MF_PHILIPS),
-    "V705-H3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
+    "smart soundbar 10": (CAST_TYPE_AUDIO, MF_CANTON),
+    "stream tv": (CAST_TYPE_CHROMECAST, MF_WNC),
+    "svs pro soundbase": (CAST_TYPE_AUDIO, MF_SVS),
+    "tpm191e": (CAST_TYPE_CHROMECAST, MF_PHILIPS),
+    "v705-h3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
 }
 
 
