@@ -1,4 +1,4 @@
-beautifulsoup4==4.13.4
+beautifulsoup4==4.13.5
 black==25.1.0
 flake8==7.3.0
 mypy==1.15.0
