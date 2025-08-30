@@ -4,7 +4,7 @@ on the Chromecast.
 """
 
 import abc
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 import logging
 import threading
@@ -153,7 +153,7 @@ class MediaStatus:
             return (
                 self.current_time
                 + self.playback_rate
-                * (datetime.utcnow() - self.last_updated).total_seconds()
+                * (datetime.now(timezone.utc) - self.last_updated).total_seconds()
             )
         # Not playing, return last reported seek time
         return self.current_time
@@ -336,7 +336,7 @@ class MediaStatus:
         self.current_subtitle_tracks = status_data.get(
             "activeTrackIds", self.current_subtitle_tracks
         )
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
     def __repr__(self) -> str:
         info = {
