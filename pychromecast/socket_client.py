@@ -263,15 +263,14 @@ class SocketClient(threading.Thread, CastStatusListener):
 
                 self.logger.debug("Connected using tuple: %s", info)
                 return result
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 self.logger.debug(
                     "Failed to connect using tuple: %s", info, exc_info=True
                 )
 
-        else:
-            raise ChromecastConnectionError(
-                "All connection attempts failed, see debug log for details"
-            )
+        raise ChromecastConnectionError(
+            "All connection attempts failed, see debug log for details"
+        )
 
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches
         self,
