@@ -57,6 +57,7 @@ CAST_TYPES = {
     "jbl link portable": (CAST_TYPE_AUDIO, MF_HARMAN),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, MF_LENOVO),
     "lenovo smart display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
+    "lenovo smart display 10": (CAST_TYPE_CHROMECAST, MF_LENOVO),
     "lg wk7 thinq speaker": (CAST_TYPE_AUDIO, MF_LG),
     "marshall stanmore ii": (CAST_TYPE_AUDIO, MF_MARSHALL),
     "mitv-mssp2": (CAST_TYPE_CHROMECAST, MF_XIAOMI),
