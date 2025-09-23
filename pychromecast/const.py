@@ -70,6 +70,7 @@ CAST_TYPES = {
     "svs pro soundbase": (CAST_TYPE_AUDIO, MF_SVS),
     "tpm191e": (CAST_TYPE_CHROMECAST, MF_PHILIPS),
     "v705-h3": (CAST_TYPE_CHROMECAST, MF_VIZIO),
+    "d24f-j09": (CAST_TYPE_CHROMECAST, MF_VIZIO),
 }
 
 
