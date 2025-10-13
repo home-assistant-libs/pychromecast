@@ -10,6 +10,7 @@ from uuid import UUID
 
 import zeroconf
 
+# pylint: disable=invalid-name
 ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
 if hasattr(zeroconf, "EventLoopBlocked"):
     # Added in zeroconf 0.37.0
