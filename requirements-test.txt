@@ -1,5 +1,5 @@
 beautifulsoup4==4.14.2
-black==25.9.0
+black==25.11.0
 flake8==7.3.0
 mypy==1.15.0
 PlexAPI==4.17.1
