@@ -268,7 +268,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             retry["delay"] = min(retry["delay"] * 2, 300)
             retries[service] = retry
 
-        while not self.stop.is_set() and (tries is None or tries > 0):  # pylint:disable=too-many-nested-blocks
+        while not self.stop.is_set() and (tries is None or tries > 0):
             # Prune retries dict
             retries = {
                 key: retries[key]
