@@ -30,8 +30,8 @@ classifiers=[
 [project.urls]
 "Homepage" = "https://github.com/home-assistant-libs/pychromecast"
 
-[tool.black]
-exclude = 'pb2'
+[tool.ruff]
+exclude = ['*_pb2.*']
 
 [tool.rstcheck]
 # README.rst has embedded python examples which show the interactive interpreter output
