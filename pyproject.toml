@@ -48,3 +48,8 @@ include = ["pychromecast*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.0",
+]
