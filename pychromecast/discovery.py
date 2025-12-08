@@ -121,7 +121,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
         _LOGGER.debug("remove_service %s, %s", type_, name)
         cast_info = None
         device_removed = False
-        uuid = None
+        uuid: UUID
         service_info = MDNSServiceInfo(name)
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
