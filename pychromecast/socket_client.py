@@ -229,6 +229,49 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.receiver_controller.register_status_listener(self)
 
+    def _connect_to_host(self, host: str, port: int) -> socket.socket:
+
+        self.logger.debug(
+            "[%s(%s):%s] Connecting to %s:%s",
+            self.fn or "",
+            self.host,
+            self.port,
+            self.host,
+            self.port,
+        )
+
+        addrinfo = socket.getaddrinfo(
+            host,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+            flags=(socket.AI_ADDRCONFIG | socket.AI_V4MAPPED),
+            proto=socket.IPPROTO_TCP,
+        )
+
+        # This should preferable be a happy eyeballs implementation
+        for info in addrinfo:
+            try:
+                result = socket.socket(family=info[0], type=info[1], proto=info[2])
+                try:
+                    configure_socket(result)
+                    result.settimeout(self.timeout)
+                    result.connect(info[4])
+                except BaseException:
+                    result.close()
+                    raise
+
+                self.logger.debug("Connected using tuple: %s", info)
+                return result
+            except Exception:  # pylint: disable=broad-except
+                self.logger.debug(
+                    "Failed to connect using tuple: %s", info, exc_info=True
+                )
+
+        raise ChromecastConnectionError(
+            "All connection attempts failed, see debug log for details"
+        )
+
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches
         self,
     ) -> None:
@@ -291,11 +334,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -347,15 +385,11 @@ class SocketClient(threading.Thread, CastStatusListener):
                         # try next service
                         continue
 
-                    self.logger.debug(
-                        "[%s(%s):%s] Connecting to %s:%s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        self.host,
-                        self.port,
+                    self.socket = self._connect_to_host(host, port)
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
                     )
-                    self.socket.connect((self.host, self.port))
+
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
@@ -393,7 +427,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 # OSError raised if connecting to the socket fails, NotConnected raised
                 # if another thread tries - and fails - to send a message before the
                 # calls to receiver_controller and heartbeat_controller.
-                except (OSError, NotConnected) as err:
+                except (OSError, NotConnected, ChromecastConnectionError) as err:
                     self.connecting = True
                     if self.stop.is_set():
                         self.logger.error(
@@ -1085,15 +1119,17 @@ class ConnectionController(BaseController):
         return False
 
 
-def new_socket() -> socket.socket:
+def configure_socket(new_socket: socket.socket) -> None:
     """
     Create a new socket with OS-specific parameters
 
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if new_socket.family == socket.AF_INET6:
+        new_socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+
+    new_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
         # noinspection PyUnresolvedReferences
@@ -1102,10 +1138,8 @@ def new_socket() -> socket.socket:
         pass
     else:
         try:
-            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+            new_socket.setsockopt(socket.SOL_SOCKET, reuseport, 1)
         except (OSError, socket.error) as err:
             # OSError on python 3, socket.error on python 2
             if err.errno != errno.ENOPROTOOPT:
                 raise
-
-    return new_sock
