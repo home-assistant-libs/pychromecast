@@ -1,5 +1,5 @@
 beautifulsoup4==4.14.3
-ruff==0.14.14
+ruff==0.15.0
 mypy==1.19.1
 PlexAPI==4.17.2
 pylint==4.0.4
