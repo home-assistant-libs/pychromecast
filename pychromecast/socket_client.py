@@ -173,6 +173,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_wait: float | None,
         services: set[HostServiceInfo | MDNSServiceInfo],
         zconf: zeroconf.Zeroconf | None,
+        ip_family: socket.AddressFamily = socket.AF_INET,
     ) -> None:
         super().__init__()
 
@@ -192,6 +193,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.host = "unknown"
         self.port = 8009
+        self.ip_family = ip_family
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
@@ -291,7 +293,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
+                    self.socket = new_socket(self.ip_family)
                     self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
                     )
@@ -1085,14 +1087,14 @@ class ConnectionController(BaseController):
         return False
 
 
-def new_socket() -> socket.socket:
+def new_socket(family: socket.AddressFamily) -> socket.socket:
     """
     Create a new socket with OS-specific parameters
 
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_sock = socket.socket(family, socket.SOCK_STREAM)
     new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
