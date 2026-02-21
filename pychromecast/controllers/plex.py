@@ -488,7 +488,9 @@ class PlexController(BaseController):
 
         def app_launched_callback(msg_sent: bool, _response: dict | None) -> None:
             if not msg_sent:
-                raise RequestFailed("PlexController.play_media")
+                self.logger.warning("PlexController.play_media: unable to launch app, device unavailable?")
+                self.play_media_event.set()
+                return
             try:
                 self._send_start_play(media, **kwargs)
             finally:
