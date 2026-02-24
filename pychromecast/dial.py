@@ -17,7 +17,7 @@ from typing import Any
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
-from .error import ZeroConfInstanceRequired
+from .error import ZeroConfInstanceRequired, ResolveHostFailed
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
@@ -112,6 +112,8 @@ def _get_status(
         if host:
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
+    else:
+        raise ResolveHostFailed("Unable to find host to read status from.")
 
     if secure:
         url = FORMAT_BASE_URL_HTTPS.format(host) + path
@@ -175,6 +177,7 @@ def get_cast_type(
             urllib.error.URLError,
             OSError,
             ValueError,
+            ResolveHostFailed,
         ) as err:
             _LOGGER.warning(
                 "Failed to determine cast type for host %s (%s) (services:%s)",
