@@ -253,7 +253,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self._open_channels = []
 
         self.connecting = True
-        retry_log_fun = self.logger.error
+        retry_log_fun = self.logger.debug
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -629,7 +629,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 )
             except socket.error as exc:
                 self._force_recon = True
-                self.logger.error(
+                self.logger.debug(
                     "[%s(%s):%s] Error reading from socket: %s",
                     self.fn or "",
                     self.host,
