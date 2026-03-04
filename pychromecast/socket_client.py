@@ -350,7 +350,9 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.host,
                         self.port,
                     )
-                    self.socket = socket.create_connection((self.host, self.port), self.timeout)
+                    self.socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
                     configure_socket(self.socket)
                     self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
