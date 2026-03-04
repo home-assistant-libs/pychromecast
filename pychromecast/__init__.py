@@ -11,7 +11,6 @@ from threading import Event
 import threading
 from typing import TYPE_CHECKING, Literal, cast, overload
 from uuid import UUID
-import socket
 
 import zeroconf
 
@@ -337,7 +336,6 @@ class Chromecast(CastStatusListener):
             retry_wait=retry_wait,
             services=cast_info.services,
             zconf=zconf,
-            ip_family=socket.AF_INET6 if ':' in cast_info.host else socket.AF_INET,
         )
 
         receiver_controller = self.socket_client.receiver_controller
