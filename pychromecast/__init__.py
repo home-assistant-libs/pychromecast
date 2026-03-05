@@ -371,7 +371,7 @@ class Chromecast(CastStatusListener):
             or self.app_id in (None, IDLE_APP_ID)
             or (
                 self.cast_type == CAST_TYPE_CHROMECAST
-                and not self.status.is_active_input
+                and self.status.is_active_input is False
                 and not self.ignore_cec
             )
         )
