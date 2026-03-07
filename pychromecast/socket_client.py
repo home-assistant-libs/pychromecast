@@ -291,11 +291,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -355,7 +350,13 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.host,
                         self.port,
                     )
-                    self.socket.connect((self.host, self.port))
+                    self.socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
+                    configure_socket(self.socket)
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
@@ -1085,15 +1086,14 @@ class ConnectionController(BaseController):
         return False
 
 
-def new_socket() -> socket.socket:
+def configure_socket(_socket: socket.socket) -> None:
     """
-    Create a new socket with OS-specific parameters
+    Configure a socket with OS-specific parameters
 
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    _socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
         # noinspection PyUnresolvedReferences
@@ -1102,10 +1102,8 @@ def new_socket() -> socket.socket:
         pass
     else:
         try:
-            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+            _socket.setsockopt(socket.SOL_SOCKET, reuseport, 1)
         except (OSError, socket.error) as err:
             # OSError on python 3, socket.error on python 2
             if err.errno != errno.ENOPROTOOPT:
                 raise
-
-    return new_sock
