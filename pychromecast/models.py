@@ -10,6 +10,8 @@ from uuid import UUID
 
 import zeroconf
 
+from .const import HostnameType
+
 # pylint: disable=invalid-name
 ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
 if hasattr(zeroconf, "EventLoopBlocked"):
@@ -25,7 +27,7 @@ class CastInfo:
     uuid: UUID
     model_name: str | None
     friendly_name: str | None
-    host: str
+    host: HostnameType
     port: int
     cast_type: str | None
     manufacturer: str | None
@@ -35,7 +37,7 @@ class CastInfo:
 class HostServiceInfo:
     """Service info container."""
 
-    host: str
+    host: HostnameType
     port: int
 
 

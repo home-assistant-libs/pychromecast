@@ -21,11 +21,18 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from struct import pack, unpack
+from typing import Any
 
 import zeroconf
 
 from .config import APP_AUDIBLE
-from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
+from .const import (
+    HostnameType,
+    MESSAGE_TYPE,
+    PLATFORM_DESTINATION_ID,
+    REQUEST_ID,
+    SESSION_ID,
+)
 from .controllers import BaseController, CallbackType
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
@@ -113,8 +120,35 @@ def _message_to_string(
 class NetworkAddress:
     """Network address container."""
 
-    address: str
-    port: int | None
+    host: HostnameType
+    port: int
+
+    def resolve(self) -> tuple[socket.AddressFamily, tuple[Any, ...]]:
+        """Resolve given hostname to an IP family (IPv4 or IPv6; 4 preferred),
+        and address to connect to."""
+        hostname: HostnameType = self.host
+        if ("[", "]") == (hostname[:1], hostname[-1:]) and ":" in hostname:
+            # IPv6 hostname annotation
+            hostname = hostname[1:-1]
+
+        family: socket.AddressFamily = socket.AF_INET
+        socket_address: tuple[Any, ...] = ()
+        try:
+            # Prefer IPv4
+            socket_address = socket.getaddrinfo(
+                hostname, self.port, socket.AF_INET, socket.SO_TYPE, socket.IPPROTO_TCP
+            )[-1]
+        except socket.gaierror:
+            # Fall-back to IPv6
+            socket_address = socket.getaddrinfo(
+                hostname, self.port, socket.AF_INET6, socket.SO_TYPE, socket.IPPROTO_TCP
+            )[-1]
+            family = socket.AF_INET6
+
+        return family, socket_address
+
+    def __str__(self) -> str:
+        return f"{self.host}:{self.port}"
 
 
 @dataclass(frozen=True)
@@ -190,8 +224,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.services = services
         self.zconf = zconf
 
-        self.host = "unknown"
-        self.port = 8009
+        self.address = NetworkAddress("unknown", 8009)
 
         self.source_id = "sender-0"
         self.stop = threading.Event()
@@ -228,6 +261,16 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.register_handler(self.media_controller)
 
         self.receiver_controller.register_status_listener(self)
+
+    @property
+    def host(self) -> HostnameType:
+        """Client hostname."""
+        return self.address.host
+
+    @property
+    def port(self) -> int:
+        """Client port."""
+        return self.address.port
 
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches
         self,
@@ -284,28 +327,9 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
-                    if self.socket is not None:
-                        # If we retry connecting, we need to clean up the socket again
-                        self.selector.unregister(self.socket)
-                        self.socket.close()
-                        self.socket = None
-                        self.remote_selector_key = None
-
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
-                    self._report_connection_status(
-                        ConnectionStatus(
-                            CONNECTION_STATUS_CONNECTING,
-                            NetworkAddress(self.host, self.port),
-                            None,
-                        )
-                    )
                     # Resolve the service name.
-                    host = None
-                    port = None
+                    host: HostnameType | None = None
+                    port: int | None = None
                     host, port, service_info = get_host_from_service(
                         service, self.zconf
                     )
@@ -317,22 +341,20 @@ class SocketClient(threading.Thread, CastStatusListener):
                             except (AttributeError, KeyError, UnicodeError):
                                 pass
                         self.logger.debug(
-                            "[%s(%s):%s] Resolved service %s to %s:%s",
+                            "[%s(%s):%s] Resolved service %s to %s",
                             self.fn or "",
-                            self.host,
-                            self.port,
+                            self.address.host,
+                            self.address.port,
                             service,
-                            host,
-                            port,
+                            self.address,
                         )
-                        self.host = host
-                        self.port = port
+                        self.address = NetworkAddress(host, port)
                     else:
                         self.logger.debug(
                             "[%s(%s):%s] Failed to resolve service %s",
                             self.fn or "",
-                            self.host,
-                            self.port,
+                            self.address.host,
+                            self.address.port,
                             service,
                         )
                         self._report_connection_status(
@@ -347,15 +369,55 @@ class SocketClient(threading.Thread, CastStatusListener):
                         # try next service
                         continue
 
-                    self.logger.debug(
-                        "[%s(%s):%s] Connecting to %s:%s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        self.host,
-                        self.port,
+                    if self.socket is not None:
+                        # If we retry connecting, we need to clean up the socket again
+                        self.selector.unregister(self.socket)
+                        self.socket.close()
+                        self.socket = None
+                        self.remote_selector_key = None
+
+                    try:
+                        family, socket_address = self.address.resolve()
+                    except socket.gaierror:
+                        self.logger.debug(
+                            "[%s(%s):%s] Failed to resolve service %s to IP",
+                            self.fn or "",
+                            self.address.host,
+                            self.address.port,
+                            service,
+                        )
+                        self._report_connection_status(
+                            ConnectionStatus(
+                                CONNECTION_STATUS_FAILED_RESOLVE,
+                                None,
+                                service,
+                            )
+                        )
+                        mdns_backoff(service, retry)
+                        # If zeroconf fails to receive the necessary data,
+                        # try next service
+                        continue
+
+                    self.socket = new_socket(family)
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
                     )
-                    self.socket.connect((self.host, self.port))
+                    self.socket.settimeout(self.timeout)
+                    self._report_connection_status(
+                        ConnectionStatus(
+                            CONNECTION_STATUS_CONNECTING,
+                            self.address,
+                            None,
+                        )
+                    )
+                    self.logger.debug(
+                        "[%s(%s):%s] Connecting to %s",
+                        self.fn or "",
+                        self.address.host,
+                        self.address.port,
+                        self.address,
+                    )
+                    self.socket.connect(socket_address)
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
@@ -365,7 +427,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTED,
-                            NetworkAddress(self.host, self.port),
+                            self.address,
                             None,
                         )
                     )
@@ -378,15 +440,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.logger.debug(
                             "[%s(%s):%s] Connected!",
                             self.fn or "",
-                            self.host,
-                            self.port,
+                            self.address.host,
+                            self.address.port,
                         )
                     else:
                         self.logger.info(
                             "[%s(%s):%s] Connection reestablished!",
                             self.fn or "",
-                            self.host,
-                            self.port,
+                            self.address.host,
+                            self.address.port,
                         )
                     return
 
@@ -399,8 +461,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.logger.error(
                             "[%s(%s):%s] Failed to connect: %s. aborting due to stop signal.",
                             self.fn or "",
-                            self.host,
-                            self.port,
+                            self.address.host,
+                            self.address.port,
                             err,
                         )
                         raise ChromecastConnectionError("Failed to connect") from err
@@ -408,15 +470,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_FAILED,
-                            NetworkAddress(self.host, self.port),
+                            self.address,
                             None,
                         )
                     )
                     retry_log_fun(
                         "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
                         self.fn or "",
-                        self.host,
-                        self.port,
+                        self.address.host,
+                        self.address.port,
                         service,
                         retry["delay"],
                     )
@@ -428,8 +490,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug(
                     "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     self.retry_wait,
                     self.services,
                 )
@@ -442,8 +504,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.error(
             "[%s(%s):%s] Failed to connect. No retries.",
             self.fn or "",
-            self.host,
-            self.port,
+            self.address.host,
+            self.address.port,
         )
         raise ChromecastConnectionError("Failed to connect")
 
@@ -534,7 +596,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._report_connection_status(
                 ConnectionStatus(
                     CONNECTION_STATUS_DISCONNECTED,
-                    NetworkAddress(self.host, self.port),
+                    self.address,
                     None,
                 )
             )
@@ -551,8 +613,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.exception(
                     "[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                 )
 
         self.logger.debug("Thread done...")
@@ -583,8 +645,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.error(
                 "[%s(%s):%s] Error in select call: %s",
                 self.fn or "",
-                self.host,
-                self.port,
+                self.address.host,
+                self.address.port,
                 exc,
             )
             self._force_recon = True
@@ -601,15 +663,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.logger.info(
                         "[%s(%s):%s] Stopped while reading message, disconnecting.",
                         self.fn or "",
-                        self.host,
-                        self.port,
+                        self.address.host,
+                        self.address.port,
                     )
                 else:
                     self.logger.error(
                         "[%s(%s):%s] Interruption caught without being stopped: %s",
                         self.fn or "",
-                        self.host,
-                        self.port,
+                        self.address.host,
+                        self.address.port,
                         exc,
                     )
                 return 1
@@ -623,8 +685,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug(
                     "[%s(%s):%s] %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     exc,
                 )
             except socket.error as exc:
@@ -632,8 +694,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.error(
                     "[%s(%s):%s] Error reading from socket: %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     exc,
                 )
 
@@ -671,8 +733,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.debug(
                 "[%s(%s):%s] Forced reconnection",
                 self.fn or "",
-                self.host,
-                self.port,
+                self.address.host,
+                self.address.port,
             )
             reset = True
 
@@ -680,8 +742,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.info(
                 "[%s(%s):%s] Heartbeat timeout, resetting connection",
                 self.fn or "",
-                self.host,
-                self.port,
+                self.address.host,
+                self.address.port,
             )
             reset = True
 
@@ -690,9 +752,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             for channel in self._open_channels:
                 self.disconnect_channel(channel)
             self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
-                )
+                ConnectionStatus(CONNECTION_STATUS_LOST, self.address, None)
             )
             try:
                 self.initialize_connection()
@@ -713,8 +773,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug(
                     "[%s(%s):%s] Received: %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     _message_to_string(message, data),
                 )
 
@@ -728,8 +788,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                             self.logger.debug(
                                 "[%s(%s):%s] Message unhandled: %s",
                                 self.fn or "",
-                                self.host,
-                                self.port,
+                                self.address.host,
+                                self.address.port,
                                 _message_to_string(message, data),
                             )
                 except Exception:  # pylint: disable=broad-except
@@ -739,8 +799,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                             "controller %s: %s"
                         ),
                         self.fn or "",
-                        self.host,
-                        self.port,
+                        self.address.host,
+                        self.address.port,
                         type(handler).__name__,
                         _message_to_string(message, data),
                     )
@@ -749,8 +809,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.debug(
                 "[%s(%s):%s] Received unknown namespace: %s",
                 self.fn or "",
-                self.host,
-                self.port,
+                self.address.host,
+                self.address.port,
                 _message_to_string(message, data),
             )
 
@@ -774,12 +834,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.socket.close()
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    "[%s(%s):%s] _cleanup", self.fn or "", self.host, self.port
+                    "[%s(%s):%s] _cleanup",
+                    self.fn or "",
+                    self.address.host,
+                    self.address.port,
                 )
         self._report_connection_status(
             ConnectionStatus(
                 CONNECTION_STATUS_DISCONNECTED,
-                NetworkAddress(self.host, self.port),
+                self.address,
                 None,
             )
         )
@@ -797,8 +860,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug(
                     "[%s(%s):%s] connection listener: %x (%s) %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     id(listener),
                     type(listener).__name__,
                     status,
@@ -808,8 +871,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.exception(
                     "[%s(%s):%s] Exception thrown when calling connection listener",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                 )
 
     def _read_bytes_from_socket(self, msglen: int) -> bytes:
@@ -832,8 +895,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug(
                     "[%s(%s):%s] timeout in : _read_bytes_from_socket",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                 )
                 continue
         return b"".join(chunks)
@@ -900,8 +963,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.debug(
                 "[%s(%s):%s] Sending: %s",
                 self.fn or "",
-                self.host,
-                self.port,
+                self.address.host,
+                self.address.port,
                 _message_to_string(msg, data),
             )
 
@@ -929,14 +992,14 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.warning(
                     "[%s(%s):%s] Error writing to socket: %s",
                     self.fn or "",
-                    self.host,
-                    self.port,
+                    self.address.host,
+                    self.address.port,
                     exc,
                 )
         else:
             if callback_function:
                 callback_function(False, None)
-            raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
+            raise NotConnected(f"Chromecast {self.address} is connecting...")
 
     def send_platform_message(
         self,
@@ -1036,7 +1099,10 @@ class SocketClient(threading.Thread, CastStatusListener):
                 pass
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    "[%s(%s):%s] Exception", self.fn or "", self.host, self.port
+                    "[%s(%s):%s] Exception",
+                    self.fn or "",
+                    self.address.host,
+                    self.address.port,
                 )
 
             self._open_channels.remove(destination_id)
@@ -1085,14 +1151,14 @@ class ConnectionController(BaseController):
         return False
 
 
-def new_socket() -> socket.socket:
+def new_socket(family: socket.AddressFamily) -> socket.socket:
     """
     Create a new socket with OS-specific parameters
 
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_sock = socket.socket(family, socket.SOCK_STREAM)
     new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:

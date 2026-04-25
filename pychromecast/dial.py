@@ -16,7 +16,7 @@ from typing import Any
 
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
+from .const import HostnameType, CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .error import ZeroConfInstanceRequired
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def get_host_from_service(
     service: HostServiceInfo | MDNSServiceInfo, zconf: zeroconf.Zeroconf | None
-) -> tuple[str | None, int | None, zeroconf.ServiceInfo | None]:
+) -> tuple[HostnameType | None, int | None, zeroconf.ServiceInfo | None]:
     """Resolve host and port from service."""
     service_info = None
 
@@ -67,7 +67,10 @@ def _get_host_from_zc_service_info(
     port = None
     if service_info and service_info.port:
         if len(service_info.addresses) > 0:
-            host = socket.inet_ntoa(service_info.addresses[0])
+            if len(service_info.addresses[0]) == 8:
+                host = socket.inet_ntoa(service_info.addresses[0])
+            elif len(service_info.addresses[0]) == 16:
+                host = socket.inet_ntop(socket.AF_INET6, service_info.addresses[0])
         elif service_info.server is not None:
             host = service_info.server.lower()
         if host is not None:
@@ -148,7 +151,7 @@ def get_cast_type(
         cast_type = CAST_TYPE_GROUP
         manufacturer = "Google Inc."
     else:
-        host: str | None = "<unknown>"
+        host: HostnameType | None = "<unknown>"
         try:
             display_supported = True
             host, status = _get_status(
@@ -197,7 +200,7 @@ def get_cast_type(
 
 
 def get_device_info(  # pylint: disable=too-many-locals
-    host: str,
+    host: HostnameType,
     services: set[HostServiceInfo | MDNSServiceInfo] | None = None,
     zconf: zeroconf.Zeroconf | None = None,
     timeout: float = 30,
@@ -271,7 +274,7 @@ def get_device_info(  # pylint: disable=too-many-locals
         return None
 
 
-def _get_group_info(host: str, group: Any) -> MultizoneInfo:
+def _get_group_info(host: HostnameType, group: Any) -> MultizoneInfo:
     """Parse group JSON data and return a MultizoneInfo instance."""
     name = group.get("name", "Unknown group name")
     udn = group.get("uuid", None)
@@ -294,7 +297,7 @@ def _get_group_info(host: str, group: Any) -> MultizoneInfo:
 
 
 def get_multizone_status(
-    host: str,
+    host: HostnameType,
     services: set[HostServiceInfo | MDNSServiceInfo] | None = None,
     zconf: zeroconf.Zeroconf | None = None,
     timeout: float = 30,
@@ -339,7 +342,7 @@ class MultizoneInfo:
 
     friendly_name: str
     uuid: UUID | None
-    host: str | None
+    host: HostnameType | None
     port: int | None
 
 
