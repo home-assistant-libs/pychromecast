@@ -123,26 +123,30 @@ class NetworkAddress:
     host: HostnameType
     port: int
 
-    def resolve(self) -> tuple[socket.AddressFamily, tuple[Any, ...]]:
-        """Resolve given hostname to an IP family (IPv4 or IPv6; 4 preferred),
-        and address to connect to."""
+    def get_socket_address(self):
+        # Clean up hostname annotation. Older Linux kernels don't like getaddrinfo with the IPv6 square bracket format.
         hostname: HostnameType = self.host
         if ("[", "]") == (hostname[:1], hostname[-1:]) and ":" in hostname:
             # IPv6 hostname annotation
             hostname = hostname[1:-1]
+        return (hostname, self.port)
 
+    def resolve(self) -> tuple[socket.AddressFamily, tuple[HostnameType, int]]:
+        """Resolve given hostname to an IP family (IPv4 or IPv6; 4 preferred),
+        and address to connect to."""
         family: socket.AddressFamily = socket.AF_INET
-        socket_address: tuple[Any, ...] = ()
+        socket_address = self.get_socket_address()
+
         try:
             # Prefer IPv4
-            socket_address = socket.getaddrinfo(
-                hostname, self.port, socket.AF_INET, socket.SO_TYPE, socket.IPPROTO_TCP
-            )[-1]
+            socket.getaddrinfo(
+                *socket_address,
+                family=socket.AF_INET,
+                type=socket.SOCK_STREAM,
+                proto=socket.IPPROTO_TCP,
+            )
         except socket.gaierror:
-            # Fall-back to IPv6
-            socket_address = socket.getaddrinfo(
-                hostname, self.port, socket.AF_INET6, socket.SO_TYPE, socket.IPPROTO_TCP
-            )[-1]
+            # Fall-back to IPv6.
             family = socket.AF_INET6
 
         return family, socket_address
@@ -378,6 +382,15 @@ class SocketClient(threading.Thread, CastStatusListener):
 
                     try:
                         family, socket_address = self.address.resolve()
+                        self.logger.debug(
+                            "[%s(%s):%s] Resolved service %s to IPv%d, %s",
+                            self.fn or "",
+                            self.address.host,
+                            self.address.port,
+                            service,
+                            4 if family == socket.AF_INET else 6,
+                            socket_address[0],
+                        )
                     except socket.gaierror:
                         self.logger.debug(
                             "[%s(%s):%s] Failed to resolve service %s to IP",
