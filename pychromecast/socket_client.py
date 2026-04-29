@@ -1086,14 +1086,14 @@ class ConnectionController(BaseController):
         return False
 
 
-def configure_socket(_socket: socket.socket) -> None:
+def configure_socket(socket_: socket.socket) -> None:
     """
     Configure a socket with OS-specific parameters
 
     Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
     Catches errors if not.
     """
-    _socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    socket_.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
         # noinspection PyUnresolvedReferences
@@ -1102,7 +1102,7 @@ def configure_socket(_socket: socket.socket) -> None:
         pass
     else:
         try:
-            _socket.setsockopt(socket.SOL_SOCKET, reuseport, 1)
+            socket_.setsockopt(socket.SOL_SOCKET, reuseport, 1)
         except (OSError, socket.error) as err:
             # OSError on python 3, socket.error on python 2
             if err.errno != errno.ENOPROTOOPT:
