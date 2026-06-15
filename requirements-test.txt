@@ -1,4 +1,4 @@
-beautifulsoup4==4.14.3
+beautifulsoup4==4.15.0
 ruff==0.15.17
 mypy==2.1.0
 PlexAPI==4.17.2
