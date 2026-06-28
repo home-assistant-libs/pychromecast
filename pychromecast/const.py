@@ -46,6 +46,8 @@ CAST_TYPES = {
     "google nest mini": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "nest audio": (CAST_TYPE_AUDIO, MF_GOOGLE),
     "nest wifi point": (CAST_TYPE_AUDIO, MF_GOOGLE),
+    "bravia 4k gb": (CAST_TYPE_CHROMECAST, MF_SONY),
+    "bravia 4k gb atv3": (CAST_TYPE_CHROMECAST, MF_SONY),
     "bravia 4k vh2": (CAST_TYPE_CHROMECAST, MF_SONY),
     "bravia 4k vh21": (CAST_TYPE_CHROMECAST, MF_SONY),
     "bose smart ultra soundbar": (CAST_TYPE_AUDIO, MF_BOSE),
