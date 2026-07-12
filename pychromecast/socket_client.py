@@ -243,7 +243,15 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         # Make sure nobody is blocking.
         for callback_function in self._request_callbacks.values():
-            callback_function(False, None)
+            try:
+                callback_function(False, None)
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    "[%s(%s):%s] Unhandled exception in callback function",
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
 
         self.app_namespaces = []
         self.destination_id = None
