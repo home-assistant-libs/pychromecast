@@ -33,6 +33,9 @@ classifiers=[
 [tool.ruff]
 exclude = ['*_pb2.*']
 
+[tool.ruff.lint]
+ignore = ["BLE001", "I001", "RUF015", "RUF022", "RUF100", "S110", "SIM102", "SIM103", "TRY004", "UP017", "UP024"]
+
 [tool.rstcheck]
 # README.rst has embedded python examples which show the interactive interpreter output
 # that's not valid Python, so we disable the check
