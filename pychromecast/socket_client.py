@@ -67,6 +67,12 @@ SELECT_TIMEOUT = 5.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
+# Errors reported when a Cast device closes or resets its connection. Devices
+# commonly do this as part of their regular restart cycle.
+EXPECTED_DISCONNECT_ERRNOS = frozenset(
+    (errno.ECONNABORTED, errno.ECONNRESET, errno.ENOTCONN, errno.EPIPE)
+)
+
 
 class InterruptLoop(Exception):
     """The chromecast has been manually stopped."""
@@ -622,10 +628,17 @@ class SocketClient(threading.Thread, CastStatusListener):
                     )
                 return 1
             except ssl.SSLError as exc:
-                if exc.errno == ssl.SSL_ERROR_EOF:
-                    if self.stop.is_set():
-                        return 1
-                raise
+                if exc.errno != ssl.SSL_ERROR_EOF:
+                    raise
+                if self.stop.is_set():
+                    return 1
+                self._force_recon = True
+                self.logger.debug(
+                    "[%s(%s):%s] TLS connection was closed by remote",
+                    self.fn or "",
+                    self.host,
+                    self.port,
+                )
             except ChromecastConnectionClosed as exc:
                 self._force_recon = True
                 self.logger.debug(
@@ -637,7 +650,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                 )
             except socket.error as exc:
                 self._force_recon = True
-                self.logger.error(
+                log = (
+                    self.logger.debug
+                    if exc.errno in EXPECTED_DISCONNECT_ERRNOS
+                    else self.logger.error
+                )
+                log(
                     "[%s(%s):%s] Error reading from socket: %s",
                     self.fn or "",
                     self.host,
