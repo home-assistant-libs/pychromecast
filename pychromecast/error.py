@@ -60,5 +60,9 @@ class RequestTimeout(PyChromecastError):
         super().__init__(self.MSG.format(request=request, timeout=timeout))
 
 
+class ResolveHostFailed(PyChromecastError):
+    """Raised when library is unable to resolve a name into an connectable address."""
+
+
 class ZeroConfInstanceRequired(PyChromecastError):
     """Raised when a zeroconf instance is required."""
