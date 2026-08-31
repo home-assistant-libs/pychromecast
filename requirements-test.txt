@@ -1,6 +1,6 @@
 beautifulsoup4==4.15.0
 ruff==0.16.3
-mypy==2.3.0
+mypy==2.3.1
 PlexAPI==4.17.2
 pylint==4.0.7
 rstcheck==6.3.0
