@@ -644,7 +644,7 @@ class CastBrowser:
 class CastListener(CastBrowser):
     """Backwards compatible helper class.
 
-    Deprecated as of February 2021, will be removed in June 2024.
+    Deprecated as of February 2021, will be removed in June 2027.
     """
 
     def __init__(
@@ -654,7 +654,7 @@ class CastListener(CastBrowser):
         update_callback: Callable[[UUID, str], None] | None = None,
     ):
         _LOGGER.info(
-            "CastListener is deprecated and will be removed in June 2024, update to use CastBrowser instead"
+            "CastListener is deprecated and will be removed in June 2027, update to use CastBrowser instead"
         )
         listener = SimpleCastListener(add_callback, remove_callback, update_callback)
         super().__init__(listener)
@@ -665,10 +665,10 @@ def start_discovery(
 ) -> CastBrowser:
     """Start discovering chromecasts on the network.
 
-    Deprecated as of February 2021, will be removed in June 2024.
+    Deprecated as of February 2021, will be removed in June 2027.
     """
     _LOGGER.info(
-        "start_discovery is deprecated and will be removed in June 2024, call CastBrowser.start_discovery() instead"
+        "start_discovery is deprecated and will be removed in June 2027, call CastBrowser.start_discovery() instead"
     )
     cast_browser.set_zeroconf_instance(zeroconf_instance)
     cast_browser.start_discovery()
@@ -678,10 +678,10 @@ def start_discovery(
 def stop_discovery(cast_browser: CastBrowser) -> None:
     """Stop the chromecast discovery threads.
 
-    Deprecated as of February 2021, will be removed in June 2024.
+    Deprecated as of February 2021, will be removed in June 2027.
     """
     _LOGGER.info(
-        "stop_discovery is deprecated and will be removed in June 2024, call CastBrowser.stop_discovery() instead"
+        "stop_discovery is deprecated and will be removed in June 2027, call CastBrowser.stop_discovery() instead"
     )
     cast_browser.stop_discovery()
 
@@ -695,7 +695,7 @@ def discover_chromecasts(
     """
     Discover chromecasts on the network.
 
-    Deprecated as of February 2021, will be removed in June 2024.
+    Deprecated as of February 2021, will be removed in June 2027.
 
 
     Returns a tuple of:
@@ -707,7 +707,7 @@ def discover_chromecasts(
     """
 
     _LOGGER.info(
-        "discover_chromecasts is deprecated and will be removed in June 2024, update to use CastBrowser instead."
+        "discover_chromecasts is deprecated and will be removed in June 2027, update to use CastBrowser instead."
     )
 
     def add_callback(_uuid: UUID, _service: str) -> None:
