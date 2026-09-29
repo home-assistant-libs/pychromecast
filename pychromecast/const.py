@@ -57,6 +57,7 @@ CAST_TYPES = {
     "jbl link 300": (CAST_TYPE_AUDIO, MF_JBL),
     "jbl link 500": (CAST_TYPE_AUDIO, MF_JBL),
     "jbl link portable": (CAST_TYPE_AUDIO, MF_HARMAN),
+    "jbl playlist": (CAST_TYPE_AUDIO, MF_JBL),
     "lenovocd-24502f": (CAST_TYPE_AUDIO, MF_LENOVO),
     "lenovo smart display 7": (CAST_TYPE_CHROMECAST, MF_LENOVO),
     "lenovo smart display 10": (CAST_TYPE_CHROMECAST, MF_LENOVO),
