@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from http import HTTPStatus
 import json
 import logging
-import socket
 import ssl
 import urllib.request
+import urllib.error
+from urllib.parse import unquote, quote, urlparse
 from uuid import UUID
 from typing import Any
 
@@ -56,28 +57,26 @@ def get_host_from_service(
         # We do not catch zeroconf.NotRunningException as it's
         # an unrecoverable error.
         _LOGGER.debug("get_info_from_service raised:", exc_info=True)
-    return _get_host_from_zc_service_info(service_info) + (service_info,)
+    return get_host_from_zc_service_info(service_info) + (service_info,)
 
 
-def _get_host_from_zc_service_info(
+def get_host_from_zc_service_info(
     service_info: zeroconf.ServiceInfo | None,
 ) -> tuple[str | None, int | None]:
     """Get hostname or IP + port from zeroconf service_info."""
-    host = None
-    port = None
-    if service_info and service_info.port:
-        if len(service_info.addresses) > 0:
-            host = socket.inet_ntoa(service_info.addresses[0])
-        elif service_info.server is not None:
-            host = service_info.server.lower()
-        if host is not None:
-            port = service_info.port
-    return (host, port)
+    if not service_info or not service_info.port:
+        return None, None
+
+    addresses = service_info.parsed_scoped_addresses()
+    if not addresses:
+        return None, None
+
+    return addresses[0], service_info.port
 
 
 def _urlopen(url: str, timeout: float, context: ssl.SSLContext | None) -> Any:
     """Help open an URL."""
-    headers = {"content-type": "application/json"}
+    headers = {"content-type": "application/json", "host": _url_host_header(url)}
     try:
         req = urllib.request.Request(url, headers=headers)
         return urllib.request.urlopen(req, timeout=timeout, context=context)
@@ -97,6 +96,39 @@ def _urlopen(url: str, timeout: float, context: ssl.SSLContext | None) -> Any:
         return urllib.request.urlopen(req, timeout=timeout, context=context)
 
 
+def _url_encode_hostname(host: str) -> str:
+    """Ensure hostname is url safe."""
+    # any zone identifier must be encoded
+    host = host.replace("%", quote("%"))
+
+    # make sure ipv6 ip address is enclosed
+    if host.find(":") >= 0:
+        host = f"[{host}]"
+    return host
+
+
+def _url_decode_hostname(host: str) -> str:
+    """Extract unquoted value from hostname."""
+    host = host.removeprefix("[").removesuffix("]")
+    return unquote(host)
+
+
+def _url_host_header(url: str) -> str:
+    """Construct host header from url
+
+    This is needed since urllib.request will mis-construct urls
+    that contain ipv6 addresses with zone identifiers and retain
+    the scope.
+    """
+    parsed = urlparse(url)
+    hostname = _url_decode_hostname(parsed.hostname or "")
+    hostname, _, _ = hostname.partition("%")
+    hostname = _url_encode_hostname(hostname)
+    if parsed.port in (80, 443, None):
+        return hostname
+    return f"{hostname}:{parsed.port}"
+
+
 def _get_status(
     services: set[HostServiceInfo | MDNSServiceInfo],
     zconf: zeroconf.Zeroconf | None,
@@ -107,16 +139,23 @@ def _get_status(
 ) -> tuple[str | None, Any]:
     """Query a cast device via http(s)."""
 
+    host = None
     for service in services.copy():
         host, _, _ = get_host_from_service(service, zconf)
         if host:
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
 
+    if not host:
+        # raise same as the url open would raise on invalid host
+        raise urllib.error.URLError(f"Unable to resolve host for services {services}")
+
+    host_encoded = _url_encode_hostname(host)
+
     if secure:
-        url = FORMAT_BASE_URL_HTTPS.format(host) + path
+        url = FORMAT_BASE_URL_HTTPS.format(host_encoded) + path
     else:
-        url = FORMAT_BASE_URL_HTTP.format(host) + path
+        url = FORMAT_BASE_URL_HTTP.format(host_encoded) + path
 
     has_context = bool(context)
     if secure and not has_context:
@@ -288,7 +327,7 @@ def _get_group_info(host: str, group: Any) -> MultizoneInfo:
         leader_port = group["cast_port"]
     elif len(elected_leader_split) == 2:
         # The port in the URL is not useful, but we can scan the host
-        leader_host = elected_leader_split[0]
+        leader_host = _url_decode_hostname(elected_leader_split[0])
 
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 
