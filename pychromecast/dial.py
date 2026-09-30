@@ -148,17 +148,27 @@ def get_cast_type(
         cast_type = CAST_TYPE_GROUP
         manufacturer = "Google Inc."
     else:
-        host: str | None = "<unknown>"
         try:
             display_supported = True
-            host, status = _get_status(
-                cast_info.services,
-                zconf,
-                "/setup/eureka_info?params=device_info,name",
-                True,
-                timeout,
-                context,
-            )
+            # Try connection with SSL first, and if it fails fall back to non-SSL
+            try:
+                _, status = _get_status(
+                    cast_info.services,
+                    zconf,
+                    "/setup/eureka_info?params=device_info,name",
+                    True,
+                    timeout / 2,
+                    context,
+                )
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                _, status = _get_status(
+                    cast_info.services,
+                    zconf,
+                    "/setup/eureka_info?params=device_info,name",
+                    False,
+                    timeout / 2,
+                    context,
+                )
             if "device_info" in status:
                 device_info = status["device_info"]
 
@@ -178,7 +188,7 @@ def get_cast_type(
         ) as err:
             _LOGGER.warning(
                 "Failed to determine cast type for host %s (%s) (services:%s)",
-                host,
+                cast_info.host,
                 err,
                 cast_info.services,
             )
