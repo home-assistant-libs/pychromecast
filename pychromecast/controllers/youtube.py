@@ -6,6 +6,7 @@ Use the media controller to play, pause etc.
 import logging
 import threading
 from typing import Any, cast
+from urllib.parse import urlencode
 
 from casttube import YouTubeSession  # type: ignore[import-untyped]
 from casttube.YouTubeSession import HEADERS  # type: ignore[import-untyped]
@@ -57,7 +58,14 @@ class TimeoutYouTubeSession(YouTubeSession):  # type: ignore[misc]
         if headers:
             headers = {**HEADERS, **headers}
         else:
-            headers = HEADERS
+            headers = dict(HEADERS)
+
+        # Add Content-Length header for YouTube API compatibility
+        if data is not None and "Content-Length" not in headers:
+            if isinstance(data, dict):
+                encoded_data = urlencode(data)
+                headers["Content-Length"] = str(len(encoded_data))
+
         response = requests.post(
             url, headers=headers, data=data, params=params, timeout=self.__timeout
         )
