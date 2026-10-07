@@ -23,6 +23,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+          pip install -e .
       - name: Check formatting with ruff
         run: |
           ruff format examples pychromecast --check --diff
