@@ -705,7 +705,9 @@ def create_zeroconf(ip_version: IpVersion | None = None) -> zeroconf.Zeroconf:
 
     None means zeroconf's default.
     """
-    return zeroconf.Zeroconf(ip_version=ZEROCONF_IP_VERSIONS.get(ip_version))
+    return zeroconf.Zeroconf(
+        ip_version=ZEROCONF_IP_VERSIONS.get(ip_version, zeroconf.IPVersion.All)
+    )
 
 
 def discover_chromecasts(
