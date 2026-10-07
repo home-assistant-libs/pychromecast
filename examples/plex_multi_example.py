@@ -28,7 +28,13 @@ from plexapi.server import PlexServer  # type: ignore[import-untyped]
 import pychromecast
 from pychromecast.controllers.plex import PlexController
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+    get_ip_version,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -71,6 +77,7 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 parser.add_argument(
     "--url", help='URL of your Plex Server (default: "%(default)s").', default=PLEX_URL
 )
@@ -110,14 +117,22 @@ def start_item_info(_media: Any) -> None:
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
-    friendly_names=[args.cast], known_hosts=args.known_host
+    friendly_names=[args.cast],
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
+    ip_version=get_ip_version(args),
 )
 cast = next((cc for cc in chromecasts if cc.name == args.cast), None)
 
 if not cast:
     print(f"No chromecast with name '{args.cast}' found.")
     foundCasts = ", ".join(
-        [cc.name or "<unknown>" for cc in pychromecast.get_chromecasts()[0]]
+        [
+            cc.name or "<unknown>"
+            for cc in pychromecast.get_chromecasts(
+                zeroconf_instance=create_zeroconf(args), ip_version=get_ip_version(args)
+            )[0]
+        ]
     )
     print(f"Chromecasts found: {foundCasts}")
     sys.exit(1)

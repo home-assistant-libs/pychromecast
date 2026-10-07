@@ -41,7 +41,7 @@ from .error import (
 
 # pylint: disable-next=no-name-in-module
 from .generated.cast_channel_pb2 import CastMessage
-from .models import HostServiceInfo, MDNSServiceInfo
+from .models import HostServiceInfo, IpVersion, MDNSServiceInfo
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
 
@@ -160,6 +160,8 @@ class SocketClient(threading.Thread, CastStatusListener):
     :param zconf: A zeroconf instance, needed if a list of services is passed.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
+    :param ip_version: IP version to connect over, 4 or 6. None means any, with
+                       IPv4 preferred.
     """
 
     # pylint: disable-next=too-many-arguments
@@ -172,6 +174,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_wait: float | None,
         services: set[HostServiceInfo | MDNSServiceInfo],
         zconf: zeroconf.Zeroconf | None,
+        ip_version: IpVersion | None = None,
     ) -> None:
         super().__init__()
 
@@ -188,6 +191,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.retry_wait = retry_wait or RETRY_TIME
         self.services = services
         self.zconf = zconf
+        self.ip_version = ip_version
 
         self.host = "unknown"
         self.port = 8009
@@ -309,7 +313,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     host = None
                     port = None
                     host, port, service_info = get_host_from_service(
-                        service, self.zconf
+                        service, self.zconf, self.ip_version
                     )
                     if host and port:
                         if service_info:

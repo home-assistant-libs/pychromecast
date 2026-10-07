@@ -12,7 +12,13 @@ from time import sleep
 import pychromecast
 from pychromecast import quick_play
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+    get_ip_version,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -41,6 +47,7 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 parser.add_argument(
     "--url", help='Media url (default: "%(default)s")', default=MEDIA_URL
 )
@@ -52,7 +59,10 @@ args = parser.parse_args()
 configure_logging(args)
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
-    friendly_names=[args.cast], known_hosts=args.known_host
+    friendly_names=[args.cast],
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
+    ip_version=get_ip_version(args),
 )
 if not chromecasts:
     print(f'No chromecast with name "{args.cast}" discovered')

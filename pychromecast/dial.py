@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from http import HTTPStatus
+import ipaddress
 import json
 import logging
 import ssl
@@ -19,7 +20,13 @@ import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .error import ZeroConfInstanceRequired
-from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
+from .models import (
+    ZEROCONF_ERRORS,
+    CastInfo,
+    HostServiceInfo,
+    IpVersion,
+    MDNSServiceInfo,
+)
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -30,12 +37,20 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def get_host_from_service(
-    service: HostServiceInfo | MDNSServiceInfo, zconf: zeroconf.Zeroconf | None
+    service: HostServiceInfo | MDNSServiceInfo,
+    zconf: zeroconf.Zeroconf | None,
+    ip_version: IpVersion | None = None,
 ) -> tuple[str | None, int | None, zeroconf.ServiceInfo | None]:
-    """Resolve host and port from service."""
+    """Resolve host and port from service.
+
+    If ip_version is set, only addresses of that IP version are used. A
+    HostServiceInfo with a hostname is used as given.
+    """
     service_info = None
 
     if isinstance(service, HostServiceInfo):
+        if not _address_matches_ip_version(service.host, ip_version):
+            return (None, None, None)
         return (service.host, service.port, None)
 
     try:
@@ -57,21 +72,36 @@ def get_host_from_service(
         # We do not catch zeroconf.NotRunningException as it's
         # an unrecoverable error.
         _LOGGER.debug("get_info_from_service raised:", exc_info=True)
-    return get_host_from_zc_service_info(service_info) + (service_info,)
+    return get_host_from_zc_service_info(service_info, ip_version) + (service_info,)
 
 
 def get_host_from_zc_service_info(
     service_info: zeroconf.ServiceInfo | None,
+    ip_version: IpVersion | None = None,
 ) -> tuple[str | None, int | None]:
     """Get hostname or IP + port from zeroconf service_info."""
     if not service_info or not service_info.port:
         return None, None
 
-    addresses = service_info.parsed_scoped_addresses()
+    addresses = [
+        address
+        for address in service_info.parsed_scoped_addresses()
+        if _address_matches_ip_version(address, ip_version)
+    ]
     if not addresses:
         return None, None
 
     return addresses[0], service_info.port
+
+
+def _address_matches_ip_version(address: str, ip_version: IpVersion | None) -> bool:
+    """Check if address is of the given IP version, hostnames always match."""
+    if ip_version is None:
+        return True
+    try:
+        return ipaddress.ip_address(address).version == ip_version
+    except ValueError:
+        return True
 
 
 def _urlopen(url: str, timeout: float, context: ssl.SSLContext | None) -> Any:
@@ -136,12 +166,13 @@ def _get_status(
     secure: bool,
     timeout: float,
     context: ssl.SSLContext | None,
+    ip_version: IpVersion | None = None,
 ) -> tuple[str | None, Any]:
     """Query a cast device via http(s)."""
 
     host = None
     for service in services.copy():
-        host, _, _ = get_host_from_service(service, zconf)
+        host, _, _ = get_host_from_service(service, zconf, ip_version)
         if host:
             _LOGGER.debug("Resolved service %s to %s", service, host)
             break
@@ -179,6 +210,7 @@ def get_cast_type(
     zconf: zeroconf.Zeroconf | None = None,
     timeout: float = 30,
     context: ssl.SSLContext | None = None,
+    ip_version: IpVersion | None = None,
 ) -> CastInfo:
     """Add cast type and manufacturer to a CastInfo instance."""
     cast_type = CAST_TYPE_CHROMECAST
@@ -198,6 +230,7 @@ def get_cast_type(
                     True,
                     timeout / 2,
                     context,
+                    ip_version=ip_version,
                 )
             except (urllib.error.HTTPError, urllib.error.URLError):
                 _, status = _get_status(
@@ -207,6 +240,7 @@ def get_cast_type(
                     False,
                     timeout / 2,
                     context,
+                    ip_version=ip_version,
                 )
             if "device_info" in status:
                 device_info = status["device_info"]
@@ -251,6 +285,7 @@ def get_device_info(  # pylint: disable=too-many-locals
     zconf: zeroconf.Zeroconf | None = None,
     timeout: float = 30,
     context: ssl.SSLContext | None = None,
+    ip_version: IpVersion | None = None,
 ) -> DeviceStatus | None:
     """Return a filled in DeviceStatus object for the specified device."""
 
@@ -267,6 +302,7 @@ def get_device_info(  # pylint: disable=too-many-locals
                 True,
                 timeout / 2,
                 context,
+                ip_version=ip_version,
             )
         except (urllib.error.HTTPError, urllib.error.URLError):
             _, status = _get_status(
@@ -276,6 +312,7 @@ def get_device_info(  # pylint: disable=too-many-locals
                 False,
                 timeout / 2,
                 context,
+                ip_version=ip_version,
             )
 
         cast_type = CAST_TYPE_CHROMECAST
@@ -348,6 +385,7 @@ def get_multizone_status(
     zconf: zeroconf.Zeroconf | None = None,
     timeout: float = 30,
     context: ssl.SSLContext | None = None,
+    ip_version: IpVersion | None = None,
 ) -> MultizoneStatus | None:
     """Return a filled in MultizoneStatus object for the specified device."""
 
@@ -361,6 +399,7 @@ def get_multizone_status(
             True,
             timeout,
             context,
+            ip_version=ip_version,
         )
 
         dynamic_groups = []

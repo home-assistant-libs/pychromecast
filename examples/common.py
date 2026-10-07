@@ -5,6 +5,37 @@ import logging
 
 import zeroconf
 
+from pychromecast.models import IpVersion
+
+ZEROCONF_IP_VERSIONS = {
+    4: zeroconf.IPVersion.V4Only,
+    6: zeroconf.IPVersion.V6Only,
+}
+
+
+def add_network_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add arguments to control networking to the parser."""
+    parser.add_argument(
+        "--ip-version",
+        help="Only use this IP version for discovery and connections (default: any)",
+        type=int,
+        choices=(4, 6),
+        default=None,
+    )
+
+
+def create_zeroconf(args: argparse.Namespace) -> zeroconf.Zeroconf:
+    """Create a zeroconf instance according to command line arguments."""
+    return zeroconf.Zeroconf(
+        ip_version=ZEROCONF_IP_VERSIONS.get(args.ip_version, zeroconf.IPVersion.All)
+    )
+
+
+def get_ip_version(args: argparse.Namespace) -> IpVersion | None:
+    """Get the IP version to connect to cast devices over."""
+    ip_version: IpVersion | None = args.ip_version
+    return ip_version
+
 
 def add_log_arguments(parser: argparse.ArgumentParser) -> None:
     """Add arguments to control logging to the parser."""
