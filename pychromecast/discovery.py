@@ -15,10 +15,26 @@ from uuid import UUID
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, CAST_TYPES, MF_GOOGLE
-from .dial import get_device_info, get_multizone_status, get_ssl_context
-from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
+from .dial import (
+    get_device_info,
+    get_multizone_status,
+    get_ssl_context,
+    get_host_from_zc_service_info,
+)
+from .models import (
+    ZEROCONF_ERRORS,
+    CastInfo,
+    HostServiceInfo,
+    IpVersion,
+    MDNSServiceInfo,
+)
 
 DISCOVER_TIMEOUT = 5
+
+ZEROCONF_IP_VERSIONS: dict[IpVersion | None, zeroconf.IPVersion] = {
+    4: zeroconf.IPVersion.V4Only,
+    6: zeroconf.IPVersion.V6Only,
+}
 
 # Models matching this list will only be polled once by the HostBrowser
 HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
@@ -200,9 +216,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                 return value
             return value.decode("utf-8")
 
-        addresses = service.parsed_addresses()
-        host = addresses[0] if addresses else service.server
-
+        host, _ = get_host_from_zc_service_info(service)
         if host is None:
             _LOGGER.debug(
                 "_add_update_service failed to get host for %s, %s", typ, name
@@ -686,11 +700,22 @@ def stop_discovery(cast_browser: CastBrowser) -> None:
     cast_browser.stop_discovery()
 
 
+def create_zeroconf(ip_version: IpVersion | None = None) -> zeroconf.Zeroconf:
+    """Create a zeroconf instance doing mDNS over the given IP version.
+
+    None means zeroconf's default.
+    """
+    return zeroconf.Zeroconf(
+        ip_version=ZEROCONF_IP_VERSIONS.get(ip_version, zeroconf.IPVersion.All)
+    )
+
+
 def discover_chromecasts(
     max_devices: int | None = None,
     timeout: float = DISCOVER_TIMEOUT,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    ip_version: IpVersion | None = None,
 ) -> tuple[list[CastInfo], CastBrowser]:
     """
     Discover chromecasts on the network.
@@ -704,6 +729,8 @@ def discover_chromecasts(
       are (no longer) needed, call browser.stop_discovery().
 
     :param zeroconf_instance: An existing zeroconf instance.
+    :param ip_version: IP version mDNS runs over when no zeroconf_instance is
+                       given, 4 or 6. None means zeroconf's default.
     """
 
     _LOGGER.info(
@@ -716,7 +743,7 @@ def discover_chromecasts(
             discover_complete.set()
 
     discover_complete = threading.Event()
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf(ip_version)
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
@@ -732,6 +759,7 @@ def discover_listed_chromecasts(
     discovery_timeout: float = DISCOVER_TIMEOUT,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    ip_version: IpVersion | None = None,
 ) -> tuple[list[CastInfo], CastBrowser]:
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -748,6 +776,8 @@ def discover_listed_chromecasts(
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
     :param zeroconf_instance: An existing zeroconf instance.
+    :param ip_version: IP version mDNS runs over when no zeroconf_instance is
+                       given, 4 or 6. None means zeroconf's default.
     """
 
     cc_list: dict[UUID, CastInfo] = {}
@@ -767,7 +797,7 @@ def discover_listed_chromecasts(
 
     discover_complete = threading.Event()
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf(ip_version)
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
