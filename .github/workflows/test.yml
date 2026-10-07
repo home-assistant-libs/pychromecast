@@ -38,3 +38,6 @@ jobs:
       - name: Lint with rstcheck
         run: |
           rstcheck README.rst
+      - name: Test with pytest
+        run: |
+          pytest
