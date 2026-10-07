@@ -22,6 +22,7 @@ from .discovery import (  # noqa: F401
     CastBrowser,
     CastListener,  # Deprecated
     SimpleCastListener,
+    create_zeroconf,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
@@ -132,7 +133,8 @@ def get_listed_chromecasts(
                                devices matching the criteria have been found.
     :param zeroconf_instance: An existing zeroconf instance.
     :param ip_version: IP version to connect over, 4 or 6. None means any, with
-                       IPv4 preferred.
+                       IPv4 preferred. Also sets the IP version mDNS runs over
+                       when no zeroconf_instance is given.
     """
 
     cc_list: dict[UUID, Chromecast] = {}
@@ -169,7 +171,7 @@ def get_listed_chromecasts(
 
     discover_complete = Event()
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf(ip_version)
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
@@ -245,12 +247,15 @@ def get_chromecasts(  # pylint: disable=too-many-locals
                      blocking = False.
     :param zeroconf_instance: An existing zeroconf instance.
     :param ip_version: IP version to connect over, 4 or 6. None means any, with
-                       IPv4 preferred.
+                       IPv4 preferred. Also sets the IP version mDNS runs over
+                       when no zeroconf_instance is given.
     """
     if blocking:
         # Thread blocking chromecast discovery
         devices, browser = discover_chromecasts(
-            zeroconf_instance=zeroconf_instance, known_hosts=known_hosts
+            zeroconf_instance=zeroconf_instance,
+            known_hosts=known_hosts,
+            ip_version=ip_version,
         )
         cc_list: list[Chromecast] = []
         for device in devices:
@@ -296,7 +301,7 @@ def get_chromecasts(  # pylint: disable=too-many-locals
         except ChromecastConnectionError:  # noqa: F405
             pass
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf(ip_version)
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
     return browser

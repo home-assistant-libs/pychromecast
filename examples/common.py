@@ -5,12 +5,8 @@ import logging
 
 import zeroconf
 
+from pychromecast.discovery import ZEROCONF_IP_VERSIONS
 from pychromecast.models import IpVersion
-
-ZEROCONF_IP_VERSIONS = {
-    4: zeroconf.IPVersion.V4Only,
-    6: zeroconf.IPVersion.V6Only,
-}
 
 
 def add_network_arguments(parser: argparse.ArgumentParser) -> None:
