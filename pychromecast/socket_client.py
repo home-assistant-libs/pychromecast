@@ -554,9 +554,9 @@ class SocketClient(threading.Thread, CastStatusListener):
             try:
                 if self._run_once() == 1:
                     break
-            except Exception as err:  # pylint: disable=broad-except
-                if isinstance(err, PyChromecastStopped) and self.stop.is_set():
-                    break
+            except PyChromecastStopped:
+                break
+            except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
                 self.logger.exception(
                     "[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect",

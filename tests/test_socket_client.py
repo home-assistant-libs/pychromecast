@@ -33,8 +33,8 @@ def test_stopped_during_worker_does_not_log_exception() -> None:
     client._cleanup.assert_called_once()
 
 
-def test_stopped_exception_without_shutdown_is_logged() -> None:
-    """An unexpected stopped exception must retain normal error handling."""
+def test_stopped_exception_exits_worker() -> None:
+    """A stopped socket client exits the worker loop cleanly."""
     client = object.__new__(SocketClient)
 
     client.fn = "Test Chromecast"
@@ -42,7 +42,7 @@ def test_stopped_exception_without_shutdown_is_logged() -> None:
     client.port = 8009
 
     client.stop = Mock()
-    client.stop.is_set.side_effect = [False, False, True]
+    client.stop.is_set.side_effect = [False, False]
     client._run_once = Mock(
         side_effect=PyChromecastStopped("Socket client's thread is stopped.")
     )
@@ -55,6 +55,6 @@ def test_stopped_exception_without_shutdown_is_logged() -> None:
     client.run()
 
     client._run_once.assert_called_once()
-    client.logger.exception.assert_called_once()
-    assert client._force_recon is True
+    client.logger.exception.assert_not_called()
+    assert client._force_recon is False
     client._cleanup.assert_called_once()
