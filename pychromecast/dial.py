@@ -12,7 +12,7 @@ import logging
 import ssl
 import urllib.request
 import urllib.error
-from urllib.parse import unquote, quote, urlparse
+from urllib.parse import unquote, quote, urlsplit
 from uuid import UUID
 from typing import Any
 
@@ -137,12 +137,6 @@ def _url_encode_hostname(host: str) -> str:
     return host
 
 
-def _url_decode_hostname(host: str) -> str:
-    """Extract unquoted value from hostname."""
-    host = host.removeprefix("[").removesuffix("]")
-    return unquote(host)
-
-
 def _url_host_header(url: str) -> str:
     """Construct host header from url
 
@@ -150,9 +144,8 @@ def _url_host_header(url: str) -> str:
     that contain ipv6 addresses with zone identifiers and retain
     the scope.
     """
-    parsed = urlparse(url)
-    hostname = _url_decode_hostname(parsed.hostname or "")
-    hostname, _, _ = hostname.partition("%")
+    parsed = urlsplit(url)
+    hostname, _, _ = (parsed.hostname or "").partition("%")
     hostname = _url_encode_hostname(hostname)
     if parsed.port in (80, 443, None):
         return hostname
@@ -365,16 +358,15 @@ def _get_group_info(host: str, group: Any) -> MultizoneInfo:
     if udn:
         uuid = UUID(udn.replace("-", ""))
     elected_leader = group.get("elected_leader", "")
-    elected_leader_split = elected_leader.rsplit(":", 1)
 
     leader_host = None
     leader_port = None
     if elected_leader == "self" and "cast_port" in group:
         leader_host = host
         leader_port = group["cast_port"]
-    elif len(elected_leader_split) == 2:
+    elif ":" in elected_leader:
         # The port in the URL is not useful, but we can scan the host
-        leader_host = _url_decode_hostname(elected_leader_split[0])
+        leader_host = unquote(urlsplit(f"//{elected_leader}").hostname or "") or None
 
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 

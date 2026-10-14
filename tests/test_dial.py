@@ -5,7 +5,7 @@ import urllib.request
 import pytest
 
 from pychromecast.dial import (
-    _url_decode_hostname,
+    _get_group_info,
     _url_encode_hostname,
     _url_host_header,
 )
@@ -27,9 +27,17 @@ def test_url_encode_hostname(hostname: str, encoded: str) -> None:
 
 
 @pytest.mark.parametrize(("hostname", "encoded"), HOSTNAMES)
-def test_url_decode_hostname(hostname: str, encoded: str) -> None:
-    """Test that brackets are removed and zone identifiers decoded."""
-    assert _url_decode_hostname(encoded) == hostname
+def test_get_group_info_elected_leader(hostname: str, encoded: str) -> None:
+    """Test that the leader host is extracted from the elected leader."""
+    group = {"elected_leader": f"{encoded}:8009"}
+    assert _get_group_info("10.0.0.1", group).host == hostname
+
+
+def test_get_group_info_elected_leader_self() -> None:
+    """Test that a self elected leader uses the host and cast port."""
+    group = {"elected_leader": "self", "cast_port": 32187}
+    info = _get_group_info("10.0.0.1", group)
+    assert (info.host, info.port) == ("10.0.0.1", 32187)
 
 
 @pytest.mark.parametrize(("hostname", "encoded"), HOSTNAMES)
