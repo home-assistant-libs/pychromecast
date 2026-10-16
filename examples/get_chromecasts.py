@@ -9,7 +9,13 @@ import sys
 
 import pychromecast
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+    get_ip_version,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -26,11 +32,16 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 args = parser.parse_args()
 
 configure_logging(args)
 
-casts, browser = pychromecast.get_chromecasts(known_hosts=args.known_host)
+casts, browser = pychromecast.get_chromecasts(
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
+    ip_version=get_ip_version(args),
+)
 # Shut down discovery as we don't care about updates
 browser.stop_discovery()
 if len(casts) == 0:

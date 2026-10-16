@@ -10,7 +10,6 @@ Without him this would not have been possible.
 from __future__ import annotations
 
 import abc
-import errno
 import json
 import logging
 import selectors
@@ -42,7 +41,7 @@ from .error import (
 
 # pylint: disable-next=no-name-in-module
 from .generated.cast_channel_pb2 import CastMessage
-from .models import HostServiceInfo, MDNSServiceInfo
+from .models import HostServiceInfo, IpVersion, MDNSServiceInfo
 
 NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
 
@@ -161,6 +160,8 @@ class SocketClient(threading.Thread, CastStatusListener):
     :param zconf: A zeroconf instance, needed if a list of services is passed.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
+    :param ip_version: IP version to connect over, 4 or 6. None means any, with
+                       IPv4 preferred.
     """
 
     # pylint: disable-next=too-many-arguments
@@ -173,6 +174,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_wait: float | None,
         services: set[HostServiceInfo | MDNSServiceInfo],
         zconf: zeroconf.Zeroconf | None,
+        ip_version: IpVersion | None = None,
     ) -> None:
         super().__init__()
 
@@ -189,6 +191,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.retry_wait = retry_wait or RETRY_TIME
         self.services = services
         self.zconf = zconf
+        self.ip_version = ip_version
 
         self.host = "unknown"
         self.port = 8009
@@ -299,11 +302,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -315,7 +313,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     host = None
                     port = None
                     host, port, service_info = get_host_from_service(
-                        service, self.zconf
+                        service, self.zconf, self.ip_version
                     )
                     if host and port:
                         if service_info:
@@ -363,7 +361,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.host,
                         self.port,
                     )
-                    self.socket.connect((self.host, self.port))
+                    self.socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
@@ -1091,29 +1094,3 @@ class ConnectionController(BaseController):
             return True
 
         return False
-
-
-def new_socket() -> socket.socket:
-    """
-    Create a new socket with OS-specific parameters
-
-    Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
-    Catches errors if not.
-    """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    try:
-        # noinspection PyUnresolvedReferences
-        reuseport = socket.SO_REUSEPORT
-    except AttributeError:
-        pass
-    else:
-        try:
-            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
-        except (OSError, socket.error) as err:
-            # OSError on python 3, socket.error on python 2
-            if err.errno != errno.ENOPROTOOPT:
-                raise
-
-    return new_sock
