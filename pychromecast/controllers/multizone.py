@@ -107,6 +107,7 @@ class Listener(
     ) -> None:
         """Initialize the listener."""
         self._casts = casts
+        self._group_cast = group_cast
         group_cast.register_status_listener(self)
         group_cast.media_controller.register_status_listener(self)
         group_cast.register_connection_listener(self)
@@ -154,8 +155,14 @@ class Listener(
         if group_uuid not in casts:
             casts[group_uuid] = {"listeners": [], "group_memberships": set()}
         casts[group_uuid]["group_memberships"].add(self._group_uuid)
+        # The member gets the group's status on changes, pass the current one
+        cast_status = self._group_cast.status
+        media_status = self._group_cast.media_controller.status
         for listener in list(casts[group_uuid]["listeners"]):
             listener.added_to_multizone(self._group_uuid)
+            if cast_status is not None:
+                listener.multizone_new_cast_status(self._group_uuid, cast_status)
+            listener.multizone_new_media_status(self._group_uuid, media_status)
 
     def multizone_member_removed(self, group_uuid: str) -> None:
         """Handle removed audio group member."""
