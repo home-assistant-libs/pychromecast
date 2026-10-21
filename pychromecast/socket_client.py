@@ -204,10 +204,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.connecting = True
         self.first_connection = True
         self.socket: socket.socket | ssl.SSLSocket | None = None
-        # Serializes reads and writes, an SSLSocket must not be used by the
-        # worker thread and senders concurrently. Also guards the state used
-        # when sending: request ids, request callbacks and open channels.
-        # Reentrant because opening a channel sends a message.
+        # Guards the socket, which isn't thread safe, and the sending state
         self._socket_lock = threading.RLock()
         # Received data not yet parsed into complete messages
         self._recv_buffer = b""
@@ -833,8 +830,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         assert self.socket is not None
 
         with self._socket_lock:
-            # Don't wait for a complete TLS record, the socket timeout is
-            # shared with senders but they hold the lock while sending
             self.socket.settimeout(0)
             try:
                 while True:
