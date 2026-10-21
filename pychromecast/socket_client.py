@@ -68,10 +68,6 @@ TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
 
-class InterruptLoop(Exception):
-    """The chromecast has been manually stopped."""
-
-
 def _dict_from_message_payload(message: CastMessage) -> dict:
     """Parses a PB2 message as a JSON dict."""
     try:
@@ -213,6 +209,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         # when sending: request ids, request callbacks and open channels.
         # Reentrant because opening a channel sends a message.
         self._socket_lock = threading.RLock()
+        # Received data not yet parsed into complete messages
+        self._recv_buffer = b""
         self.selector = selectors.DefaultSelector()
         self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
@@ -248,6 +246,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.remote_selector_key = None
 
             callbacks = list(self._request_callbacks.values())
+            self._recv_buffer = b""
             self._request_id = 0
             self._request_callbacks = {}
             self._open_channels = []
@@ -614,28 +613,11 @@ class SocketClient(threading.Thread, CastStatusListener):
             return 0
 
         can_read = {key for key, _ in ready}
-        # read message from chromecast
-        message = None
+        # read messages from chromecast
+        messages: list[CastMessage] = []
         if self.remote_selector_key in can_read and not self._force_recon:
             try:
-                message = self._read_message()
-            except InterruptLoop as exc:
-                if self.stop.is_set():
-                    self.logger.info(
-                        "[%s(%s):%s] Stopped while reading message, disconnecting.",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                    )
-                else:
-                    self.logger.error(
-                        "[%s(%s):%s] Interruption caught without being stopped: %s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        exc,
-                    )
-                return 1
+                messages = self._read_messages()
             except ssl.SSLError as exc:
                 if exc.errno == ssl.SSL_ERROR_EOF:
                     if self.stop.is_set():
@@ -664,23 +646,24 @@ class SocketClient(threading.Thread, CastStatusListener):
             # Clear the socket's buffer
             self.socketpair[0].recv(128)
 
-        # If we are stopped after receiving a message we skip the message
-        # and tear down the connection
+        for message in messages:
+            # If we are stopped after receiving a message we skip the message
+            # and tear down the connection
+            if self.stop.is_set():
+                return 1
+
+            # See if any handlers will accept this message
+            data = _dict_from_message_payload(message)
+            self._route_message(message, data)
+
+            # A sender may remove the callback concurrently if writing fails
+            if REQUEST_ID in data and (
+                callback_function := self._request_callbacks.pop(data[REQUEST_ID], None)
+            ):
+                callback_function(True, data)
+
         if self.stop.is_set():
             return 1
-
-        if not message:
-            return 0
-
-        # See if any handlers will accept this message
-        data = _dict_from_message_payload(message)
-        self._route_message(message, data)
-
-        # A sender may remove the callback concurrently if writing fails
-        if REQUEST_ID in data and (
-            callback_function := self._request_callbacks.pop(data[REQUEST_ID], None)
-        ):
-            callback_function(True, data)
 
         return 0
 
@@ -840,46 +823,45 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.port,
                 )
 
-    def _read_bytes_from_socket(self, msglen: int) -> bytes:
-        """Read bytes from the socket."""
+    def _read_messages(self) -> list[CastMessage]:
+        """Read the data available on the socket without waiting for more.
+
+        Returns the complete messages received, a partial message is kept until
+        the rest of it has been received.
+        """
         # It is a programming error if this is called when we don't have a socket
         assert self.socket is not None
 
-        chunks = []
-        bytes_recd = 0
-        while bytes_recd < msglen:
-            if self.stop.is_set():
-                raise InterruptLoop("Stopped while reading from socket")
+        with self._socket_lock:
+            # Don't wait for a complete TLS record, the socket timeout is
+            # shared with senders but they hold the lock while sending
+            self.socket.settimeout(0)
             try:
-                with self._socket_lock:
-                    chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
-                if chunk == b"":
-                    raise ChromecastConnectionClosed("Connection was closed by remote")
-                chunks.append(chunk)
-                bytes_recd += len(chunk)
-            except TimeoutError:
-                self.logger.debug(
-                    "[%s(%s):%s] timeout in : _read_bytes_from_socket",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                )
-                continue
-        return b"".join(chunks)
+                while True:
+                    try:
+                        chunk = self.socket.recv(65536)
+                    except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                        break
+                    if chunk == b"":
+                        raise ChromecastConnectionClosed(
+                            "Connection was closed by remote"
+                        )
+                    self._recv_buffer += chunk
+            finally:
+                self.socket.settimeout(self.timeout)
 
-    def _read_message(self) -> CastMessage:
-        """Reads a message from the socket and converts it to a message."""
-        # first 4 bytes is Big-Endian payload length
-        payload_info = self._read_bytes_from_socket(4)
-        read_len = unpack(">I", payload_info)[0]
+        messages = []
+        # each message is prefixed with its Big-Endian 4 byte length
+        while len(self._recv_buffer) >= 4:
+            (read_len,) = unpack(">I", self._recv_buffer[:4])
+            if len(self._recv_buffer) < 4 + read_len:
+                break
+            message = CastMessage()
+            message.ParseFromString(self._recv_buffer[4 : 4 + read_len])
+            self._recv_buffer = self._recv_buffer[4 + read_len :]
+            messages.append(message)
 
-        # now read the payload
-        payload = self._read_bytes_from_socket(read_len)
-
-        message = CastMessage()
-        message.ParseFromString(payload)
-
-        return message
+        return messages
 
     # pylint: disable=too-many-arguments, too-many-branches
     def send_message(

@@ -1,6 +1,7 @@
 """Tests for the socket client."""
 
 import socket
+import ssl
 import threading
 from collections.abc import Generator
 from struct import pack, unpack
@@ -11,7 +12,11 @@ import pytest
 from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
-from pychromecast.error import NotConnected, PyChromecastStopped
+from pychromecast.error import (
+    ChromecastConnectionClosed,
+    NotConnected,
+    PyChromecastStopped,
+)
 from pychromecast.socket_client import NS_CONNECTION, SocketClient
 
 
@@ -33,6 +38,17 @@ def _lock_held(client: SocketClient) -> bool:
     return not acquired[0]
 
 
+def _message(payload: str = "{}") -> CastMessage:
+    return CastMessage(
+        protocol_version=CastMessage.CASTV2_1_0,
+        source_id="receiver-0",
+        destination_id="sender-0",
+        namespace="urn:x-cast:test",
+        payload_type=CastMessage.STRING,
+        payload_utf8=payload,
+    )
+
+
 def _frame(msg: CastMessage) -> bytes:
     payload = msg.SerializeToString()
     return pack(">I", len(payload)) + payload
@@ -45,10 +61,16 @@ class FakeSocket:
         self, client: SocketClient, data: bytes = b"", error: OSError | None = None
     ) -> None:
         self._client = client
-        self._data = data
+        # Each item is what one recv call returns, then it would block
+        self.reads: list[bytes] = [data] if data else []
         self._error = error
         self.locked: list[bool] = []
         self.sent: list[CastMessage] = []
+        self.timeout: float | None = None
+
+    def settimeout(self, timeout: float | None) -> None:
+        """Record the timeout."""
+        self.timeout = timeout
 
     def sendall(self, data: bytes) -> None:
         """Record a written message."""
@@ -61,9 +83,13 @@ class FakeSocket:
         self.sent.append(msg)
 
     def recv(self, bufsize: int) -> bytes:
-        """Return queued data."""
+        """Return available data, like a non-blocking SSLSocket."""
         self.locked.append(_lock_held(self._client))
-        chunk, self._data = self._data[:bufsize], self._data[bufsize:]
+        assert self.timeout == 0, "recv would block"
+        if not self.reads:
+            raise ssl.SSLWantReadError
+        chunk = self.reads.pop(0)
+        assert len(chunk) <= bufsize
         return chunk
 
 
@@ -98,19 +124,57 @@ def test_send_holds_socket_lock(client: SocketClient) -> None:
 
 def test_read_holds_socket_lock(client: SocketClient) -> None:
     """Test reads hold the socket lock, an SSLSocket is not thread safe."""
-    msg = CastMessage(
-        protocol_version=CastMessage.CASTV2_1_0,
-        source_id="receiver-0",
-        destination_id="sender-0",
-        namespace="urn:x-cast:test",
-        payload_type=CastMessage.STRING,
-        payload_utf8="{}",
-    )
+    msg = _message()
     sock = FakeSocket(client, _frame(msg))
     client.socket = sock  # type: ignore[assignment]
 
-    assert client._read_message() == msg  # pylint: disable=protected-access
+    assert client._read_messages() == [msg]  # pylint: disable=protected-access
     assert sock.locked and all(sock.locked)
+    # The timeout is restored for senders
+    assert sock.timeout == client.timeout
+
+
+def test_read_partial_message(client: SocketClient) -> None:
+    """Test a partial message is kept until the rest of it is received."""
+    msg = _message('{"type": "TEST"}')
+    frame = _frame(msg)
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+
+    # Only part of the length prefix
+    sock.reads = [frame[:2]]
+    assert not client._read_messages()  # pylint: disable=protected-access
+    # The length prefix and part of the payload
+    sock.reads = [frame[2:10]]
+    assert not client._read_messages()  # pylint: disable=protected-access
+    # The rest of the message, split over two reads
+    sock.reads = [frame[10:15], frame[15:]]
+    assert client._read_messages() == [msg]  # pylint: disable=protected-access
+
+
+def test_read_several_messages(client: SocketClient) -> None:
+    """Test all complete messages are returned when several are received."""
+    msgs = [_message(f'{{"n": {n}}}') for n in range(3)]
+    data = b"".join(_frame(msg) for msg in msgs)
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+
+    # Two and a half messages, then the rest
+    sock.reads = [data[:-3]]
+    assert client._read_messages() == msgs[:2]  # pylint: disable=protected-access
+    sock.reads = [data[-3:]]
+    assert client._read_messages() == msgs[2:]  # pylint: disable=protected-access
+
+
+def test_read_connection_closed(client: SocketClient) -> None:
+    """Test a closed connection is detected and the timeout restored."""
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    sock.reads = [b""]
+
+    with pytest.raises(ChromecastConnectionClosed):
+        client._read_messages()  # pylint: disable=protected-access
+    assert sock.timeout == client.timeout
 
 
 def test_cleanup_closes_all_channels(client: SocketClient) -> None:
