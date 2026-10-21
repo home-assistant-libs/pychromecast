@@ -64,8 +64,8 @@ class SessionEndpoint:
 class PlaybackSessionUpdate:
     """Change of the set of devices playing a session.
 
-    changed_devices is only filled in on the reply to the sender which made the
-    change, copies sent to other connections leave it empty.
+    changed_devices may be empty, it's always empty on copies sent to other
+    connections than the one which made the change.
     """
 
     name: str
