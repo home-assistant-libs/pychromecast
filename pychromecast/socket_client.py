@@ -483,7 +483,12 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def new_cast_status(self, status: CastStatus) -> None:
         """Called when a new cast status has been received."""
-        new_channel = self.destination_id != status.transport_id
+        # A group member taking over the group's session keeps the transport
+        # of the app it ran as a member, but it's a new app
+        new_channel = (
+            self.destination_id != status.transport_id
+            or self.session_id != status.session_id
+        )
 
         if new_channel and self.destination_id is not None:
             self.disconnect_channel(self.destination_id)
