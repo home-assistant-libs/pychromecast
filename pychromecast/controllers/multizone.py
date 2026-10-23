@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import abc
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
 
 from . import BaseController
@@ -40,6 +41,72 @@ TYPE_MULTIZONE_STATUS = "MULTIZONE_STATUS"
 TYPE_SESSION_UPDATED = "PLAYBACK_SESSION_UPDATED"
 
 
+@dataclass(frozen=True)
+class PlaybackSession:
+    """Capabilities of the playback session attached to a multizone endpoint."""
+
+    app_allows_grouping: bool | None
+    is_video_content: bool | None
+    stream_transfer_supported: bool | None
+
+
+@dataclass(frozen=True)
+class SessionEndpoint:
+    """Endpoint which currently owns a playback session."""
+
+    device_id: str
+    host: str
+    port: int
+    session_id: str | None
+
+
+@dataclass(frozen=True)
+class PlaybackSessionUpdate:
+    """Change of the set of devices playing a session.
+
+    changed_devices may be empty, it's always empty on copies sent to other
+    connections than the one which made the change.
+    """
+
+    name: str
+    changed_devices: list[str]
+    failed_devices: list[str]
+    session_endpoint: SessionEndpoint | None
+
+
+def _normalize_device_id(device_id: str) -> str:
+    """Return device id in dashed form, devices report both forms."""
+    try:
+        return str(UUID(device_id))
+    except ValueError:
+        return device_id
+
+
+def _parse_playback_session(data: dict[str, Any]) -> PlaybackSession:
+    return PlaybackSession(
+        data.get("appAllowsGrouping"),
+        data.get("isVideoContent"),
+        data.get("streamTransferSupported"),
+    )
+
+
+def _parse_session_update(data: dict[str, Any]) -> PlaybackSessionUpdate:
+    endpoint = None
+    if endpoint_data := data.get("sessionEndpoint"):
+        endpoint = SessionEndpoint(
+            _normalize_device_id(endpoint_data["deviceId"]),
+            endpoint_data["ipAddress"],
+            endpoint_data["port"],
+            endpoint_data.get("sessionId"),
+        )
+    return PlaybackSessionUpdate(
+        data.get("name", ""),
+        [_normalize_device_id(uuid) for uuid in data.get("changedDevices", [])],
+        [_normalize_device_id(uuid) for uuid in data.get("failedDevices", [])],
+        endpoint,
+    )
+
+
 class GroupInfo(TypedDict):
     """Chromecast connection and listener for a group."""
 
@@ -68,6 +135,9 @@ class MultiZoneControllerListener(abc.ABC):
     @abc.abstractmethod
     def multizone_status_received(self) -> None:
         """Multizone status has been updated."""
+
+    def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
+        """The set of devices playing the session has changed."""
 
 
 class MultiZoneManagerListener(abc.ABC):
@@ -235,6 +305,7 @@ class MultizoneController(BaseController):
 
     def __init__(self, uuid: UUID) -> None:
         self._members: dict[str, str] = {}
+        self._playback_session: PlaybackSession | None = None
         self._status_listeners: list[MultiZoneControllerListener] = []
         self._uuid = str(uuid)
         super().__init__(MULTIZONE_NAMESPACE, target_platform=True)
@@ -269,6 +340,7 @@ class MultizoneController(BaseController):
         listener.multizone_member_added(uuid)
         listener.multizone_member_removed(uuid)
         listener.multizone_status_received()
+        listener.multizone_playback_session_updated(update)
         """
         self._status_listeners.append(listener)
 
@@ -277,8 +349,17 @@ class MultizoneController(BaseController):
         """Return a list of audio group members."""
         return list(self._members.keys())
 
+    @property
+    def playback_session(self) -> PlaybackSession | None:
+        """Return the playback session reported in the last multizone status.
+
+        None if no session is attached to this endpoint.
+        """
+        return self._playback_session
+
     def reset_members(self) -> None:
         """Reset audio group members."""
+        self._playback_session = None
         for uuid in list(self._members):
             self._remove_member(uuid)
 
@@ -328,13 +409,25 @@ class MultizoneController(BaseController):
             for uuid in added_members:
                 self._add_member(uuid, members[uuid])
 
+            playback_session = data["status"].get("playbackSession")
+            self._playback_session = (
+                _parse_playback_session(playback_session)
+                if playback_session is not None
+                else None
+            )
+
             for listener in list(self._status_listeners):
                 listener.multizone_status_received()
 
             return True
 
         if data[MESSAGE_TYPE] == TYPE_SESSION_UPDATED:
-            # A temporary group has been formed
+            # The devices playing the session changed, the session may have
+            # moved to a new endpoint
+            update = _parse_session_update(data)
+            _LOGGER.debug("(%s) Playback session updated: %s", self._uuid, update)
+            for listener in list(self._status_listeners):
+                listener.multizone_playback_session_updated(update)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_CASTING_GROUPS:
