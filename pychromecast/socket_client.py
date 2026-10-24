@@ -210,7 +210,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.connecting = True
         self.first_connection = True
-        self.socket: socket.socket | ssl.SSLSocket | None = None
+        self.socket: ssl.SSLSocket | None = None
         self.selector = selectors.DefaultSelector()
         self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
@@ -361,16 +361,20 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.host,
                         self.port,
                     )
-                    self.socket = socket.create_connection(
-                        (self.host, self.port), self.timeout
-                    )
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
-                    self.socket = context.wrap_socket(self.socket)
+                    raw_socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
+                    try:
+                        self.socket = context.wrap_socket(raw_socket)
+                    except BaseException:
+                        raw_socket.close()
+                        raise
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     self.connecting = False
                     self._force_recon = False
                     self._report_connection_status(
