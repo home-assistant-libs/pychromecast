@@ -820,16 +820,16 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.port,
                 )
 
-    def _read_messages(self) -> list[CastMessage]:
+    def _read_bytes_from_socket(self) -> bytes:
         """Read one TLS record from the socket without waiting for more.
 
-        Returns the complete messages received, a partial message is kept until
-        the rest of it has been received. Data left in the socket wakes the
-        selector again, which lets senders and stop in between reads.
+        Data left in the socket wakes the selector again, which lets senders
+        and stop in between reads.
         """
         # It is a programming error if this is called when we don't have a socket
         assert self.socket is not None
 
+        chunks = []
         events = selectors.EVENT_READ
         with self._socket_lock:
             self.socket.settimeout(0)
@@ -837,11 +837,11 @@ class SocketClient(threading.Thread, CastStatusListener):
                 chunk = self.socket.recv(65536)
                 if chunk == b"":
                     raise ChromecastConnectionClosed("Connection was closed by remote")
-                self._recv_buffer += chunk
+                chunks.append(chunk)
                 # Decrypted data is not seen by the selector, only an SSLSocket
                 # is read from
                 while pending := self.socket.pending():  # type: ignore[attr-defined]
-                    self._recv_buffer += self.socket.recv(pending)
+                    chunks.append(self.socket.recv(pending))
             except ssl.SSLWantReadError:
                 pass
             except ssl.SSLWantWriteError:
@@ -853,6 +853,15 @@ class SocketClient(threading.Thread, CastStatusListener):
         assert self.remote_selector_key is not None
         if self.remote_selector_key.events != events:
             self.remote_selector_key = self.selector.modify(self.socket, events)
+
+        return b"".join(chunks)
+
+    def _read_messages(self) -> list[CastMessage]:
+        """Read the messages available on the socket.
+
+        A partial message is kept until the rest of it has been received.
+        """
+        self._recv_buffer += self._read_bytes_from_socket()
 
         messages = []
         # each message is prefixed with its Big-Endian 4 byte length
