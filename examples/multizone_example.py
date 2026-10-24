@@ -21,7 +21,6 @@ from .common import (
     add_network_arguments,
     configure_logging,
     create_zeroconf,
-    get_ip_version,
 )
 
 # Enable deprecation warnings etc.
@@ -79,7 +78,6 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast],
     known_hosts=args.known_host,
     zeroconf_instance=create_zeroconf(args),
-    ip_version=get_ip_version(args),
 )
 if not chromecasts:
     print(f'No chromecast with name "{args.cast}" discovered')

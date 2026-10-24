@@ -17,7 +17,6 @@ from .common import (
     add_network_arguments,
     configure_logging,
     create_zeroconf,
-    get_ip_version,
 )
 
 # Enable deprecation warnings etc.
@@ -87,9 +86,7 @@ if args.known_host and not args.force_zeroconf:
     zconf = None
 else:
     zconf = create_zeroconf(args)
-browser = pychromecast.discovery.CastBrowser(
-    MyCastListener(), zconf, args.known_host, get_ip_version(args)
-)
+browser = pychromecast.discovery.CastBrowser(MyCastListener(), zconf, args.known_host)
 browser.start_discovery()
 
 try:

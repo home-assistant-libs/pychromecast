@@ -14,7 +14,6 @@ from .common import (
     add_network_arguments,
     configure_logging,
     create_zeroconf,
-    get_ip_version,
 )
 
 # Enable deprecation warnings etc.
@@ -40,7 +39,6 @@ configure_logging(args)
 casts, browser = pychromecast.get_chromecasts(
     known_hosts=args.known_host,
     zeroconf_instance=create_zeroconf(args),
-    ip_version=get_ip_version(args),
 )
 # Shut down discovery as we don't care about updates
 browser.stop_discovery()

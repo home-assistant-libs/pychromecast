@@ -33,7 +33,6 @@ from .common import (
     add_network_arguments,
     configure_logging,
     create_zeroconf,
-    get_ip_version,
 )
 
 # Enable deprecation warnings etc.
@@ -120,7 +119,6 @@ chromecasts, browser = pychromecast.get_listed_chromecasts(
     friendly_names=[args.cast],
     known_hosts=args.known_host,
     zeroconf_instance=create_zeroconf(args),
-    ip_version=get_ip_version(args),
 )
 cast = next((cc for cc in chromecasts if cc.name == args.cast), None)
 
@@ -130,7 +128,7 @@ if not cast:
         [
             cc.name or "<unknown>"
             for cc in pychromecast.get_chromecasts(
-                zeroconf_instance=create_zeroconf(args), ip_version=get_ip_version(args)
+                zeroconf_instance=create_zeroconf(args)
             )[0]
         ]
     )

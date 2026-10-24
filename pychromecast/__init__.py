@@ -32,7 +32,7 @@ from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED, MediaController  # noqa: F401
 from .controllers.receiver import CastStatus, CastStatusListener
 from .error import NotConnected, RequestTimeout
-from .models import CastInfo, HostServiceInfo, IpVersion, MDNSServiceInfo
+from .models import CastInfo, HostServiceInfo, MDNSServiceInfo
 from .response_handler import WaitResponse
 
 __all__ = ("get_chromecasts", "Chromecast")
@@ -80,7 +80,6 @@ def get_chromecast_from_cast_info(
     tries: int | None = None,
     retry_wait: float | None = None,
     timeout: float | None = None,
-    ip_version: IpVersion | None = None,
 ) -> Chromecast:
     """Creates a Chromecast object from a zeroconf service."""
     _LOGGER.debug("get_chromecast_from_cast_info %s", cast_info)
@@ -90,7 +89,6 @@ def get_chromecast_from_cast_info(
         timeout=timeout,
         retry_wait=retry_wait,
         zconf=zconf,
-        ip_version=ip_version,
     )
 
 
@@ -109,7 +107,6 @@ def get_listed_chromecasts(
     discovery_timeout: float = DISCOVER_TIMEOUT,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-    ip_version: IpVersion | None = None,
 ) -> tuple[list[Chromecast], CastBrowser]:
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -132,9 +129,6 @@ def get_listed_chromecasts(
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
     :param zeroconf_instance: An existing zeroconf instance.
-    :param ip_version: IP version to connect over, 4 or 6. None means any, with
-                       IPv4 preferred. Also sets the IP version mDNS runs over
-                       when no zeroconf_instance is given.
     """
 
     cc_list: dict[UUID, Chromecast] = {}
@@ -151,7 +145,6 @@ def get_listed_chromecasts(
                 tries=tries,
                 retry_wait=retry_wait,
                 timeout=timeout,
-                ip_version=ip_version,
             )
 
         friendly_name = browser.devices[uuid].friendly_name
@@ -171,10 +164,8 @@ def get_listed_chromecasts(
 
     discover_complete = Event()
 
-    zconf = zeroconf_instance or create_zeroconf(ip_version)
-    browser = CastBrowser(
-        SimpleCastListener(add_callback), zconf, known_hosts, ip_version
-    )
+    zconf = zeroconf_instance or create_zeroconf()
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
@@ -191,7 +182,6 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-    ip_version: IpVersion | None = None,
 ) -> tuple[list[Chromecast], CastBrowser]: ...
 
 
@@ -205,7 +195,6 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-    ip_version: IpVersion | None = None,
 ) -> CastBrowser: ...
 
 
@@ -217,7 +206,6 @@ def get_chromecasts(  # pylint: disable=too-many-locals
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
-    ip_version: IpVersion | None = None,
 ) -> tuple[list[Chromecast], CastBrowser] | CastBrowser:
     """
     Searches the network for chromecast devices and creates a Chromecast object
@@ -248,16 +236,12 @@ def get_chromecasts(  # pylint: disable=too-many-locals
     :param callback: Callback which is triggered for each discovered chromecast when
                      blocking = False.
     :param zeroconf_instance: An existing zeroconf instance.
-    :param ip_version: IP version to connect over, 4 or 6. None means any, with
-                       IPv4 preferred. Also sets the IP version mDNS runs over
-                       when no zeroconf_instance is given.
     """
     if blocking:
         # Thread blocking chromecast discovery
         devices, browser = discover_chromecasts(
             zeroconf_instance=zeroconf_instance,
             known_hosts=known_hosts,
-            ip_version=ip_version,
         )
         cc_list: list[Chromecast] = []
         for device in devices:
@@ -269,7 +253,6 @@ def get_chromecasts(  # pylint: disable=too-many-locals
                         tries=tries,
                         retry_wait=retry_wait,
                         timeout=timeout,
-                        ip_version=ip_version,
                     )
                 )
             except ChromecastConnectionError:  # noqa: F405
@@ -296,17 +279,14 @@ def get_chromecasts(  # pylint: disable=too-many-locals
                     tries=tries,
                     retry_wait=retry_wait,
                     timeout=timeout,
-                    ip_version=ip_version,
                 )
             )
             known_uuids.add(uuid)
         except ChromecastConnectionError:  # noqa: F405
             pass
 
-    zconf = zeroconf_instance or create_zeroconf(ip_version)
-    browser = CastBrowser(
-        SimpleCastListener(add_callback), zconf, known_hosts, ip_version
-    )
+    zconf = zeroconf_instance or create_zeroconf()
+    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
     return browser
 
@@ -328,8 +308,6 @@ class Chromecast(CastStatusListener):
                   mDNS services.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
-    :param ip_version: IP version to connect over, 4 or 6. None means any, with
-                       IPv4 preferred.
     """
 
     def __init__(
@@ -340,12 +318,11 @@ class Chromecast(CastStatusListener):
         timeout: float | None = None,
         retry_wait: float | None = None,
         zconf: zeroconf.Zeroconf | None = None,
-        ip_version: IpVersion | None = None,
     ):
         self.logger = logging.getLogger(__name__)
 
         if not cast_info.cast_type:
-            cast_info = get_cast_type(cast_info, zconf, ip_version=ip_version)
+            cast_info = get_cast_type(cast_info, zconf)
 
         if TYPE_CHECKING:
             # get_cast_type is guaranteed to return a CastInfo with a non-None cast_type
@@ -363,7 +340,6 @@ class Chromecast(CastStatusListener):
             retry_wait=retry_wait,
             services=cast_info.services,
             zconf=zconf,
-            ip_version=ip_version,
         )
 
         receiver_controller = self.socket_client.receiver_controller
