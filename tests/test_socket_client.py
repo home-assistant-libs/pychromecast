@@ -1,5 +1,6 @@
 """Tests for the socket client."""
 
+import selectors
 import socket
 import ssl
 import threading
@@ -61,13 +62,27 @@ class FakeSocket:
         self, client: SocketClient, data: bytes = b"", error: OSError | None = None
     ) -> None:
         self._client = client
-        # Each item is a TLS record, then it would block
-        self.reads: list[bytes] = [data] if data else []
+        # Each item is a TLS record or an error, then it would block
+        self.reads: list[bytes | ssl.SSLError] = [data] if data else []
         self._error = error
         self.locked: list[bool] = []
         self.sent: list[CastMessage] = []
         self.timeout: float | None = None
         self._pending = 0
+        # Gives the selector something to watch
+        self._pair = socket.socketpair()
+        client.remote_selector_key = client.selector.register(
+            self, selectors.EVENT_READ
+        )
+
+    def fileno(self) -> int:
+        """Return a file descriptor for the selector."""
+        return self._pair[0].fileno()
+
+    def close_pair(self) -> None:
+        """Close the file descriptor of the selector."""
+        self._pair[0].close()
+        self._pair[1].close()
 
     def settimeout(self, timeout: float | None) -> None:
         """Record the timeout."""
@@ -90,6 +105,8 @@ class FakeSocket:
         if not self.reads:
             raise ssl.SSLWantReadError
         record = self.reads.pop(0)
+        if isinstance(record, ssl.SSLError):
+            raise record
         chunk, rest = record[:bufsize], record[bufsize:]
         if rest:
             self.reads.insert(0, rest)
@@ -115,6 +132,9 @@ def client_fixture() -> Generator[SocketClient]:
     )
     client.connecting = False
     yield client
+    sock: object = client.socket
+    if isinstance(sock, FakeSocket):
+        sock.close_pair()
     client.socketpair[0].close()
     client.socketpair[1].close()
     client.selector.close()
@@ -209,6 +229,25 @@ def test_read_message_before_connection_closed(client: SocketClient) -> None:
     assert client._read_messages() == [msg]  # pylint: disable=protected-access
     with pytest.raises(ChromecastConnectionClosed):
         client._read_messages()  # pylint: disable=protected-access
+
+
+def test_read_retried_when_writable(client: SocketClient) -> None:
+    """Test a read waiting for TLS to write is retried when it can write."""
+    msg = _message()
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    sock.reads = [ssl.SSLWantWriteError(), _frame(msg)]
+
+    assert not client._read_messages()  # pylint: disable=protected-access
+    assert client.remote_selector_key is not None
+    assert client.remote_selector_key.events == (
+        selectors.EVENT_READ | selectors.EVENT_WRITE
+    )
+    # A writable socket wakes the selector like a readable one
+    assert client.remote_selector_key in {key for key, _ in client.selector.select(0)}
+
+    assert client._read_messages() == [msg]  # pylint: disable=protected-access
+    assert client.remote_selector_key.events == selectors.EVENT_READ
 
 
 def test_read_connection_closed(client: SocketClient) -> None:
