@@ -49,7 +49,7 @@ def get_host_from_service(
     service_info = None
 
     if isinstance(service, HostServiceInfo):
-        if not _address_matches_ip_version(service.host, ip_version):
+        if not address_matches_ip_version(service.host, ip_version):
             return (None, None, None)
         return (service.host, service.port, None)
 
@@ -86,7 +86,7 @@ def get_host_from_zc_service_info(
     addresses = [
         address
         for address in service_info.parsed_scoped_addresses()
-        if _address_matches_ip_version(address, ip_version)
+        if address_matches_ip_version(address, ip_version)
     ]
     if not addresses:
         return None, None
@@ -94,7 +94,7 @@ def get_host_from_zc_service_info(
     return addresses[0], service_info.port
 
 
-def _address_matches_ip_version(address: str, ip_version: IpVersion | None) -> bool:
+def address_matches_ip_version(address: str, ip_version: IpVersion | None) -> bool:
     """Check if address is of the given IP version, hostnames always match."""
     if ip_version is None:
         return True
@@ -145,7 +145,7 @@ def _url_host_header(url: str) -> str:
     the scope.
     """
     parsed = urlsplit(url)
-    hostname, _, _ = (parsed.hostname or "").partition("%")
+    hostname, _, _ = unquote(parsed.hostname or "").partition("%")
     hostname = _url_encode_hostname(hostname)
     if parsed.port in (80, 443, None):
         return hostname
@@ -350,6 +350,28 @@ def get_device_info(  # pylint: disable=too-many-locals
         return None
 
 
+def _inherit_scope(address: str, scoped_address: str) -> str:
+    """Give an unscoped link local address the scope of scoped_address.
+
+    A link local address is only reachable through the interface in its scope.
+    Group members share a link, so the scope of the polled device applies.
+    """
+    try:
+        ip = ipaddress.ip_address(address)
+        scoped_ip = ipaddress.ip_address(scoped_address)
+    except ValueError:
+        return address
+    if (
+        isinstance(ip, ipaddress.IPv6Address)
+        and isinstance(scoped_ip, ipaddress.IPv6Address)
+        and ip.is_link_local
+        and ip.scope_id is None
+        and scoped_ip.scope_id
+    ):
+        return f"{address}%{scoped_ip.scope_id}"
+    return address
+
+
 def _get_group_info(host: str, group: Any) -> MultizoneInfo:
     """Parse group JSON data and return a MultizoneInfo instance."""
     name = group.get("name", "Unknown group name")
@@ -367,6 +389,8 @@ def _get_group_info(host: str, group: Any) -> MultizoneInfo:
     elif ":" in elected_leader:
         # The port in the URL is not useful, but we can scan the host
         leader_host = unquote(urlsplit(f"//{elected_leader}").hostname or "") or None
+        if leader_host:
+            leader_host = _inherit_scope(leader_host, host)
 
     return MultizoneInfo(name, uuid, leader_host, leader_port)
 

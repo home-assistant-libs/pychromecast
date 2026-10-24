@@ -33,6 +33,30 @@ def test_get_group_info_elected_leader(hostname: str, encoded: str) -> None:
     assert _get_group_info("10.0.0.1", group).host == hostname
 
 
+@pytest.mark.parametrize(
+    ("host", "elected_leader", "leader_host"),
+    [
+        ("fe80::a%2", "[fe80::b]:8009", "fe80::b%2"),
+        ("fe80::a%en0", "[fe80::b]:8009", "fe80::b%en0"),
+        # An existing scope is kept
+        ("fe80::a%2", "[fe80::b%253]:8009", "fe80::b%3"),
+        # Only link local addresses need a scope
+        ("fe80::a%2", "[2001:db8::b]:8009", "2001:db8::b"),
+        ("fe80::a%2", "192.168.1.3:8009", "192.168.1.3"),
+        # Nothing to inherit
+        ("fe80::a", "[fe80::b]:8009", "fe80::b"),
+        ("192.168.1.2", "[fe80::b]:8009", "fe80::b"),
+        ("chromecast.local", "[fe80::b]:8009", "fe80::b"),
+    ],
+)
+def test_get_group_info_elected_leader_scope(
+    host: str, elected_leader: str, leader_host: str
+) -> None:
+    """Test that an unscoped link local leader inherits the polled host's scope."""
+    group = {"elected_leader": elected_leader}
+    assert _get_group_info(host, group).host == leader_host
+
+
 def test_get_group_info_elected_leader_self() -> None:
     """Test that a self elected leader uses the host and cast port."""
     group = {"elected_leader": "self", "cast_port": 32187}
