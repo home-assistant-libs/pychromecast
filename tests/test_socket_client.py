@@ -222,6 +222,25 @@ def test_read_connection_closed(client: SocketClient) -> None:
     assert sock.timeout == client.timeout
 
 
+def test_channel_not_open_when_connecting(client: SocketClient) -> None:
+    """Test a channel is not marked open when its CONNECT can't be sent.
+
+    A request callback failed by a reconnect may retry its send, the channel
+    must then be connected on the new connection.
+    """
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    client.connecting = True
+
+    with pytest.raises(NotConnected):
+        client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
+    assert not client._open_channels  # pylint: disable=protected-access
+
+    client.connecting = False
+    client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
+    assert [msg.namespace for msg in sock.sent] == [NS_CONNECTION, "urn:x-cast:test"]
+
+
 def test_cleanup_closes_all_channels(client: SocketClient) -> None:
     """Test all channels are closed, also when there are several."""
     sock = FakeSocket(client)

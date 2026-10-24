@@ -1040,26 +1040,32 @@ class SocketClient(threading.Thread, CastStatusListener):
         with self._socket_lock:
             if destination_id in self._open_channels:
                 return
+            # Added before sending, as the CONNECT itself goes to the channel
             self._open_channels.append(destination_id)
 
-            self.send_message(
-                destination_id,
-                NS_CONNECTION,
-                {
-                    MESSAGE_TYPE: TYPE_CONNECT,
-                    "origin": {},
-                    "userAgent": "PyChromecast",
-                    "senderInfo": {
-                        "sdkType": 2,
-                        "version": "15.605.1.3",
-                        "browserVersion": "44.0.2403.30",
-                        "platform": 4,
-                        "systemVersion": "Macintosh; Intel Mac OS X10_10_3",
-                        "connectionType": 1,
+            try:
+                self.send_message(
+                    destination_id,
+                    NS_CONNECTION,
+                    {
+                        MESSAGE_TYPE: TYPE_CONNECT,
+                        "origin": {},
+                        "userAgent": "PyChromecast",
+                        "senderInfo": {
+                            "sdkType": 2,
+                            "version": "15.605.1.3",
+                            "browserVersion": "44.0.2403.30",
+                            "platform": 4,
+                            "systemVersion": "Macintosh; Intel Mac OS X10_10_3",
+                            "connectionType": 1,
+                        },
                     },
-                },
-                no_add_request_id=True,
-            )
+                    no_add_request_id=True,
+                )
+            except Exception:
+                # Not sent, so it must be sent on the next connection
+                self._open_channels.remove(destination_id)
+                raise
 
     def disconnect_channel(self, destination_id: str) -> None:
         """Disconnect a channel with destination_id."""
