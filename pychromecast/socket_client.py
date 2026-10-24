@@ -834,22 +834,19 @@ class SocketClient(threading.Thread, CastStatusListener):
         with self._socket_lock:
             self.socket.settimeout(0)
             try:
-                chunk = None
-                try:
-                    chunk = self.socket.recv(65536)
-                except ssl.SSLWantReadError:
-                    pass
-                except ssl.SSLWantWriteError:
-                    # The read is retried when TLS can write what it needs to
-                    events |= selectors.EVENT_WRITE
+                chunk = self.socket.recv(65536)
                 if chunk == b"":
                     raise ChromecastConnectionClosed("Connection was closed by remote")
-                if chunk:
-                    self._recv_buffer += chunk
+                self._recv_buffer += chunk
                 # Decrypted data is not seen by the selector, only an SSLSocket
                 # is read from
                 while pending := self.socket.pending():  # type: ignore[attr-defined]
                     self._recv_buffer += self.socket.recv(pending)
+            except ssl.SSLWantReadError:
+                pass
+            except ssl.SSLWantWriteError:
+                # The read is retried when TLS can write what it needs to
+                events |= selectors.EVENT_WRITE
             finally:
                 self.socket.settimeout(self.timeout)
 
