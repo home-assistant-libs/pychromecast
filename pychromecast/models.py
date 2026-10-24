@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 import zeroconf
 
 # pylint: disable=invalid-name
+# IP version as in ipaddress.IPv4Address.version / ipaddress.IPv6Address.version
+IpVersion = Literal[4, 6]
+
 ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
 if hasattr(zeroconf, "EventLoopBlocked"):
     # Added in zeroconf 0.37.0
