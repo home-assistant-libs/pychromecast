@@ -61,12 +61,13 @@ class FakeSocket:
         self, client: SocketClient, data: bytes = b"", error: OSError | None = None
     ) -> None:
         self._client = client
-        # Each item is what one recv call returns, then it would block
+        # Each item is a TLS record, then it would block
         self.reads: list[bytes] = [data] if data else []
         self._error = error
         self.locked: list[bool] = []
         self.sent: list[CastMessage] = []
         self.timeout: float | None = None
+        self._pending = 0
 
     def settimeout(self, timeout: float | None) -> None:
         """Record the timeout."""
@@ -83,14 +84,22 @@ class FakeSocket:
         self.sent.append(msg)
 
     def recv(self, bufsize: int) -> bytes:
-        """Return available data, like a non-blocking SSLSocket."""
+        """Return data from one record, like a non-blocking SSLSocket."""
         self.locked.append(_lock_held(self._client))
         assert self.timeout == 0, "recv would block"
         if not self.reads:
             raise ssl.SSLWantReadError
-        chunk = self.reads.pop(0)
-        assert len(chunk) <= bufsize
+        record = self.reads.pop(0)
+        chunk, rest = record[:bufsize], record[bufsize:]
+        if rest:
+            self.reads.insert(0, rest)
+        self._pending = len(rest)
         return chunk
+
+    def pending(self) -> int:
+        """Return the decrypted data left of the current record."""
+        self.locked.append(_lock_held(self._client))
+        return self._pending
 
 
 @pytest.fixture(name="client")
@@ -147,8 +156,9 @@ def test_read_partial_message(client: SocketClient) -> None:
     # The length prefix and part of the payload
     sock.reads = [frame[2:10]]
     assert not client._read_messages()  # pylint: disable=protected-access
-    # The rest of the message, split over two reads
+    # The rest of the message, split over two records
     sock.reads = [frame[10:15], frame[15:]]
+    assert not client._read_messages()  # pylint: disable=protected-access
     assert client._read_messages() == [msg]  # pylint: disable=protected-access
 
 
@@ -164,6 +174,41 @@ def test_read_several_messages(client: SocketClient) -> None:
     assert client._read_messages() == msgs[:2]  # pylint: disable=protected-access
     sock.reads = [data[-3:]]
     assert client._read_messages() == msgs[2:]  # pylint: disable=protected-access
+
+
+def test_read_one_record(client: SocketClient) -> None:
+    """Test one record is read at a time, so data never stops the reader."""
+    msgs = [_message(f'{{"n": {n}}}') for n in range(2)]
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    sock.reads = [_frame(msg) for msg in msgs]
+
+    assert client._read_messages() == msgs[:1]  # pylint: disable=protected-access
+    assert client._read_messages() == msgs[1:]  # pylint: disable=protected-access
+
+
+def test_read_pending_data(client: SocketClient) -> None:
+    """Test decrypted data left in the SSL buffer is read."""
+    # A record larger than a recv
+    msg = _message(f'{{"data": "{"x" * 70000}"}}')
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    sock.reads = [_frame(msg)]
+
+    assert client._read_messages() == [msg]  # pylint: disable=protected-access
+    assert not sock.reads
+
+
+def test_read_message_before_connection_closed(client: SocketClient) -> None:
+    """Test a message received just before the connection closes is returned."""
+    msg = _message()
+    sock = FakeSocket(client)
+    client.socket = sock  # type: ignore[assignment]
+    sock.reads = [_frame(msg), b""]
+
+    assert client._read_messages() == [msg]  # pylint: disable=protected-access
+    with pytest.raises(ChromecastConnectionClosed):
+        client._read_messages()  # pylint: disable=protected-access
 
 
 def test_read_connection_closed(client: SocketClient) -> None:

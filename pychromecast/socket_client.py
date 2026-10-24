@@ -821,10 +821,11 @@ class SocketClient(threading.Thread, CastStatusListener):
                 )
 
     def _read_messages(self) -> list[CastMessage]:
-        """Read the data available on the socket without waiting for more.
+        """Read one TLS record from the socket without waiting for more.
 
         Returns the complete messages received, a partial message is kept until
-        the rest of it has been received.
+        the rest of it has been received. Data left in the socket wakes the
+        selector again, which lets senders and stop in between reads.
         """
         # It is a programming error if this is called when we don't have a socket
         assert self.socket is not None
@@ -832,16 +833,18 @@ class SocketClient(threading.Thread, CastStatusListener):
         with self._socket_lock:
             self.socket.settimeout(0)
             try:
-                while True:
-                    try:
-                        chunk = self.socket.recv(65536)
-                    except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
-                        break
-                    if chunk == b"":
-                        raise ChromecastConnectionClosed(
-                            "Connection was closed by remote"
-                        )
+                try:
+                    chunk = self.socket.recv(65536)
+                except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                    chunk = None
+                if chunk == b"":
+                    raise ChromecastConnectionClosed("Connection was closed by remote")
+                if chunk:
                     self._recv_buffer += chunk
+                # Decrypted data is not seen by the selector, only an SSLSocket
+                # is read from
+                while pending := self.socket.pending():  # type: ignore[attr-defined]
+                    self._recv_buffer += self.socket.recv(pending)
             finally:
                 self.socket.settimeout(self.timeout)
 
