@@ -690,8 +690,8 @@ def stop_discovery(cast_browser: CastBrowser) -> None:
 
 
 def create_zeroconf() -> zeroconf.Zeroconf:
-    """Create a zeroconf instance doing mDNS over both IPv4 and IPv6."""
-    return zeroconf.Zeroconf(ip_version=zeroconf.IPVersion.All)
+    """Create a zeroconf instance doing mDNS over IPv4."""
+    return zeroconf.Zeroconf(ip_version=zeroconf.IPVersion.V4Only)
 
 
 def discover_chromecasts(

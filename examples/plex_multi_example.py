@@ -127,12 +127,11 @@ if not cast:
     foundCasts = ", ".join(
         [
             cc.name or "<unknown>"
-            for cc in pychromecast.get_chromecasts(
-                zeroconf_instance=create_zeroconf(args)
-            )[0]
+            for cc in pychromecast.get_chromecasts(zeroconf_instance=browser.zc)[0]
         ]
     )
     print(f"Chromecasts found: {foundCasts}")
+    browser.stop_discovery()
     sys.exit(1)
 
 plex_server = PlexServer(args.url, args.token)

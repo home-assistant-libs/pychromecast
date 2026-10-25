@@ -6,8 +6,9 @@ import logging
 import zeroconf
 
 ZEROCONF_IP_VERSIONS = {
-    4: zeroconf.IPVersion.V4Only,
-    6: zeroconf.IPVersion.V6Only,
+    "4": zeroconf.IPVersion.V4Only,
+    "6": zeroconf.IPVersion.V6Only,
+    "all": zeroconf.IPVersion.All,
 }
 
 
@@ -15,20 +16,15 @@ def add_network_arguments(parser: argparse.ArgumentParser) -> None:
     """Add arguments to control networking to the parser."""
     parser.add_argument(
         "--zeroconf-ip-version",
-        help="Only use this IP version for mDNS (default: any)",
-        type=int,
-        choices=(4, 6),
-        default=None,
+        help="IP version to use for mDNS (default: %(default)s)",
+        choices=tuple(ZEROCONF_IP_VERSIONS),
+        default="4",
     )
 
 
 def create_zeroconf(args: argparse.Namespace) -> zeroconf.Zeroconf:
     """Create a zeroconf instance according to command line arguments."""
-    return zeroconf.Zeroconf(
-        ip_version=ZEROCONF_IP_VERSIONS.get(
-            args.zeroconf_ip_version, zeroconf.IPVersion.All
-        )
-    )
+    return zeroconf.Zeroconf(ip_version=ZEROCONF_IP_VERSIONS[args.zeroconf_ip_version])
 
 
 def add_log_arguments(parser: argparse.ArgumentParser) -> None:

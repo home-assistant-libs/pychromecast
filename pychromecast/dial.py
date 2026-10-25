@@ -318,25 +318,33 @@ def get_device_info(  # pylint: disable=too-many-locals
 
 
 def _inherit_scope(address: str, scoped_address: str) -> str:
-    """Give an unscoped link local address the scope of scoped_address.
+    """Give a link local address the scope of scoped_address.
 
     A link local address is only reachable through the interface in its scope.
-    Group members share a link, so the scope of the polled device applies.
+    Group members share a link, so the scope of the polled device applies. A
+    scope reported by the device is local to the device and is dropped.
     """
     try:
         ip = ipaddress.ip_address(address)
         scoped_ip = ipaddress.ip_address(scoped_address)
     except ValueError:
         return address
-    if (
-        isinstance(ip, ipaddress.IPv6Address)
-        and isinstance(scoped_ip, ipaddress.IPv6Address)
-        and ip.is_link_local
-        and ip.scope_id is None
-        and scoped_ip.scope_id
-    ):
+    if not isinstance(ip, ipaddress.IPv6Address) or not ip.is_link_local:
+        return address
+    address, _, _ = address.partition("%")
+    if isinstance(scoped_ip, ipaddress.IPv6Address) and scoped_ip.scope_id:
         return f"{address}%{scoped_ip.scope_id}"
     return address
+
+
+def _get_leader_host(elected_leader: str) -> str | None:
+    """Get the host from an elected leader in url host:port format."""
+    try:
+        hostname = urlsplit(f"//{elected_leader}").hostname
+    except ValueError:
+        _LOGGER.debug("Invalid elected leader %s", elected_leader)
+        return None
+    return unquote(hostname) if hostname else None
 
 
 def _get_group_info(host: str, group: Any) -> MultizoneInfo:
@@ -355,7 +363,7 @@ def _get_group_info(host: str, group: Any) -> MultizoneInfo:
         leader_port = group["cast_port"]
     elif ":" in elected_leader:
         # The port in the URL is not useful, but we can scan the host
-        leader_host = unquote(urlsplit(f"//{elected_leader}").hostname or "") or None
+        leader_host = _get_leader_host(elected_leader)
         if leader_host:
             leader_host = _inherit_scope(leader_host, host)
 
