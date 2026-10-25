@@ -1,17 +1,24 @@
 """Tests for the multizone controller."""
 
+from functools import partial
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
 
+from pychromecast.controllers import add_listener
 from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
+    MultizoneManager,
+    MultiZoneManagerListener,
     PlaybackSession,
     PlaybackSessionUpdate,
     SessionEndpoint,
 )
+from pychromecast.const import CAST_TYPE_GROUP
+from pychromecast.socket_client import CONNECTION_STATUS_CONNECTED
 from pychromecast.models import CastInfo
 
 GROUP_UUID = "9a4683f8-a265-4ec7-aab1-a70cb50f4ca7"
@@ -236,3 +243,162 @@ def test_set_playback_devices_response(
     send.call_args.kwargs["callback_function"](msg_sent, response)
 
     callback.assert_called_once_with(success, response)
+
+
+SPEAKER_A = "6a1c3e2f-5b7d-4e8a-9c0b-1d2e3f4a5b6c"
+SPEAKER_B = "7b2d4f3a-6c8e-4f9b-8d1c-2e3f4a5b6c7d"
+SESSION = "1546815f-47eb-4c7d-8216-181f1197f05b"
+PLAYBACK_SESSION = {
+    "appAllowsGrouping": True,
+    "isVideoContent": False,
+    "streamTransferSupported": True,
+}
+
+
+class FakeEndpoint:
+    """A connected cast device or group which answers multizone requests."""
+
+    def __init__(
+        self,
+        uuid: str,
+        session_id: str | None,
+        members: list[str],
+        playback_session: dict | None,
+        host: str = "192.0.2.1",
+    ) -> None:
+        self.cast = MagicMock(uuid=UUID(uuid), cast_info=_cast_info(uuid, host))
+        self.cast.status.session_id = session_id
+        self.cast.register_handler.side_effect = self._register
+        self._status_listeners: list[Any] = []
+        self._connection_listeners: list[Any] = []
+        self.cast.register_status_listener.side_effect = partial(
+            add_listener, self._status_listeners
+        )
+        self.cast.register_connection_listener.side_effect = partial(
+            add_listener, self._connection_listeners
+        )
+        self.members = members
+        self.playback_session = playback_session
+        self.response: dict = {"type": "INVALID_REQUEST"}
+        self.sent: list[dict] = []
+        self.controller: MultizoneController | None = None
+
+    def _register(self, controller: MultizoneController) -> None:
+        self.controller = controller
+        socket_client = MagicMock()
+        socket_client.send_platform_message.side_effect = self._receive
+        controller.registered(socket_client)
+
+    def connect(self) -> None:
+        """Report the connection and the receiver status, like a Chromecast."""
+        for listener in self._connection_listeners:
+            listener.new_connection_status(
+                MagicMock(status=CONNECTION_STATUS_CONNECTED)
+            )
+        self.new_cast_status()
+
+    def new_cast_status(self) -> None:
+        """Report the receiver status."""
+        for listener in self._status_listeners:
+            listener.new_cast_status(self.cast.status)
+
+    def _receive(self, _namespace: str, data: dict, **kwargs: Any) -> None:
+        assert self.controller is not None
+        self.sent.append(data)
+        if data["type"] == "GET_STATUS":
+            status: dict = {
+                "devices": [{"deviceId": m, "name": m} for m in self.members]
+            }
+            if self.playback_session is not None:
+                status["playbackSession"] = self.playback_session
+            response = {"type": "MULTIZONE_STATUS", "requestId": 1, "status": status}
+            self.controller.receive_message(MagicMock(), response)
+        else:
+            response = self.response
+        if callback_function := kwargs.get("callback_function"):
+            callback_function(True, response)
+
+    def device_list(self) -> set[tuple[str, str]]:
+        """Return the devices and addresses of the last SET_PLAYBACK_DEVICES."""
+        assert self.sent[-1]["type"] == "SET_PLAYBACK_DEVICES"
+        return {
+            (device["deviceId"], device["ipAddress"])
+            for device in self.sent[-1]["deviceList"]
+        }
+
+
+def _speaker_a(
+    session_id: str | None = SESSION,
+    playback_session: dict | None = None,
+    owner: bool = True,
+) -> FakeEndpoint:
+    if owner and playback_session is None:
+        playback_session = PLAYBACK_SESSION
+    return FakeEndpoint(
+        SPEAKER_A, session_id, [SPEAKER_A], playback_session, "192.0.2.10"
+    )
+
+
+def _speaker_b(session_id: str | None = None) -> FakeEndpoint:
+    return FakeEndpoint(SPEAKER_B, session_id, [SPEAKER_B], None, "192.0.2.11")
+
+
+def _group(members: list[str]) -> FakeEndpoint:
+    # Hosted by speaker A
+    return FakeEndpoint(GROUP_UUID, SESSION, members, PLAYBACK_SESSION, "192.0.2.10")
+
+
+def _manager(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint] | None = None
+) -> MultizoneManager:
+    manager = MultizoneManager()
+    for device in devices:
+        manager.add_multizone(device.cast)
+        device.connect()
+    for group in groups or []:
+        group.cast.cast_type = CAST_TYPE_GROUP
+        manager.add_multizone(group.cast)
+        group.connect()
+    return manager
+
+
+def test_multizone_manager_members() -> None:
+    """Test the members of managed groups are exposed."""
+    group = FakeEndpoint(GROUP_UUID, None, [], None)
+    group.cast.cast_type = CAST_TYPE_GROUP
+    manager = MultizoneManager()
+    manager.add_multizone(group.cast)
+    group.connect()
+    assert manager.get_multizone_members(UUID(GROUP_UUID)) == []
+
+    group.members = [KITCHEN_UUID]
+    group.connect()
+
+    assert manager.get_multizone_members(UUID(GROUP_UUID)) == [KITCHEN_UUID]
+    # The listeners are passed group uuids as strings
+    assert manager.get_multizone_members(GROUP_UUID) == [KITCHEN_UUID]
+
+
+def test_group_told_to_members() -> None:
+    """Test the members of a group are told about it and its status."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    group.cast.cast_type = CAST_TYPE_GROUP
+    manager = MultizoneManager()
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+    manager.add_multizone(group.cast)
+    group.connect()
+
+    listener.added_to_multizone.assert_called_once_with(GROUP_UUID)
+    assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == [GROUP_UUID]
+    listener.multizone_new_cast_status.assert_called_with(GROUP_UUID, group.cast.status)
+    media_listener = group.cast.media_controller.register_status_listener.call_args
+    media_status = MagicMock()
+    media_listener.args[0].new_media_status(media_status)
+    listener.multizone_new_media_status.assert_called_once_with(
+        GROUP_UUID, media_status
+    )
+
+    manager.remove_multizone(UUID(GROUP_UUID))
+    listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
+    assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == []
