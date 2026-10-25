@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import abc
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
 
-from . import BaseController, CallbackType
+from . import BaseController, CallbackType, add_listener
 from .media import MediaController, MediaStatusListener, MediaStatus
 from .receiver import CastStatus, CastStatusListener
 from ..const import MESSAGE_TYPE
@@ -338,14 +338,18 @@ class MultizoneController(BaseController):
         for listener in list(self._status_listeners):
             listener.multizone_member_removed(uuid)
 
-    def register_listener(self, listener: MultiZoneControllerListener) -> None:
+    def register_listener(
+        self, listener: MultiZoneControllerListener
+    ) -> Callable[[], None]:
         """Register a listener for audio group changes. On update will call:
         listener.multizone_member_added(uuid)
         listener.multizone_member_removed(uuid)
         listener.multizone_status_received()
         listener.multizone_playback_session_updated(update)
+
+        Returns a function which unregisters the listener.
         """
-        self._status_listeners.append(listener)
+        return add_listener(self._status_listeners, listener)
 
     @property
     def members(self) -> list[str]:
