@@ -399,6 +399,34 @@ def _manager(
     return manager
 
 
+def _session_devices(manager: MultizoneManager, device: str) -> list[str]:
+    """Return the devices playing the session a device plays."""
+    if (endpoint := manager.get_session_endpoint(UUID(device))) is None:
+        return []
+    return manager.get_multizone_members(endpoint)
+
+
+SESSION_UPDATED = {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []}
+
+
+@pytest.mark.parametrize(
+    ("devices", "groups"),
+    [
+        # Followers report no playback session
+        ([_speaker_a(owner=False)], []),
+        # A dynamic group the session has left
+        ([_speaker_a(owner=False)], [_group([SPEAKER_A])]),
+    ],
+)
+def test_no_session_endpoint(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint]
+) -> None:
+    """Test no endpoint is found when no endpoint owns the session."""
+    manager = _manager([*devices, _speaker_b()], groups)
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
+
+
 def test_multizone_manager_members() -> None:
     """Test the members of managed groups are exposed."""
     group = FakeEndpoint(GROUP_UUID, None, [], None)
@@ -439,6 +467,51 @@ def test_group_told_to_members() -> None:
     manager.remove_multizone(UUID(GROUP_UUID))
     listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
     assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == []
+
+
+@pytest.mark.parametrize("device", [SPEAKER_A, SPEAKER_B])
+def test_session_endpoint_group(device: str) -> None:
+    """Test a group's session, its members with the leader first."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    # The leader runs the group's session, the other member one of its own
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+
+    assert manager.get_session_endpoint(UUID(device)) == UUID(GROUP_UUID)
+    assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_A, SPEAKER_B]
+
+
+def test_session_endpoint_one_device() -> None:
+    """Test a device playing a session on its own, or no session."""
+    manager = _manager([_speaker_a(), _speaker_b()])
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
+    assert manager.get_multizone_members(SPEAKER_A) == [SPEAKER_A]
+    assert manager.get_session_endpoint(UUID(SPEAKER_B)) is None
+
+
+def test_session_status_requested_on_changes() -> None:
+    """Test status is requested when the playback session may have changed."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    assert _session_devices(manager, SPEAKER_A) == []
+    speaker_a.sent.clear()
+
+    # A session is started
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS"]
+    assert _session_devices(manager, SPEAKER_A) == [SPEAKER_A]
+
+    # Other cast status changes don't request status
+    speaker_a.new_cast_status()
+    assert len(speaker_a.sent) == 1
+
+    # The devices playing the session are changed by another sender
+    assert speaker_a.controller is not None
+    speaker_a.controller.receive_message(
+        MagicMock(), {**SESSION_UPDATED, "requestId": 0, "changedDevices": []}
+    )
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS", "GET_STATUS"]
 
 
 def test_sessions_changed_reported() -> None:
@@ -492,3 +565,19 @@ def test_remove_group(group_uuid: UUID | str) -> None:
     group.connect()
     assert not group.sent
     listener.multizone_new_cast_status.assert_not_called()
+
+
+def test_idle_group_members_keep_their_order() -> None:
+    """Test an idle member isn't taken for the leader of an idle group."""
+    group = FakeEndpoint(GROUP_UUID, None, [], None)
+    # Speaker B plays a session of its own, speaker A is idle
+    manager = _manager([_speaker_a(None), _speaker_b("973c31d5")], [group])
+    # Added one at a time to get a known order, a status is applied as a set
+    assert group.controller is not None
+    for member in (SPEAKER_B, SPEAKER_A):
+        group.controller.receive_message(
+            MagicMock(),
+            {"type": "DEVICE_ADDED", "device": {"deviceId": member, "name": member}},
+        )
+
+    assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_B, SPEAKER_A]

@@ -367,8 +367,38 @@ class MultizoneManager:
         return self._groups[str(group_uuid)]["chromecast"].media_controller
 
     def get_multizone_members(self, group_uuid: UUID | str) -> list[str]:
-        """Return the members of a device or group"""
-        return self._groups[str(group_uuid)]["controller"].members
+        """Return the members of a device or group.
+
+        If it runs a playback session, the leader, the device running the
+        session, is listed first if it's managed.
+        """
+        group = self._groups[str(group_uuid)]
+        members = group["controller"].members
+        monitor = group["monitor"]
+        if monitor.session_id is None:
+            return members
+
+        def is_leader(uuid: str) -> bool:
+            # The leader runs the session with the session id of the group,
+            # the other members run sessions of their own
+            member = self._groups.get(uuid)
+            return (
+                member is not None
+                and member["monitor"].session_id == monitor.session_id
+            )
+
+        return sorted(members, key=lambda uuid: not is_leader(uuid))
+
+    def get_session_endpoint(self, device: UUID) -> UUID | None:
+        """Return the device or group owning the session a device plays.
+
+        Returns None if the device plays no session. The devices playing the
+        session are the members of the device or group.
+        """
+        owner = self._find_session_owner(device)
+        if owner is None:
+            return None
+        return owner["chromecast"].uuid
 
     def on_sessions_changed(self) -> None:
         """Tell the listeners the devices playing a session may have changed.
@@ -432,6 +462,35 @@ class MultizoneManager:
             if member_uuid in self._casts
             for listener in list(self._casts[member_uuid]["listeners"])
         ]
+
+    def _session_members(self, group: GroupInfo) -> list[str]:
+        """Return the devices playing the session a device or group owns.
+
+        Returns an empty list if it owns no session.
+        """
+        controller = group["controller"]
+        # Followers report the session_id but no playback session
+        if group["monitor"].session_id is None or controller.playback_session is None:
+            return []
+        members = controller.members
+        # A dynamic group the session has left can keep reporting both for
+        # minutes, but its only member is then another device
+        if len(members) == 1 and members[0] != str(group["chromecast"].uuid):
+            return []
+        return members
+
+    def _find_session_owner(self, device: UUID) -> GroupInfo | None:
+        """Return the endpoint which owns the playback session a device plays.
+
+        The device's own receiver status can't be used, the members of a group
+        which don't host it run a session of their own. Returns None if the
+        device plays no session.
+        """
+        device_str = str(device)
+        for endpoint in list(self._groups.values()):
+            if device_str in self._session_members(endpoint):
+                return endpoint
+        return None
 
 
 class MultizoneController(BaseController):
