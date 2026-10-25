@@ -1084,7 +1084,10 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def disconnect_channel(self, destination_id: str) -> None:
         """Disconnect a channel with destination_id."""
-        if destination_id in self._open_channels:
+        # Locked so a sender opening the channel can't remove it in between
+        with self._socket_lock:
+            if destination_id not in self._open_channels:
+                return
             try:
                 self.send_message(
                     destination_id,
@@ -1102,7 +1105,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             self._open_channels.remove(destination_id)
 
-            self.handle_channel_disconnected()
+        self.handle_channel_disconnected()
 
     def handle_channel_disconnected(self) -> None:
         """Handles a channel being disconnected."""

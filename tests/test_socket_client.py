@@ -300,6 +300,34 @@ def test_cleanup_closes_all_channels(client: SocketClient) -> None:
     assert not client._open_channels  # pylint: disable=protected-access
 
 
+def test_disconnect_channel_removed_while_waiting(client: SocketClient) -> None:
+    """Test a channel removed by a sender while reconnecting is skipped.
+
+    A sender rolls back a channel when its CONNECT can't be sent.
+    """
+    client.socket = FakeSocket(client)  # type: ignore[assignment]
+    client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
+    # Reconnecting, sends fail
+    client.connecting = True
+    errors: list[Exception] = []
+
+    def disconnect() -> None:
+        try:
+            client.disconnect_channel("receiver-0")
+        except Exception as err:  # pylint: disable=broad-except
+            errors.append(err)
+
+    with client._socket_lock:  # pylint: disable=protected-access
+        thread = threading.Thread(target=disconnect)
+        thread.start()
+        # The disconnect waits for the lock
+        thread.join(0.1)
+        client._open_channels.remove("receiver-0")  # pylint: disable=protected-access
+    thread.join()
+
+    assert not errors
+
+
 def _callback(client: SocketClient) -> tuple[MagicMock, list[bool]]:
     """Return a callback recording whether the socket lock was held."""
     locked: list[bool] = []
