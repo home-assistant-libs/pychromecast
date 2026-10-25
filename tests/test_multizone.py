@@ -18,6 +18,7 @@ from pychromecast.controllers.multizone import (
     SessionEndpoint,
 )
 from pychromecast.const import CAST_TYPE_GROUP
+from pychromecast.error import RequestFailed
 from pychromecast.socket_client import CONNECTION_STATUS_CONNECTED
 from pychromecast.models import CastInfo
 
@@ -406,7 +407,77 @@ def _session_devices(manager: MultizoneManager, device: str) -> list[str]:
     return manager.get_multizone_members(endpoint)
 
 
+def _session_endpoint(manager: MultizoneManager, device: str) -> UUID:
+    """Return the endpoint owning the session a device plays."""
+    endpoint = manager.get_session_endpoint(UUID(device))
+    assert endpoint is not None
+    return endpoint
+
+
 SESSION_UPDATED = {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []}
+
+
+def test_update_session_devices_add() -> None:
+    """Test adding a device to a session playing on one speaker."""
+    speaker_a = _speaker_a()
+    speaker_a.response = {
+        **SESSION_UPDATED,
+        "changedDevices": [SPEAKER_B.replace("-", "")],
+        "sessionEndpoint": {
+            "deviceId": GROUP_UUID,
+            "ipAddress": "192.0.2.10",
+            "port": 32203,
+            "sessionId": SESSION,
+        },
+    }
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+
+    update = manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+    assert update is not None
+    assert update.session_endpoint == SessionEndpoint(
+        GROUP_UUID, "192.0.2.10", 32203, SESSION
+    )
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, "192.0.2.11"),
+    }
+
+
+@pytest.mark.parametrize("device", [SPEAKER_A, SPEAKER_B])
+def test_update_session_devices_remove_from_group(device: str) -> None:
+    """Test removing a device, the group owns the session.
+
+    The member not hosting the group runs a session of its own.
+    """
+    group = _group([SPEAKER_B, SPEAKER_A])
+    group.response = SESSION_UPDATED
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+
+    endpoint = _session_endpoint(manager, device)
+    manager.update_session_devices(endpoint, remove={UUID(SPEAKER_A)})
+
+    assert group.device_list() == {(SPEAKER_B, "192.0.2.11")}
+
+
+def test_update_session_devices_ignores_left_group() -> None:
+    """Test a dynamic group the session has left is ignored."""
+    speaker_a = _speaker_a()
+    speaker_a.response = SESSION_UPDATED
+    # Still reports the session, its only member is the new owner
+    group = _group([SPEAKER_A])
+    manager = _manager([speaker_a, _speaker_b()], [group])
+
+    endpoint = _session_endpoint(manager, SPEAKER_A)
+    assert endpoint == UUID(SPEAKER_A)
+    manager.update_session_devices(endpoint, add={UUID(SPEAKER_B)})
+
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, "192.0.2.11"),
+    }
+    assert {data["type"] for data in group.sent} == {"GET_STATUS"}
 
 
 @pytest.mark.parametrize(
@@ -425,6 +496,78 @@ def test_no_session_endpoint(
     manager = _manager([*devices, _speaker_b()], groups)
 
     assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
+
+
+def test_update_session_devices_no_session() -> None:
+    """Test an error is raised when the endpoint runs no session."""
+    manager = _manager([_speaker_a(None), _speaker_b()])
+
+    with pytest.raises(RequestFailed, match="runs no session"):
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+
+def test_update_session_devices_unmanaged_endpoint() -> None:
+    """Test an error is raised when the endpoint isn't managed."""
+    manager = _manager([_speaker_a(), _speaker_b()])
+
+    with pytest.raises(RequestFailed, match="isn't managed"):
+        manager.update_session_devices(UUID(GROUP_UUID), add={UUID(SPEAKER_B)})
+
+
+def test_update_session_devices_unknown_member() -> None:
+    """Test an error is raised when a member isn't a managed device."""
+    unknown = "c0ffee00-0000-0000-0000-000000000000"
+    group = _group([SPEAKER_B, unknown])
+    manager = _manager([_speaker_a(None, owner=False), _speaker_b()], [group])
+
+    with pytest.raises(RequestFailed, match="no address known"):
+        manager.update_session_devices(UUID(GROUP_UUID), add={UUID(SPEAKER_A)})
+    assert group.sent[-1]["type"] == "GET_STATUS"
+
+
+def test_update_session_devices_rejected() -> None:
+    """Test an error is raised when the change is rejected."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a, _speaker_b()])
+
+    with pytest.raises(RequestFailed):
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+    assert speaker_a.sent[-1]["type"] == "SET_PLAYBACK_DEVICES"
+
+
+def test_update_session_devices_nothing_to_change() -> None:
+    """Test nothing is sent when the set of devices doesn't change."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a])
+
+    # Already a member
+    assert (
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_A)}) is None
+    )
+    assert {data["type"] for data in speaker_a.sent} == {"GET_STATUS"}
+
+
+def test_update_session_devices_none_left() -> None:
+    """Test an error is raised when no device would be left."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a])
+
+    with pytest.raises(RequestFailed, match="no device would be left"):
+        manager.update_session_devices(UUID(SPEAKER_A), remove={UUID(SPEAKER_A)})
+    assert {data["type"] for data in speaker_a.sent} == {"GET_STATUS"}
+
+
+def test_remove_device() -> None:
+    """Test a removed device is no longer managed."""
+    speaker_a = _speaker_a()
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+
+    manager.remove_multizone(UUID(SPEAKER_B))
+
+    speaker_b.cast.unregister_handler.assert_called_once_with(speaker_b.controller)
+    with pytest.raises(RequestFailed, match="no address known"):
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
 
 
 def test_multizone_manager_members() -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import abc
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Set as AbstractSet
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -16,8 +16,9 @@ from . import BaseController, CallbackType, add_listener
 from .media import MediaController, MediaStatusListener, MediaStatus
 from .receiver import CastStatus, CastStatusListener
 from ..const import CAST_TYPE_GROUP, MESSAGE_TYPE
-from ..error import PyChromecastError
+from ..error import PyChromecastError, RequestFailed
 from ..models import CastInfo
+from ..response_handler import WaitResponse
 
 # pylint: disable-next=no-name-in-module
 from ..generated.cast_channel_pb2 import CastMessage
@@ -399,6 +400,59 @@ class MultizoneManager:
         if owner is None:
             return None
         return owner["chromecast"].uuid
+
+    def update_session_devices(
+        self,
+        endpoint: UUID,
+        *,
+        add: AbstractSet[UUID] = frozenset(),
+        remove: AbstractSet[UUID] = frozenset(),
+        timeout: float = 10.0,
+    ) -> PlaybackSessionUpdate | None:
+        """Add devices to, or remove devices from, the session of an endpoint.
+
+        The endpoint is the device or group owning the session, see
+        get_session_endpoint. All devices must have been added with
+        add_multizone. Blocks until the change is done, returns None if nothing
+        changes.
+
+        Raises RequestFailed if the endpoint isn't managed or runs no session, no
+        device would be left, a device isn't managed or the change fails, and
+        RequestTimeout if there's no response.
+        """
+        group = self._groups.get(str(endpoint))
+        if group is None:
+            raise RequestFailed(f"set playback devices, {endpoint} isn't managed")
+        session_id = group["monitor"].session_id
+        if session_id is None:
+            raise RequestFailed(f"set playback devices, {endpoint} runs no session")
+        controller = group["controller"]
+
+        members = {UUID(member) for member in controller.members}
+        target = (members - remove) | add
+        if target == members:
+            return None
+        if not target:
+            raise RequestFailed("set playback devices, no device would be left")
+
+        devices = []
+        for uuid in target:
+            member = self._groups.get(str(uuid))
+            if member is None:
+                raise RequestFailed(
+                    f"set playback devices, no address known for device {uuid}"
+                )
+            devices.append(member["chromecast"].cast_info)
+
+        waiter = WaitResponse(timeout, "set playback devices")
+        controller.set_playback_devices(
+            session_id,
+            devices,
+            callback_function=waiter.callback,
+        )
+        waiter.wait_response()
+        assert waiter.response is not None
+        return _parse_session_update(waiter.response)
 
     def on_sessions_changed(self) -> None:
         """Tell the listeners the devices playing a session may have changed.
