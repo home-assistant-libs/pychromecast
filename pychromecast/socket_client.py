@@ -845,8 +845,9 @@ class SocketClient(threading.Thread, CastStatusListener):
             except ssl.SSLWantReadError:
                 pass
             except ssl.SSLWantWriteError:
-                # The read is retried when TLS can write what it needs to
-                events |= selectors.EVENT_WRITE
+                # The read is retried when TLS can write what it needs to, also
+                # waiting for reads would busy-loop while the socket is readable
+                events = selectors.EVENT_WRITE
             finally:
                 self.socket.settimeout(self.timeout)
 

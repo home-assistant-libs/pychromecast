@@ -240,9 +240,8 @@ def test_read_retried_when_writable(client: SocketClient) -> None:
 
     assert not client._read_messages()  # pylint: disable=protected-access
     assert client.remote_selector_key is not None
-    assert client.remote_selector_key.events == (
-        selectors.EVENT_READ | selectors.EVENT_WRITE
-    )
+    # Only waiting for writes, a readable socket would wake the selector again
+    assert client.remote_selector_key.events == selectors.EVENT_WRITE
     # A writable socket wakes the selector like a readable one
     assert client.remote_selector_key in {key for key, _ in client.selector.select(0)}
 
