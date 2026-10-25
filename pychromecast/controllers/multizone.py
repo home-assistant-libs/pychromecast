@@ -391,10 +391,11 @@ class MultizoneManager:
         return sorted(members, key=lambda uuid: not is_leader(uuid))
 
     def get_session_endpoint(self, device: UUID) -> UUID | None:
-        """Return the device or group owning the session a device plays.
+        """Return the device or group owning the session a device or group plays.
 
-        Returns None if the device plays no session. The devices playing the
-        session are the members of the device or group.
+        A device or group owning a session is its own endpoint. Returns None if
+        the device plays no session. The devices playing the session are the
+        members of the device or group.
         """
         owner = self._find_session_owner(device)
         if owner is None:
@@ -541,6 +542,10 @@ class MultizoneManager:
         device plays no session.
         """
         device_str = str(device)
+        # A group isn't a member of its own session
+        own = self._groups.get(device_str)
+        if own is not None and self._session_members(own):
+            return own
         for endpoint in list(self._groups.values()):
             if device_str in self._session_members(endpoint):
                 return endpoint

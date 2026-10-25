@@ -621,6 +621,8 @@ def test_session_endpoint_group(device: str) -> None:
 
     assert manager.get_session_endpoint(UUID(device)) == UUID(GROUP_UUID)
     assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_A, SPEAKER_B]
+    # The group is its own endpoint
+    assert manager.get_session_endpoint(UUID(GROUP_UUID)) == UUID(GROUP_UUID)
 
 
 def test_session_endpoint_one_device() -> None:
