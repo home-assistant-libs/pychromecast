@@ -402,3 +402,56 @@ def test_group_told_to_members() -> None:
     manager.remove_multizone(UUID(GROUP_UUID))
     listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
     assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == []
+
+
+def test_sessions_changed_reported() -> None:
+    """Test manager listeners are told when sessions may have changed."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+
+    # Once for the new session and once for the status
+    assert listener.multizone_sessions_changed.call_count == 2
+
+
+def test_removed_device_not_tracked() -> None:
+    """Test a removed device no longer requests status."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    manager.remove_multizone(UUID(SPEAKER_A))
+    speaker_a.sent.clear()
+
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+
+    assert not speaker_a.sent
+
+
+def test_member_changes_dont_request_status() -> None:
+    """Test the members reported by a status don't request it again."""
+    group = FakeEndpoint(GROUP_UUID, None, [SPEAKER_B, SPEAKER_A], None)
+    _manager([], [group])
+
+    assert [data["type"] for data in group.sent] == ["GET_STATUS"]
+
+
+@pytest.mark.parametrize("group_uuid", [UUID(GROUP_UUID), GROUP_UUID])
+def test_remove_group(group_uuid: UUID | str) -> None:
+    """Test members are told a removed group is gone, and it's no longer tracked."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    manager = _manager([], [group])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+
+    manager.remove_multizone(group_uuid)
+
+    listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
+    listener.multizone_sessions_changed.assert_called_once_with()
+    group.sent.clear()
+    group.connect()
+    assert not group.sent
+    listener.multizone_new_cast_status.assert_not_called()

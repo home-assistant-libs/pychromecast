@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc
 import logging
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
@@ -14,7 +15,8 @@ from uuid import UUID
 from . import BaseController, CallbackType, add_listener
 from .media import MediaController, MediaStatusListener, MediaStatus
 from .receiver import CastStatus, CastStatusListener
-from ..const import MESSAGE_TYPE
+from ..const import CAST_TYPE_GROUP, MESSAGE_TYPE
+from ..error import PyChromecastError
 from ..models import CastInfo
 
 # pylint: disable-next=no-name-in-module
@@ -111,11 +113,11 @@ def _parse_session_update(data: dict[str, Any]) -> PlaybackSessionUpdate:
 
 
 class GroupInfo(TypedDict):
-    """Chromecast connection, multizone controller and monitor for a group."""
+    """Chromecast connection, multizone controller and monitor of a device or group."""
 
     chromecast: Chromecast
     controller: MultizoneController
-    monitor: _GroupMonitor
+    monitor: _EndpointMonitor
 
 
 class GroupMemberInfo(TypedDict):
@@ -167,12 +169,82 @@ class MultiZoneManagerListener(abc.ABC):
     ) -> None:
         """The group identified by group_uuid, of which the cast is a member, has new status."""
 
+    def multizone_sessions_changed(self) -> None:
+        """The devices playing a playback session may have changed.
+
+        Not abstract to keep existing listeners working.
+        """
+
+
+class _EndpointMonitor(
+    CastStatusListener, ConnectionStatusListener, MultiZoneControllerListener
+):
+    """Monitor of a device or group managed by a MultizoneManager.
+
+    Requests the multizone status when the playback session may have changed,
+    it's only reported in response to a status request, and tells the manager.
+    """
+
+    def __init__(
+        self,
+        manager: MultizoneManager,
+        cast: Chromecast,
+        controller: MultizoneController,
+    ) -> None:
+        self._manager = manager
+        self._mz = controller
+        self._uuid = str(cast.uuid)
+        self._session_id: str | None = None
+        self._unregister = [
+            cast.register_status_listener(self),
+            cast.register_connection_listener(self),
+            controller.register_listener(self),
+        ]
+
+    @property
+    def session_id(self) -> str | None:
+        """Return the id of the session the endpoint runs, from its status."""
+        return self._session_id
+
+    def stop(self) -> None:
+        """Unregister the monitor."""
+        for unregister in self._unregister:
+            unregister()
+
+    def _request_status(self) -> None:
+        with suppress(PyChromecastError):
+            self._mz.update_members()
+
+    def new_cast_status(self, status: CastStatus) -> None:
+        """Request status if the endpoint plays another session."""
+        if status.session_id != self._session_id:
+            self._session_id = status.session_id
+            self._request_status()
+            self._manager.on_sessions_changed()
+
+    def new_connection_status(self, status: ConnectionStatus) -> None:
+        """Request status when connected."""
+        if status.status == CONNECTION_STATUS_CONNECTED:
+            self._request_status()
+
+    def multizone_member_added(self, group_uuid: str) -> None:
+        """Members are only changed by a status, or a broadcast of the change."""
+
+    def multizone_member_removed(self, group_uuid: str) -> None:
+        """Members are only changed by a status, or a broadcast of the change."""
+
+    def multizone_status_received(self) -> None:
+        """Report the new status."""
+        self._manager.on_sessions_changed()
+
+    def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
+        """Request status when the devices playing the session change."""
+        self._request_status()
+
 
 class _GroupMonitor(
-    CastStatusListener,
-    ConnectionStatusListener,
+    _EndpointMonitor,
     MediaStatusListener,
-    MultiZoneControllerListener,
 ):
     """Monitor of a group managed by a MultizoneManager."""
 
@@ -183,16 +255,14 @@ class _GroupMonitor(
         controller: MultizoneController,
     ) -> None:
         """Initialize the monitor."""
-        self._manager = manager
-        self._mz = controller
-        self._uuid = str(group_cast.uuid)
-        group_cast.register_status_listener(self)
-        group_cast.media_controller.register_status_listener(self)
-        group_cast.register_connection_listener(self)
-        controller.register_listener(self)
+        super().__init__(manager, group_cast, controller)
+        self._unregister.append(
+            group_cast.media_controller.register_status_listener(self)
+        )
 
     def new_cast_status(self, status: CastStatus) -> None:
         """Handle reception of a new CastStatus."""
+        super().new_cast_status(status)
         self._manager.on_group_cast_status(self._uuid, status)
 
     def new_media_status(self, status: MediaStatus) -> None:
@@ -204,8 +274,7 @@ class _GroupMonitor(
 
     def new_connection_status(self, status: ConnectionStatus) -> None:
         """Handle reception of a new ConnectionStatus."""
-        if status.status == CONNECTION_STATUS_CONNECTED:
-            self._mz.update_members()
+        super().new_connection_status(status)
         if status.status in (
             CONNECTION_STATUS_DISCONNECTED,
             CONNECTION_STATUS_LOST,
@@ -220,12 +289,9 @@ class _GroupMonitor(
         """Handle removed audio group member."""
         self._manager.on_group_member_removed(self._uuid, group_uuid)
 
-    def multizone_status_received(self) -> None:
-        """Handle reception of audio group status."""
-
 
 class MultizoneManager:
-    """Manage audio groups."""
+    """Manage audio groups, and the playback sessions of devices."""
 
     def __init__(self) -> None:
         # Protect self._casts because it will be accessed from callbacks from
@@ -233,25 +299,39 @@ class MultizoneManager:
         self._casts: dict[str, GroupMemberInfo] = {}
         self._groups: dict[str, GroupInfo] = {}
 
-    def add_multizone(self, group_cast: Chromecast) -> None:
-        """Start managing a group"""
+    def add_multizone(self, group_cast: Chromecast) -> MultizoneController:
+        """Start managing a device or group.
+
+        The members of a group are told about the group's status. Returns the
+        multizone controller of the device or group, for registering listeners.
+        """
         controller = MultizoneController(group_cast.uuid)
+        monitor: _EndpointMonitor
+        if group_cast.cast_type == CAST_TYPE_GROUP:
+            monitor = _GroupMonitor(self, group_cast, controller)
+        else:
+            monitor = _EndpointMonitor(self, group_cast, controller)
+
         self._groups[str(group_cast.uuid)] = {
             "chromecast": group_cast,
             "controller": controller,
-            "monitor": _GroupMonitor(self, group_cast, controller),
+            "monitor": monitor,
         }
         group_cast.register_handler(controller)
+        return controller
 
-    def remove_multizone(self, group_uuid: UUID) -> None:
-        """Stop managing a group"""
+    def remove_multizone(self, group_uuid: UUID | str) -> None:
+        """Stop managing a device or group"""
         group_uuid_str = str(group_uuid)
         group = self._groups.pop(group_uuid_str, None)
         # Inform all group members that they are no longer members
         if group is not None:
             group["controller"].reset_members()
+            group["monitor"].stop()
+            group["chromecast"].unregister_handler(group["controller"])
         for member in self._casts.values():
             member["group_memberships"].discard(group_uuid_str)
+        self.on_sessions_changed()
 
     def register_listener(
         self, member_uuid: UUID, listener: MultiZoneManagerListener
@@ -287,8 +367,17 @@ class MultizoneManager:
         return self._groups[str(group_uuid)]["chromecast"].media_controller
 
     def get_multizone_members(self, group_uuid: UUID | str) -> list[str]:
-        """Return the members of a group"""
+        """Return the members of a device or group"""
         return self._groups[str(group_uuid)]["controller"].members
+
+    def on_sessions_changed(self) -> None:
+        """Tell the listeners the devices playing a session may have changed.
+
+        Called by the monitors of the managed devices and groups.
+        """
+        for cast in list(self._casts.values()):
+            for listener in list(cast["listeners"]):
+                listener.multizone_sessions_changed()
 
     def on_group_cast_status(self, group_uuid: str, status: CastStatus) -> None:
         """Tell the members of a group about its new status.
@@ -412,9 +501,11 @@ class MultizoneController(BaseController):
         for uuid in list(self._members):
             self._remove_member(uuid)
 
-    def update_members(self) -> None:
+    def update_members(self, *, callback_function: CallbackType | None = None) -> None:
         """Update audio group members."""
-        self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS})
+        self.send_message(
+            {MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=callback_function
+        )
 
     def get_casting_groups(self) -> None:
         """Send GET_CASTING_GROUPS message."""
