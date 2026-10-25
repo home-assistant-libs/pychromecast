@@ -53,7 +53,7 @@ class PlaybackSession:
     stream_transfer_supported: bool | None
 
 
-class MultizoneVolume(TypedDict):
+class MultizoneVolume(TypedDict, total=False):
     """Volume of a device in a multizone status."""
 
     level: float
@@ -69,12 +69,12 @@ class MultizoneDevice(TypedDict):
     volume: NotRequired[MultizoneVolume]
 
 
-class MultizonePlaybackSession(TypedDict):
+class MultizonePlaybackSession(TypedDict, total=False):
     """The playback session in a multizone status."""
 
-    appAllowsGrouping: NotRequired[bool]
-    isVideoContent: NotRequired[bool]
-    streamTransferSupported: NotRequired[bool]
+    appAllowsGrouping: bool
+    isVideoContent: bool
+    streamTransferSupported: bool
 
 
 class MultizoneStatus(TypedDict):
