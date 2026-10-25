@@ -491,7 +491,8 @@ class MultizoneController(BaseController):
     def playback_session(self) -> PlaybackSession | None:
         """Return the playback session reported in the last multizone status.
 
-        None if no session is attached to this endpoint.
+        None if no session is attached to this endpoint, also after a session
+        update says the session moved to another endpoint.
         """
         return self._playback_session
 
@@ -621,6 +622,12 @@ class MultizoneController(BaseController):
             # moved to a new endpoint
             update = _parse_session_update(data)
             _LOGGER.debug("(%s) Playback session updated: %s", self._uuid, update)
+            endpoint = update.session_endpoint
+            if endpoint is not None and endpoint.device_id != self._uuid:
+                _LOGGER.debug(
+                    "(%s) Playback session moved to %s", self._uuid, endpoint.device_id
+                )
+                self._playback_session = None
             for listener in list(self._status_listeners):
                 listener.multizone_playback_session_updated(update)
             return True

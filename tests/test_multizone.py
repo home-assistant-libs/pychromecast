@@ -122,6 +122,43 @@ def test_playback_session_updated() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("endpoint", "playback_session"),
+    [
+        # The session moved away
+        (KITCHEN_UUID, None),
+        # The session moved here
+        (GROUP_UUID, PlaybackSession(True, None, None)),
+    ],
+)
+def test_playback_session_moved(
+    endpoint: str, playback_session: PlaybackSession | None
+) -> None:
+    """Test the playback session is cleared when the session moves away."""
+    controller, _ = _controller()
+    controller.receive_message(
+        MagicMock(), _status(playbackSession={"appAllowsGrouping": True})
+    )
+
+    controller.receive_message(
+        MagicMock(),
+        {
+            "type": "PLAYBACK_SESSION_UPDATED",
+            "requestId": 0,
+            "changedDevices": [],
+            "failedDevices": [],
+            "sessionEndpoint": {
+                "deviceId": endpoint,
+                "ipAddress": "192.168.0.13",
+                "port": 32046,
+                "sessionId": "9e63447a-e514-4a79-a22c-2afa00eea9c1",
+            },
+        },
+    )
+
+    assert controller.playback_session == playback_session
+
+
 def test_playback_session_updated_without_endpoint() -> None:
     """Test session update where the endpoint did not move."""
     controller, listener = _controller()
