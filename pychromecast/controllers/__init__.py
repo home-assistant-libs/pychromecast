@@ -5,9 +5,11 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 from __future__ import annotations
 
 import abc
+from collections.abc import Callable
+from contextlib import suppress
 from functools import partial
 import logging
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
@@ -17,6 +19,21 @@ from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
+
+_ListenerT = TypeVar("_ListenerT")
+
+
+def add_listener(
+    listeners: list[_ListenerT], listener: _ListenerT
+) -> Callable[[], None]:
+    """Add a listener to a list, returns a function which removes it again."""
+    listeners.append(listener)
+
+    def remove_listener() -> None:
+        with suppress(ValueError):
+            listeners.remove(listener)
+
+    return remove_listener
 
 
 class SendMessageFunc(Protocol):
@@ -111,6 +128,7 @@ class BaseController(abc.ABC):
 
     def unregistered(self) -> None:
         """Called when a controller is unregistered."""
+        self._socket_client = None
         self._message_func = None
 
     def channel_connected(self) -> None:

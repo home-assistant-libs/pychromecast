@@ -4,6 +4,7 @@ on the Chromecast.
 """
 
 import abc
+from collections.abc import Callable
 from datetime import datetime, timezone
 from dataclasses import dataclass
 import logging
@@ -17,7 +18,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse
-from . import CallbackType, QuickPlayController
+from . import CallbackType, QuickPlayController, add_listener
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -594,10 +595,14 @@ class MediaController(BaseMediaPlayer):
 
         return False
 
-    def register_status_listener(self, listener: MediaStatusListener) -> None:
+    def register_status_listener(
+        self, listener: MediaStatusListener
+    ) -> Callable[[], None]:
         """Register a listener for new media statuses. A new status will
-        call listener.new_media_status(status)"""
-        self._status_listeners.append(listener)
+        call listener.new_media_status(status)
+
+        Returns a function which unregisters the listener."""
+        return add_listener(self._status_listeners, listener)
 
     def update_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Send message to update the status."""
