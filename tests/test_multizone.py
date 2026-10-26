@@ -3,6 +3,8 @@
 from unittest.mock import MagicMock
 from uuid import UUID
 
+import pytest
+
 from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
@@ -10,6 +12,7 @@ from pychromecast.controllers.multizone import (
     PlaybackSessionUpdate,
     SessionEndpoint,
 )
+from pychromecast.models import CastInfo
 
 GROUP_UUID = "9a4683f8-a265-4ec7-aab1-a70cb50f4ca7"
 KITCHEN_UUID = "be209f09-0f6a-4596-ac1a-16a77670692b"
@@ -148,3 +151,88 @@ def test_listener_without_session_callback() -> None:
     assert controller.receive_message(
         MagicMock(), {"type": "PLAYBACK_SESSION_UPDATED", "requestId": 0}
     )
+
+
+SESSION_ID = "9e63447a-e514-4a79-a22c-2afa00eea9c1"
+
+
+def _cast_info(uuid: str, host: str) -> CastInfo:
+    return CastInfo(set(), UUID(uuid), None, None, host, 8009, "audio", None)
+
+
+def _registered_controller() -> tuple[MultizoneController, MagicMock]:
+    controller = MultizoneController(UUID(GROUP_UUID))
+    socket_client = MagicMock()
+    controller.registered(socket_client)
+    return controller, socket_client.send_platform_message
+
+
+def test_set_playback_devices_message() -> None:
+    """Test the SET_PLAYBACK_DEVICES message."""
+    controller, send = _registered_controller()
+
+    controller.set_playback_devices(
+        SESSION_ID,
+        [
+            _cast_info(KITCHEN_UUID, "192.168.0.13"),
+            _cast_info(BACK_ROOM_UUID, "192.168.0.11"),
+        ],
+        session_name="Kitchen and back room",
+    )
+
+    send.assert_called_once()
+    namespace, message = send.call_args.args
+    assert namespace == "urn:x-cast:com.google.cast.multizone"
+    assert message == {
+        "type": "SET_PLAYBACK_DEVICES",
+        "sessionId": SESSION_ID,
+        "deviceList": [
+            {"deviceId": KITCHEN_UUID, "ipAddress": "192.168.0.13", "port": 8009},
+            {"deviceId": BACK_ROOM_UUID, "ipAddress": "192.168.0.11", "port": 8009},
+        ],
+        "sessionName": "Kitchen and back room",
+    }
+
+
+def test_set_playback_devices_requires_a_device() -> None:
+    """Test a session can't be set to play on no devices."""
+    controller, send = _registered_controller()
+
+    with pytest.raises(ValueError):
+        controller.set_playback_devices(SESSION_ID, [])
+    send.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("msg_sent", "response", "success"),
+    [
+        (
+            True,
+            {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []},
+            True,
+        ),
+        (
+            True,
+            {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": [KITCHEN_UUID]},
+            False,
+        ),
+        (True, {"type": "INVALID_REQUEST", "reason": "INVALID_SESSION_ID"}, False),
+        (True, {"type": "INVALID_REQUEST"}, False),
+        (False, None, False),
+    ],
+)
+def test_set_playback_devices_response(
+    msg_sent: bool, response: dict | None, success: bool
+) -> None:
+    """Test the callback reports whether all devices were changed."""
+    controller, send = _registered_controller()
+    callback = MagicMock()
+
+    controller.set_playback_devices(
+        SESSION_ID,
+        [_cast_info(KITCHEN_UUID, "192.168.0.13")],
+        callback_function=callback,
+    )
+    send.call_args.kwargs["callback_function"](msg_sent, response)
+
+    callback.assert_called_once_with(success, response)

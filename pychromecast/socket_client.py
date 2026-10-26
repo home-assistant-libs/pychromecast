@@ -21,6 +21,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from struct import pack, unpack
+from typing import Any
 
 import zeroconf
 
@@ -126,6 +127,19 @@ class ConnectionStatus:
     service: HostServiceInfo | MDNSServiceInfo | None
 
 
+class _SocketClientLogger(logging.LoggerAdapter):
+    """Prefixes log messages with the friendly name and address of the cast."""
+
+    def __init__(self, logger: logging.Logger, client: SocketClient) -> None:
+        super().__init__(logger)
+        self._client = client
+
+    def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
+        """Add the prefix, the name and address may change while connecting."""
+        client = self._client
+        return f"[{client.fn or ''}({client.host}):{client.port}] {msg}", kwargs
+
+
 class ConnectionStatusListener(abc.ABC):
     """Listener for receiving connection status events."""
 
@@ -178,7 +192,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.daemon = True
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = _SocketClientLogger(logging.getLogger(__name__), self)
 
         self._force_recon = False
 
@@ -246,12 +260,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             try:
                 callback_function(False, None)
             except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    "[%s(%s):%s] Unhandled exception in callback function",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                )
+                self.logger.exception("Unhandled exception in callback function")
 
         self.app_namespaces = []
         self.destination_id = None
@@ -325,24 +334,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                             except (AttributeError, KeyError, UnicodeError):
                                 pass
                         self.logger.debug(
-                            "[%s(%s):%s] Resolved service %s to %s:%s",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                            service,
-                            host,
-                            port,
+                            "Resolved service %s to %s:%s", service, host, port
                         )
                         self.host = host
                         self.port = port
                     else:
-                        self.logger.debug(
-                            "[%s(%s):%s] Failed to resolve service %s",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                            service,
-                        )
+                        self.logger.debug("Failed to resolve service %s", service)
                         self._report_connection_status(
                             ConnectionStatus(
                                 CONNECTION_STATUS_FAILED_RESOLVE,
@@ -355,14 +352,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                         # try next service
                         continue
 
-                    self.logger.debug(
-                        "[%s(%s):%s] Connecting to %s:%s",
-                        self.fn or "",
-                        self.host,
-                        self.port,
-                        self.host,
-                        self.port,
-                    )
+                    self.logger.debug("Connecting")
                     self.socket.connect((self.host, self.port))
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
@@ -383,19 +373,9 @@ class SocketClient(threading.Thread, CastStatusListener):
 
                     if self.first_connection:
                         self.first_connection = False
-                        self.logger.debug(
-                            "[%s(%s):%s] Connected!",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                        )
+                        self.logger.debug("Connected!")
                     else:
-                        self.logger.info(
-                            "[%s(%s):%s] Connection reestablished!",
-                            self.fn or "",
-                            self.host,
-                            self.port,
-                        )
+                        self.logger.info("Connection reestablished!")
                     return
 
                 # OSError raised if connecting to the socket fails, NotConnected raised
@@ -414,10 +394,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                         )
                     )
                     retry_log_fun(
-                        "[%s(%s):%s] Failed to connect to service %s, retrying in %.1fs",
-                        self.fn or "",
-                        self.host,
-                        self.port,
+                        "Failed to connect to service %s, retrying in %.1fs",
                         service,
                         retry["delay"],
                     )
@@ -427,10 +404,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             # Only sleep if we have another retry remaining
             if tries is None or tries > 1:
                 self.logger.debug(
-                    "[%s(%s):%s] Not connected, sleeping for %.1fs. Services: %s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "Not connected, sleeping for %.1fs. Services: %s",
                     self.retry_wait,
                     self.services,
                 )
@@ -440,10 +414,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 tries -= 1
 
         self.logger.error(
-            "[%s(%s):%s] Failed to connect. No retries.",
-            self.fn or "",
-            self.host,
-            self.port,
+            "Failed to connect. No retries.",
         )
         raise ChromecastConnectionError("Failed to connect")
 
@@ -537,10 +508,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.initialize_connection()
         except ChromecastConnectionError:
             self.logger.debug(
-                "[%s(%s):%s] Connection error to host closing down",
-                self.fn or "",
-                self.host,
-                self.port,
+                "Connection error to host closing down",
                 exc_info=True,
             )
             self._cleanup()
@@ -558,10 +526,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             except ChromecastConnectionError:
                 self.logger.debug(
-                    "[%s(%s):%s] Connection error to host closing down",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "Connection error to host closing down",
                     exc_info=True,
                 )
                 break
@@ -575,30 +540,21 @@ class SocketClient(threading.Thread, CastStatusListener):
             except ChromecastConnectionClosed as exc:
                 self._force_recon = True
                 self.logger.debug(
-                    "[%s(%s):%s] %s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "%s",
                     exc,
                 )
 
             except Exception:  # pylint: disable=broad-except
                 if self.stop.is_set():
                     self.logger.debug(
-                        "[%s(%s):%s] Unhandled exception in worker thread while stopping",
-                        self.fn or "",
-                        self.host,
-                        self.port,
+                        "Unhandled exception in worker thread while stopping",
                         exc_info=True,
                     )
                     break
 
                 self._force_recon = True
                 self.logger.exception(
-                    "[%s(%s):%s] Unhandled exception in worker thread, attempting reconnect",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "Unhandled exception in worker thread, attempting reconnect",
                 )
                 time.sleep(self.retry_wait)
 
@@ -655,21 +611,11 @@ class SocketClient(threading.Thread, CastStatusListener):
         # check if connection is expired
         reset = False
         if self._force_recon:
-            self.logger.debug(
-                "[%s(%s):%s] Forced reconnection",
-                self.fn or "",
-                self.host,
-                self.port,
-            )
+            self.logger.debug("Forced reconnection")
             reset = True
 
         elif self.heartbeat_controller.is_expired():
-            self.logger.info(
-                "[%s(%s):%s] Heartbeat timeout, resetting connection",
-                self.fn or "",
-                self.host,
-                self.port,
-            )
+            self.logger.info("Heartbeat timeout, resetting connection")
             reset = True
 
         if reset:
@@ -692,13 +638,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 message.namespace != NS_HEARTBEAT
                 or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
             ):
-                self.logger.debug(
-                    "[%s(%s):%s] Received: %s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                    _message_to_string(message, data),
-                )
+                self.logger.debug("Received: %s", _message_to_string(message, data))
 
             # message handlers
             for handler in set(self._handlers[message.namespace]):
@@ -708,32 +648,19 @@ class SocketClient(threading.Thread, CastStatusListener):
                     if not handled:
                         if data.get(REQUEST_ID) not in self._request_callbacks:
                             self.logger.debug(
-                                "[%s(%s):%s] Message unhandled: %s",
-                                self.fn or "",
-                                self.host,
-                                self.port,
+                                "Message unhandled: %s",
                                 _message_to_string(message, data),
                             )
                 except Exception:  # pylint: disable=broad-except
                     self.logger.exception(
-                        (
-                            "[%s(%s):%s] Exception caught while sending message to "
-                            "controller %s: %s"
-                        ),
-                        self.fn or "",
-                        self.host,
-                        self.port,
+                        "Exception caught while sending message to controller %s: %s",
                         type(handler).__name__,
                         _message_to_string(message, data),
                     )
 
         else:
             self.logger.debug(
-                "[%s(%s):%s] Received unknown namespace: %s",
-                self.fn or "",
-                self.host,
-                self.port,
-                _message_to_string(message, data),
+                "Received unknown namespace: %s", _message_to_string(message, data)
             )
 
     def _cleanup(self) -> None:
@@ -755,9 +682,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             try:
                 self.socket.close()
             except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    "[%s(%s):%s] _cleanup", self.fn or "", self.host, self.port
-                )
+                self.logger.exception("_cleanup")
         self._report_connection_status(
             ConnectionStatus(
                 CONNECTION_STATUS_DISCONNECTED,
@@ -777,10 +702,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         for listener in self._connection_listeners:
             try:
                 self.logger.debug(
-                    "[%s(%s):%s] connection listener: %x (%s) %s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "connection listener: %x (%s) %s",
                     id(listener),
                     type(listener).__name__,
                     status,
@@ -788,10 +710,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 listener.new_connection_status(status)
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception(
-                    "[%s(%s):%s] Exception thrown when calling connection listener",
-                    self.fn or "",
-                    self.host,
-                    self.port,
+                    "Exception thrown when calling connection listener"
                 )
 
     def _read_bytes_from_socket(self, msglen: int) -> bytes:
@@ -811,12 +730,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 chunks.append(chunk)
                 bytes_recd += len(chunk)
             except TimeoutError:
-                self.logger.debug(
-                    "[%s(%s):%s] timeout in : _read_bytes_from_socket",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                )
+                self.logger.debug("timeout in : _read_bytes_from_socket")
                 continue
         return b"".join(chunks)
 
@@ -879,13 +793,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             msg.namespace != NS_HEARTBEAT
             or self.heartbeat_controller.logger.isEnabledFor(logging.DEBUG)
         ):
-            self.logger.debug(
-                "[%s(%s):%s] Sending: %s",
-                self.fn or "",
-                self.host,
-                self.port,
-                _message_to_string(msg, data),
-            )
+            self.logger.debug("Sending: %s", _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
             if callback_function:
@@ -908,13 +816,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if not no_add_request_id:
                     self._request_callbacks.pop(request_id, None)
                 self._force_recon = True
-                self.logger.warning(
-                    "[%s(%s):%s] Error writing to socket: %s",
-                    self.fn or "",
-                    self.host,
-                    self.port,
-                    exc,
-                )
+                self.logger.warning("Error writing to socket: %s", exc)
         else:
             if callback_function:
                 callback_function(False, None)
@@ -1017,9 +919,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             except NotConnected:
                 pass
             except Exception:  # pylint: disable=broad-except
-                self.logger.exception(
-                    "[%s(%s):%s] Exception", self.fn or "", self.host, self.port
-                )
+                self.logger.exception("Exception")
 
             self._open_channels.remove(destination_id)
 

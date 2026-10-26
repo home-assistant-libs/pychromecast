@@ -1,5 +1,5 @@
 beautifulsoup4==4.15.0
-ruff==0.17.1
+ruff==0.17.2
 mypy==2.4.0
 PlexAPI==4.17.2
 pylint==4.1.3
@@ -9,4 +9,4 @@ types-beautifulsoup4==4.12.0.20250516
 types-html5lib==1.1.11.20260518
 types-protobuf==7.35.1.20260906
 types-requests==2.33.0.20261006
-yle-dl==20240927
+yle-dl==20261002

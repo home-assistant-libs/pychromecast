@@ -6,14 +6,16 @@ from __future__ import annotations
 
 import abc
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
 
-from . import BaseController
+from . import BaseController, CallbackType
 from .media import MediaController, MediaStatusListener, MediaStatus
 from .receiver import CastStatus, CastStatusListener
 from ..const import MESSAGE_TYPE
+from ..models import CastInfo
 
 # pylint: disable-next=no-name-in-module
 from ..generated.cast_channel_pb2 import CastMessage
@@ -39,6 +41,7 @@ TYPE_GET_CASTING_GROUPS = "GET_CASTING_GROUPS"
 TYPE_GET_STATUS = "GET_STATUS"
 TYPE_MULTIZONE_STATUS = "MULTIZONE_STATUS"
 TYPE_SESSION_UPDATED = "PLAYBACK_SESSION_UPDATED"
+TYPE_SET_PLAYBACK_DEVICES = "SET_PLAYBACK_DEVICES"
 
 
 @dataclass(frozen=True)
@@ -370,6 +373,61 @@ class MultizoneController(BaseController):
     def get_casting_groups(self) -> None:
         """Send GET_CASTING_GROUPS message."""
         self.send_message({MESSAGE_TYPE: TYPE_GET_CASTING_GROUPS})
+
+    def set_playback_devices(
+        self,
+        session_id: str,
+        devices: Iterable[CastInfo],
+        *,
+        session_name: str | None = None,
+        callback_function: CallbackType | None = None,
+    ) -> None:
+        """Set the devices playing a session, without interrupting playback.
+
+        Must be sent to the endpoint which currently owns the session, devices
+        is the complete set of devices which should play the session. The
+        session may move to another endpoint, see
+        PlaybackSessionUpdate.session_endpoint in the response.
+
+        Depending on the app, moving the session to devices which aren't
+        playing it may restart playback on them. Adding the new devices first
+        and then removing the old ones doesn't.
+
+        The callback is called with True and the PLAYBACK_SESSION_UPDATED
+        response if all devices were changed, else with False and the response,
+        for example INVALID_REQUEST if this isn't the session's endpoint.
+        """
+        device_list = [
+            {
+                "deviceId": str(device.uuid),
+                "ipAddress": device.host,
+                "port": device.port,
+            }
+            for device in devices
+        ]
+        if not device_list:
+            raise ValueError("A session must play on at least one device")
+
+        message: dict[str, Any] = {
+            MESSAGE_TYPE: TYPE_SET_PLAYBACK_DEVICES,
+            "sessionId": session_id,
+            "deviceList": device_list,
+        }
+        if session_name is not None:
+            message["sessionName"] = session_name
+
+        def handle_response(msg_sent: bool, response: dict | None) -> None:
+            if not callback_function:
+                return
+            callback_function(
+                msg_sent
+                and response is not None
+                and response.get(MESSAGE_TYPE) == TYPE_SESSION_UPDATED
+                and not response.get("failedDevices"),
+                response,
+            )
+
+        self.send_message(message, callback_function=handle_response)
 
     def receive_message(  # pylint: disable=too-many-return-statements
         self, _message: CastMessage, data: dict
