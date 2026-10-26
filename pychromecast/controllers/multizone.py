@@ -236,6 +236,18 @@ class _EndpointMonitor(
 
     def multizone_status_received(self) -> None:
         """Report the new status."""
+        members = self._mz.members
+        if (
+            self._mz.playback_session is not None
+            and len(members) == 1
+            and members[0] != self._uuid
+        ):
+            # The manager ignores the session of a group the session has left
+            _LOGGER.debug(
+                "(%s) Reports a playback session, but its only member is %s",
+                self._uuid,
+                members[0],
+            )
         self._manager.on_sessions_changed()
 
     def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
@@ -445,6 +457,12 @@ class MultizoneManager:
                 )
             devices.append(member["chromecast"].cast_info)
 
+        _LOGGER.debug(
+            "Setting the devices of session %s on %s to %s",
+            session_id,
+            endpoint,
+            target,
+        )
         waiter = WaitResponse(timeout, "set playback devices")
         controller.set_playback_devices(
             session_id,
@@ -724,11 +742,16 @@ class MultizoneController(BaseController):
                 self._add_member(uuid, members[uuid])
 
             playback_session = data["status"].get("playbackSession")
-            self._playback_session = (
+            parsed_session = (
                 _parse_playback_session(playback_session)
                 if playback_session is not None
                 else None
             )
+            if parsed_session != self._playback_session:
+                _LOGGER.debug(
+                    "(%s) Playback session changed to %s", self._uuid, parsed_session
+                )
+            self._playback_session = parsed_session
 
             for listener in list(self._status_listeners):
                 listener.multizone_status_received()
