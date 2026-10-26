@@ -53,6 +53,7 @@ def test_get_group_info_elected_leader(hostname: str, encoded: str) -> None:
         ("fe80::a", "[fe80::b]:8009", "fe80::b"),
         ("192.168.1.2", "[fe80::b]:8009", "fe80::b"),
         ("chromecast.local", "[fe80::b]:8009", "fe80::b"),
+        ("chromecast.local", "[fe80::b%253]:8009", "fe80::b"),
     ],
 )
 def test_get_group_info_elected_leader_scope(

@@ -326,12 +326,15 @@ def _inherit_scope(address: str, scoped_address: str) -> str:
     """
     try:
         ip = ipaddress.ip_address(address)
-        scoped_ip = ipaddress.ip_address(scoped_address)
     except ValueError:
         return address
     if not isinstance(ip, ipaddress.IPv6Address) or not ip.is_link_local:
         return address
     address, _, _ = address.partition("%")
+    try:
+        scoped_ip = ipaddress.ip_address(scoped_address)
+    except ValueError:
+        return address
     if isinstance(scoped_ip, ipaddress.IPv6Address) and scoped_ip.scope_id:
         return f"{address}%{scoped_ip.scope_id}"
     return address
