@@ -136,6 +136,8 @@ class _SocketClientLogger(logging.LoggerAdapter):
     def log(self, level: int, msg: object, *args: object, **kwargs: Any) -> None:
         """Add the prefix, the name and address may change while connecting."""
         client = self._client
+        # Skip this frame so records name the real caller
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         self.logger.log(
             level,
             f"[%s(%s):%s] {msg}",

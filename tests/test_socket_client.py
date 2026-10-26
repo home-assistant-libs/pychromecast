@@ -138,3 +138,7 @@ def test_log_prefix_keeps_scope(
         "[(fe80::1%2):8009] Connected!",
         "[(fe80::1%2):8009] Connected again",
     ]
+    assert [record.funcName for record in caplog.records] == [
+        "test_log_prefix_keeps_scope",
+        "test_log_prefix_keeps_scope",
+    ]
