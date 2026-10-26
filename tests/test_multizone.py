@@ -726,3 +726,40 @@ def test_idle_group_members_keep_their_order() -> None:
         )
 
     assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_B, SPEAKER_A]
+
+
+def test_session_moved_reported() -> None:
+    """Test the device or group and its members are told where its session went."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+    listener_a = MagicMock(spec=MultiZoneManagerListener)
+    listener_group = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener_a)
+    manager.register_listener(UUID(GROUP_UUID), listener_group)
+    assert group.controller is not None
+    message = {
+        "type": "PLAYBACK_SESSION_UPDATED",
+        "requestId": 0,
+        "name": "Speaker A + 2",
+        "changedDevices": [],
+        "sessionEndpoint": {
+            "deviceId": KITCHEN_UUID,
+            "ipAddress": "192.0.2.10",
+            "port": 32077,
+            "sessionId": SESSION,
+        },
+    }
+
+    group.controller.receive_message(MagicMock(), message)
+
+    endpoint = SessionEndpoint(KITCHEN_UUID, "192.0.2.10", 32077, SESSION)
+    for listener in (listener_a, listener_group):
+        listener.multizone_session_moved.assert_called_once_with(
+            GROUP_UUID, endpoint, "Speaker A + 2"
+        )
+
+    # An update without an endpoint isn't a move
+    group.controller.receive_message(
+        MagicMock(), {"type": "PLAYBACK_SESSION_UPDATED", "requestId": 0}
+    )
+    listener_a.multizone_session_moved.assert_called_once()

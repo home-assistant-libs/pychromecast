@@ -176,6 +176,16 @@ class MultiZoneManagerListener(abc.ABC):
         Not abstract to keep existing listeners working.
         """
 
+    def multizone_session_moved(
+        self, group_uuid: str, endpoint: SessionEndpoint, name: str
+    ) -> None:
+        """The session of a device or group moved to endpoint, named name.
+
+        Called for the device or group and its members. The endpoint may not be
+        managed yet, for example a new dynamic group. Not abstract to keep
+        existing listeners working.
+        """
+
 
 class _EndpointMonitor(
     CastStatusListener, ConnectionStatusListener, MultiZoneControllerListener
@@ -253,6 +263,9 @@ class _EndpointMonitor(
     def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
         """Request status when the devices playing the session change."""
         self._request_status()
+        endpoint = update.session_endpoint
+        if endpoint is not None:
+            self._manager.on_session_moved(self._uuid, endpoint, update.name)
 
 
 class _GroupMonitor(
@@ -481,6 +494,25 @@ class MultizoneManager:
         for cast in list(self._casts.values()):
             for listener in list(cast["listeners"]):
                 listener.multizone_sessions_changed()
+
+    def on_session_moved(
+        self, group_uuid: str, endpoint: SessionEndpoint, name: str
+    ) -> None:
+        """Tell a device or group and its members that its session moved.
+
+        Called by the monitors of the managed devices and groups.
+        """
+        group = self._groups.get(group_uuid)
+        members = group["controller"].members if group is not None else []
+        listeners: list[MultiZoneManagerListener] = []
+        for uuid in [group_uuid, *members]:
+            if uuid not in self._casts:
+                continue
+            for listener in self._casts[uuid]["listeners"]:
+                if listener not in listeners:
+                    listeners.append(listener)
+        for listener in listeners:
+            listener.multizone_session_moved(group_uuid, endpoint, name)
 
     def on_group_cast_status(self, group_uuid: str, status: CastStatus) -> None:
         """Tell the members of a group about its new status.
