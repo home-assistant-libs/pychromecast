@@ -136,7 +136,8 @@ class _SocketClientLogger(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
         """Add the prefix, the name and address may change while connecting."""
         client = self._client
-        return f"[{client.fn or ''}({client.host}):{client.port}] {msg}", kwargs
+        prefix = f"[{client.fn or ''}({client.host}):{client.port}]"
+        return f"{prefix.replace('%', '%%')} {msg}", kwargs
 
 
 class ConnectionStatusListener(abc.ABC):
