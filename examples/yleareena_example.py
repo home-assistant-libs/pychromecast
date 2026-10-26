@@ -56,7 +56,7 @@ def get_kaltura_id(program_id: str) -> str:
     """
     # yledl is not available in CI, silence import warnings
     from yledl.extractors import extractor_factory  # type: ignore[import-untyped]
-    from yledl.ffprobe import NullProbe  # type: ignore[import-untyped]
+    from yledl.ffmpeg import NullProbe  # type: ignore[import-untyped]
     from yledl.http import HttpClient  # type: ignore[import-untyped]
     from yledl.io import IOContext  # type: ignore[import-untyped]
     from yledl.localization import TranslationChooser  # type: ignore[import-untyped]

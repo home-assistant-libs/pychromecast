@@ -3,11 +3,11 @@
 from collections.abc import Generator
 import socket
 import ssl
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from pychromecast.error import ChromecastConnectionError
+from pychromecast.error import ChromecastConnectionError, PyChromecastStopped
 from pychromecast.models import HostServiceInfo
 from pychromecast.socket_client import SocketClient
 
@@ -69,3 +69,57 @@ def test_connect_closes_raw_socket_on_failed_wrap(
     raw_socket.close.assert_called_once_with()
     assert socket_client.socket is None
     assert socket_client.remote_selector_key is None
+
+
+def test_stopped_during_worker_does_not_log_exception() -> None:
+    """An expected shutdown must not be logged as a worker failure."""
+    client = object.__new__(SocketClient)
+
+    client.fn = "Test Chromecast"
+    client.host = "192.0.2.1"
+    client.port = 8009
+
+    client.stop = Mock()
+    client.stop.is_set.side_effect = [False, True, True]
+    client._run_once = Mock(
+        side_effect=PyChromecastStopped("Socket client's thread is stopped.")
+    )
+    client.initialize_connection = Mock()
+    client.heartbeat_controller = Mock()
+    client.logger = Mock()
+    client._cleanup = Mock()
+    client._force_recon = False
+
+    client.run()
+
+    client._run_once.assert_called_once()
+    client.logger.exception.assert_not_called()
+    assert client._force_recon is False
+    client._cleanup.assert_called_once()
+
+
+def test_stopped_exception_exits_worker() -> None:
+    """A stopped socket client exits the worker loop cleanly."""
+    client = object.__new__(SocketClient)
+
+    client.fn = "Test Chromecast"
+    client.host = "192.0.2.1"
+    client.port = 8009
+
+    client.stop = Mock()
+    client.stop.is_set.side_effect = [False, False]
+    client._run_once = Mock(
+        side_effect=PyChromecastStopped("Socket client's thread is stopped.")
+    )
+    client.initialize_connection = Mock()
+    client.heartbeat_controller = Mock()
+    client.logger = Mock()
+    client._cleanup = Mock()
+    client._force_recon = False
+
+    client.run()
+
+    client._run_once.assert_called_once()
+    client.logger.exception.assert_not_called()
+    assert client._force_recon is False
+    client._cleanup.assert_called_once()
