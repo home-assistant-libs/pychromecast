@@ -2,7 +2,9 @@
 
 from unittest.mock import Mock
 
-from pychromecast.error import PyChromecastStopped
+import pytest
+
+from pychromecast.error import NotConnected, PyChromecastStopped
 from pychromecast.socket_client import SocketClient
 
 
@@ -58,3 +60,29 @@ def test_stopped_exception_exits_worker() -> None:
     client.logger.exception.assert_not_called()
     assert client._force_recon is False
     client._cleanup.assert_called_once()
+
+
+def test_send_message_on_torn_down_socket_raises_not_connected() -> None:
+    """A send racing socket teardown raises NotConnected instead of crashing."""
+    client = SocketClient(
+        cast_type="audio",
+        tries=1,
+        timeout=1,
+        retry_wait=1,
+        services=set(),
+        zconf=None,
+    )
+    try:
+        client.connecting = False
+        client.socket = None
+
+        with pytest.raises(NotConnected):
+            client.send_message(
+                "receiver-0",
+                "urn:x-cast:com.google.cast.receiver",
+                {"type": "STOP"},
+            )
+    finally:
+        client.socketpair[0].close()
+        client.socketpair[1].close()
+        client.selector.close()

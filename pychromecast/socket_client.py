@@ -222,6 +222,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.connecting = True
         self.first_connection = True
         self.socket: socket.socket | ssl.SSLSocket | None = None
+        # Serializes all operations on self.socket. Both the worker thread
+        # (recv, reconnect, cleanup) and caller threads (sendall) touch the
+        # socket, and concurrent operations on an SSLSocket are not safe.
+        self._socket_lock = threading.RLock()
         self.selector = selectors.DefaultSelector()
         self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
@@ -249,11 +253,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
-        if self.socket is not None:
-            self.selector.unregister(self.socket)
-            self.socket.close()
-            self.socket = None
-            self.remote_selector_key = None
+        self._close_socket()
 
         # Make sure nobody is blocking.
         for callback_function in self._request_callbacks.values():
@@ -301,18 +301,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
-                    if self.socket is not None:
-                        # If we retry connecting, we need to clean up the socket again
-                        self.selector.unregister(self.socket)
-                        self.socket.close()
-                        self.socket = None
-                        self.remote_selector_key = None
+                    # If we retry connecting, we need to clean up the socket again
+                    self._close_socket()
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
+                    with self._socket_lock:
+                        self.socket = new_socket()
+                        self.remote_selector_key = self.selector.register(
+                            self.socket, selectors.EVENT_READ
+                        )
+                        self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -353,11 +350,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                         continue
 
                     self.logger.debug("Connecting")
-                    self.socket.connect((self.host, self.port))
-                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    self.socket = context.wrap_socket(self.socket)
+                    with self._socket_lock:
+                        self.socket.connect((self.host, self.port))
+                        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                        self.socket = context.wrap_socket(self.socket)
                     self.connecting = False
                     self._force_recon = False
                     self._report_connection_status(
@@ -419,6 +417,15 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.stop.set()
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
+
+    def _close_socket(self) -> None:
+        """Unregister and close the current socket, if any."""
+        with self._socket_lock:
+            if self.socket is not None:
+                self.selector.unregister(self.socket)
+                self.socket.close()
+                self.socket = None
+                self.remote_selector_key = None
 
     def disconnect(self) -> None:
         """Disconnect socket connection to Chromecast device"""
@@ -690,11 +697,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                 except Exception:  # pylint: disable=broad-except
                     pass
 
-        if self.socket is not None:
-            try:
-                self.socket.close()
-            except Exception:  # pylint: disable=broad-except
-                self.logger.exception("_cleanup")
+        with self._socket_lock:
+            if self.socket is not None:
+                try:
+                    self.socket.close()
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception("_cleanup")
         self._report_connection_status(
             ConnectionStatus(
                 CONNECTION_STATUS_DISCONNECTED,
@@ -736,7 +744,12 @@ class SocketClient(threading.Thread, CastStatusListener):
             if self.stop.is_set():
                 raise InterruptLoop("Stopped while reading from socket")
             try:
-                chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
+                with self._socket_lock:
+                    if self.socket is None:
+                        raise ChromecastConnectionClosed(
+                            "Connection was closed by remote"
+                        )
+                    chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
                 if chunk == b"":
                     raise ChromecastConnectionClosed("Connection was closed by remote")
                 chunks.append(chunk)
@@ -812,16 +825,23 @@ class SocketClient(threading.Thread, CastStatusListener):
                 callback_function(False, None)
             raise PyChromecastStopped("Socket client's thread is stopped.")
         if not self.connecting and not self._force_recon:
-            # We have a socket
-            assert self.socket is not None
-
             try:
-                if callback_function:
-                    if not no_add_request_id:
-                        self._request_callbacks[request_id] = callback_function
-                    else:
-                        callback_function(True, None)
-                self.socket.sendall(be_size + msg.SerializeToString())
+                with self._socket_lock:
+                    # The worker thread may have torn down the socket since the
+                    # check above; re-read it while holding the lock.
+                    sock = self.socket
+                    if sock is None:
+                        if callback_function:
+                            callback_function(False, None)
+                        raise NotConnected(
+                            f"Chromecast {self.host}:{self.port} is not connected"
+                        )
+                    if callback_function:
+                        if not no_add_request_id:
+                            self._request_callbacks[request_id] = callback_function
+                        else:
+                            callback_function(True, None)
+                    sock.sendall(be_size + msg.SerializeToString())
             except socket.error as exc:
                 if callback_function:
                     callback_function(False, None)
