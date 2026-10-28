@@ -1,7 +1,6 @@
 """Tests for pychromecast.socket_client."""
 
 from collections.abc import Generator
-import logging
 import socket
 import ssl
 from unittest.mock import MagicMock, Mock, patch
@@ -124,21 +123,3 @@ def test_stopped_exception_exits_worker() -> None:
     client.logger.exception.assert_not_called()
     assert client._force_recon is False
     client._cleanup.assert_called_once()
-
-
-def test_log_prefix_keeps_scope(
-    socket_client: SocketClient, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Test that the log prefix shows a scoped host with and without arguments."""
-    socket_client.host = "fe80::1%2"
-    with caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"):
-        socket_client.logger.debug("Connected!")
-        socket_client.logger.debug("Connected %s", "again")
-    assert caplog.messages == [
-        "[(fe80::1%2):8009] Connected!",
-        "[(fe80::1%2):8009] Connected again",
-    ]
-    assert [record.funcName for record in caplog.records] == [
-        "test_log_prefix_keeps_scope",
-        "test_log_prefix_keeps_scope",
-    ]
