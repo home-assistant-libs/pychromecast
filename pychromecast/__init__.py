@@ -22,6 +22,7 @@ from .discovery import (  # noqa: F401
     CastBrowser,
     CastListener,  # Deprecated
     SimpleCastListener,
+    create_zeroconf,
     discover_chromecasts,
     start_discovery,
     stop_discovery,
@@ -163,7 +164,7 @@ def get_listed_chromecasts(
 
     discover_complete = Event()
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
@@ -238,7 +239,10 @@ def get_chromecasts(  # pylint: disable=too-many-locals
     """
     if blocking:
         # Thread blocking chromecast discovery
-        devices, browser = discover_chromecasts(known_hosts=known_hosts)
+        devices, browser = discover_chromecasts(
+            zeroconf_instance=zeroconf_instance,
+            known_hosts=known_hosts,
+        )
         cc_list: list[Chromecast] = []
         for device in devices:
             try:
@@ -281,7 +285,7 @@ def get_chromecasts(  # pylint: disable=too-many-locals
         except ChromecastConnectionError:  # noqa: F405
             pass
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
     return browser

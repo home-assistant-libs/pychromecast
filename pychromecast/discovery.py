@@ -15,7 +15,12 @@ from uuid import UUID
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, CAST_TYPES, MF_GOOGLE
-from .dial import get_device_info, get_multizone_status, get_ssl_context
+from .dial import (
+    get_device_info,
+    get_multizone_status,
+    get_ssl_context,
+    get_host_from_zc_service_info,
+)
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 DISCOVER_TIMEOUT = 5
@@ -200,9 +205,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                 return value
             return value.decode("utf-8")
 
-        addresses = service.parsed_addresses()
-        host = addresses[0] if addresses else service.server
-
+        host, _ = get_host_from_zc_service_info(service)
         if host is None:
             _LOGGER.debug(
                 "_add_update_service failed to get host for %s, %s", typ, name
@@ -686,6 +689,11 @@ def stop_discovery(cast_browser: CastBrowser) -> None:
     cast_browser.stop_discovery()
 
 
+def create_zeroconf() -> zeroconf.Zeroconf:
+    """Create a zeroconf instance doing mDNS over IPv4."""
+    return zeroconf.Zeroconf(ip_version=zeroconf.IPVersion.V4Only)
+
+
 def discover_chromecasts(
     max_devices: int | None = None,
     timeout: float = DISCOVER_TIMEOUT,
@@ -716,7 +724,7 @@ def discover_chromecasts(
             discover_complete.set()
 
     discover_complete = threading.Event()
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
@@ -767,7 +775,7 @@ def discover_listed_chromecasts(
 
     discover_complete = threading.Event()
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
