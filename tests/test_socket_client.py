@@ -138,7 +138,10 @@ def test_stopped_exception_exits_worker() -> None:
 def test_log_prefix_with_percent(
     caplog: pytest.LogCaptureFixture, fn: str, host: str, prefix: str
 ) -> None:
-    """Test the prefix and message may contain %, with and without arguments."""
+    """Test the prefix and message may contain %, with and without arguments.
+
+    Positional and mapping arguments are both supported.
+    """
     client = Mock(fn=fn, host=host, port=8009)
     logger = _SocketClientLogger(
         logging.getLogger("pychromecast.socket_client"), client
@@ -149,12 +152,16 @@ def test_log_prefix_with_percent(
         logger.debug("Volume 100%")
         logger.debug("Volume %d%% %s", 50, "100%")
         logger.info("Received: %s", "%s %d")
+        logger.debug("Volume %(volume)d%%", {"volume": 50})
+        logger.debug("State %(state)s", {"state": "100%"})
 
     assert caplog.messages == [
         f"{prefix} Connected!",
         f"{prefix} Volume 100%",
         f"{prefix} Volume 50% 100%",
         f"{prefix} Received: %s %d",
+        f"{prefix} Volume 50%",
+        f"{prefix} State 100%",
     ]
     # The records name the caller, not the adapter
     assert {record.funcName for record in caplog.records} == {

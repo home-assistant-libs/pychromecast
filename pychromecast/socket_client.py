@@ -134,28 +134,18 @@ class _SocketClientLogger(logging.LoggerAdapter):
         self._client = client
 
     def log(self, level: int, msg: object, *args: object, **kwargs: Any) -> None:
-        """Add the prefix, the name and address may change while connecting.
-
-        The name and address are passed as arguments since they may contain %,
-        e.g. a friendly name or a scoped IPv6 address.
-        """
+        """Add the prefix, the name and address may change while connecting."""
         if not self.isEnabledFor(level):
             return
-        if not args:
-            # The message is now formatted with the prefix arguments
-            msg = str(msg).replace("%", "%%")
         client = self._client
+        prefix = f"[{client.fn or ''}({client.host}):{client.port}]"
+        if args:
+            # The message is formatted with args, the name or a scoped IPv6
+            # address may contain %
+            prefix = prefix.replace("%", "%%")
         # Skip this frame so records name the real caller
         kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
-        self.logger.log(
-            level,
-            f"[%s(%s):%s] {msg}",
-            client.fn or "",
-            client.host,
-            client.port,
-            *args,
-            **kwargs,
-        )
+        self.logger.log(level, f"{prefix} {msg}", *args, **kwargs)
 
 
 class ConnectionStatusListener(abc.ABC):
