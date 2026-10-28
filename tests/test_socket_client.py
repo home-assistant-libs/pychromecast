@@ -4,7 +4,7 @@ from collections.abc import Generator
 import logging
 import socket
 import ssl
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
@@ -133,10 +133,11 @@ def test_stopped_exception_exits_worker() -> None:
         ("100% Speaker", "192.0.2.1", "[100% Speaker(192.0.2.1):8009]"),
         ("Kitchen", "fe80::1%2", "[Kitchen(fe80::1%2):8009]"),
         ("%s %d", "fe80::1%eth0", "[%s %d(fe80::1%eth0):8009]"),
+        (None, "192.0.2.1", "[(192.0.2.1):8009]"),
     ],
 )
 def test_log_prefix_with_percent(
-    caplog: pytest.LogCaptureFixture, fn: str, host: str, prefix: str
+    caplog: pytest.LogCaptureFixture, fn: str | None, host: str, prefix: str
 ) -> None:
     """Test the prefix and message may contain %, with and without arguments.
 
@@ -163,10 +164,37 @@ def test_log_prefix_with_percent(
         f"{prefix} Volume 50%",
         f"{prefix} State 100%",
     ]
+    # The args are kept, formatting is left to logging
+    assert [record.args for record in caplog.records] == [
+        (),
+        (),
+        (50, "100%"),
+        ("%s %d",),
+        {"volume": 50},
+        {"state": "100%"},
+    ]
+    assert all(record.exc_info is None for record in caplog.records)
     # The records name the caller, not the adapter
     assert {record.funcName for record in caplog.records} == {
         "test_log_prefix_with_percent"
     }
+
+
+def test_log_stacklevel(caplog: pytest.LogCaptureFixture) -> None:
+    """Test a stacklevel passed by the caller is honored."""
+    client = Mock(fn="100% Speaker", host="fe80::1%2", port=8009)
+    logger = _SocketClientLogger(
+        logging.getLogger("pychromecast.socket_client"), client
+    )
+
+    def log_helper() -> None:
+        logger.debug("Volume %s", "100%", stacklevel=2)
+
+    with caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"):
+        log_helper()
+
+    assert caplog.messages == ["[100% Speaker(fe80::1%2):8009] Volume 100%"]
+    assert caplog.records[0].funcName == "test_log_stacklevel"
 
 
 def test_log_exception_with_percent(caplog: pytest.LogCaptureFixture) -> None:
@@ -183,12 +211,14 @@ def test_log_exception_with_percent(caplog: pytest.LogCaptureFixture) -> None:
             logger.exception("Failed at 100%")
 
     assert caplog.messages == ["[100% Speaker(fe80::1%2):8009] Failed at 100%"]
-    assert caplog.records[0].exc_info is not None
+    assert caplog.records[0].exc_info[0] is ValueError
 
 
 def test_log_disabled_level_is_skipped(caplog: pytest.LogCaptureFixture) -> None:
-    """Test nothing is logged below the logger level."""
-    client = Mock(fn="100% Speaker", host="fe80::1%2", port=8009)
+    """Test nothing is logged, or prefixed, below the logger level."""
+    client = Mock(host="fe80::1%2", port=8009)
+    # The prefix must not be built for a disabled level
+    type(client).fn = PropertyMock(side_effect=AssertionError("prefix built"))
     logger = _SocketClientLogger(
         logging.getLogger("pychromecast.socket_client"), client
     )
