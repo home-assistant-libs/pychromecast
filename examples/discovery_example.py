@@ -9,12 +9,15 @@ import sys
 import time
 from uuid import UUID
 
-import zeroconf
-
 import pychromecast
 from pychromecast import CastInfo
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -36,6 +39,7 @@ parser.add_argument(
     action="store_true",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 parser.add_argument(
     "--verbose", help="Full display of discovered devices", action="store_true"
 )
@@ -81,7 +85,7 @@ class MyCastListener(pychromecast.discovery.AbstractCastListener):
 if args.known_host and not args.force_zeroconf:
     zconf = None
 else:
-    zconf = zeroconf.Zeroconf()
+    zconf = create_zeroconf(args)
 browser = pychromecast.discovery.CastBrowser(MyCastListener(), zconf, args.known_host)
 browser.start_discovery()
 

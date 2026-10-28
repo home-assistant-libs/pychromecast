@@ -10,7 +10,6 @@ Without him this would not have been possible.
 from __future__ import annotations
 
 import abc
-import errno
 import json
 import logging
 import selectors
@@ -137,7 +136,8 @@ class _SocketClientLogger(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
         """Add the prefix, the name and address may change while connecting."""
         client = self._client
-        return f"[{client.fn or ''}({client.host}):{client.port}] {msg}", kwargs
+        prefix = f"[{client.fn or ''}({client.host}):{client.port}]"
+        return f"{prefix.replace('%', '%%')} {msg}", kwargs
 
 
 class ConnectionStatusListener(abc.ABC):
@@ -221,7 +221,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.connecting = True
         self.first_connection = True
-        self.socket: socket.socket | ssl.SSLSocket | None = None
+        self.socket: ssl.SSLSocket | None = None
         self.selector = selectors.DefaultSelector()
         self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
@@ -308,11 +308,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -353,11 +348,20 @@ class SocketClient(threading.Thread, CastStatusListener):
                         continue
 
                     self.logger.debug("Connecting")
-                    self.socket.connect((self.host, self.port))
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
-                    self.socket = context.wrap_socket(self.socket)
+                    raw_socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
+                    try:
+                        self.socket = context.wrap_socket(raw_socket)
+                    except BaseException:
+                        raw_socket.close()
+                        raise
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     self.connecting = False
                     self._force_recon = False
                     self._report_connection_status(
@@ -977,29 +981,3 @@ class ConnectionController(BaseController):
             return True
 
         return False
-
-
-def new_socket() -> socket.socket:
-    """
-    Create a new socket with OS-specific parameters
-
-    Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
-    Catches errors if not.
-    """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    try:
-        # noinspection PyUnresolvedReferences
-        reuseport = socket.SO_REUSEPORT
-    except AttributeError:
-        pass
-    else:
-        try:
-            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
-        except (OSError, socket.error) as err:
-            # OSError on python 3, socket.error on python 2
-            if err.errno != errno.ENOPROTOOPT:
-                raise
-
-    return new_sock

@@ -16,7 +16,12 @@ from pychromecast.controllers.multizone import (
 )
 from pychromecast.socket_client import ConnectionStatus, ConnectionStatusListener
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -39,6 +44,7 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 args = parser.parse_args()
 
 configure_logging(args)
@@ -69,7 +75,9 @@ class MyMultiZoneControllerListener(MultiZoneControllerListener):
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
-    friendly_names=[args.cast], known_hosts=args.known_host
+    friendly_names=[args.cast],
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
 )
 if not chromecasts:
     print(f'No chromecast with name "{args.cast}" discovered')
