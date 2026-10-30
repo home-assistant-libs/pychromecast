@@ -10,6 +10,7 @@ import logging
 import ssl
 import threading
 import time
+from typing import NamedTuple
 from uuid import UUID
 
 import zeroconf
@@ -262,8 +263,10 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     manufacturer,
                 )
             else:
-                # Update stored information
-                services = self._devices[uuid].services
+                # Update stored information, mDNS has no device details so keep
+                # what the host browser polled
+                cast_info = self._devices[uuid]
+                services = cast_info.services
                 services.add(service_info)
                 self._devices[uuid] = CastInfo(
                     services,
@@ -274,9 +277,26 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     service.port,
                     cast_type,
                     manufacturer,
+                    cast_info.mac_address,
+                    cast_info.product_name,
+                    cast_info.cast_build_revision,
                 )
 
         callback(uuid, name)
+
+
+class _PolledDevice(NamedTuple):
+    """A device or group found by polling a host."""
+
+    port: int
+    friendly_name: str
+    model_name: str
+    uuid: UUID
+    cast_type: str
+    manufacturer: str
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 class HostStatus:
@@ -351,7 +371,7 @@ class HostBrowser(threading.Thread):
         # Iterate over a copy because other threads may modify the known_hosts list
         known_hosts = list(self._known_hosts.keys())
         for host in known_hosts:
-            devices: list[tuple[int, str, str, UUID, str, str]] = []
+            devices: list[_PolledDevice] = []
             uuids: list[UUID] = []
             if self.stop.is_set():
                 break
@@ -396,13 +416,16 @@ class HostBrowser(threading.Thread):
             # We got device_status, try to get multizone status, then update devices
             hoststatus.failcount = 0
             devices.append(
-                (
+                _PolledDevice(
                     8009,
                     device_status.friendly_name,
                     device_status.model_name,
                     device_status.uuid,
                     device_status.cast_type,
                     device_status.manufacturer,
+                    device_status.mac_address,
+                    device_status.product_name,
+                    device_status.cast_build_revision,
                 )
             )
             uuids.append(device_status.uuid)
@@ -424,7 +447,7 @@ class HostBrowser(threading.Thread):
                     if group.port is None or group.uuid is None or group.host != host:
                         continue
                     devices.append(
-                        (
+                        _PolledDevice(
                             group.port,
                             group.friendly_name,
                             "Google Cast Group",
@@ -440,31 +463,15 @@ class HostBrowser(threading.Thread):
     def _update_devices(
         self,
         host: str,
-        devices: list[tuple[int, str, str, UUID, str, str]],
+        devices: list[_PolledDevice],
         host_uuids: list[UUID],
     ) -> None:
         callbacks: list[Callable[[], None]] = []
 
         # Lock because the ZeroConfListener may also add or remove items
         with self._services_lock:
-            for (
-                port,
-                friendly_name,
-                model_name,
-                uuid,
-                cast_type,
-                manufacturer,
-            ) in devices:
-                self._add_host_service(
-                    host,
-                    port,
-                    friendly_name,
-                    model_name,
-                    uuid,
-                    callbacks,
-                    cast_type,
-                    manufacturer,
-                )
+            for device in devices:
+                self._add_host_service(host, device, callbacks)
 
             for uuid in self._devices:
                 for service in self._devices[uuid].services.copy():
@@ -482,53 +489,53 @@ class HostBrowser(threading.Thread):
     def _add_host_service(
         self,
         host: str,
-        port: int,
-        friendly_name: str,
-        model_name: str,
-        uuid: UUID,
+        device: _PolledDevice,
         callbacks: list[Callable[[], None]],
-        cast_type: str,
-        manufacturer: str,
     ) -> None:
+        uuid = device.uuid
+        port = device.port
         service_info = HostServiceInfo(host, port)
 
         callback = self._cast_listener.add_cast
         if uuid in self._devices:
             callback = self._cast_listener.update_cast
             cast_info = self._devices[uuid]
-            if (
-                service_info in cast_info.services
-                and cast_info.model_name == model_name
-                and cast_info.friendly_name == friendly_name
+            if service_info in cast_info.services and (
+                cast_info.model_name,
+                cast_info.friendly_name,
+                cast_info.mac_address,
+                cast_info.product_name,
+                cast_info.cast_build_revision,
+            ) == (
+                device.model_name,
+                device.friendly_name,
+                device.mac_address,
+                device.product_name,
+                device.cast_build_revision,
             ):
                 # No changes, return
                 return
 
+        services: set[HostServiceInfo | MDNSServiceInfo]
         if uuid not in self._devices:
-            self._devices[uuid] = CastInfo(
-                {service_info},
-                uuid,
-                model_name,
-                friendly_name,
-                host,
-                port,
-                cast_type,
-                manufacturer,
-            )
+            services = {service_info}
         else:
             # Update stored information
             services = self._devices[uuid].services
             services.add(service_info)
-            self._devices[uuid] = CastInfo(
-                services,
-                uuid,
-                model_name,
-                friendly_name,
-                host,
-                port,
-                cast_type,
-                manufacturer,
-            )
+        self._devices[uuid] = CastInfo(
+            services,
+            uuid,
+            device.model_name,
+            device.friendly_name,
+            host,
+            port,
+            device.cast_type,
+            device.manufacturer,
+            device.mac_address,
+            device.product_name,
+            device.cast_build_revision,
+        )
 
         name = f"{host}:{port}"
         _LOGGER.debug(
