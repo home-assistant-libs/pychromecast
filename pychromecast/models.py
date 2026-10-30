@@ -29,6 +29,9 @@ class CastInfo:
     port: int
     cast_type: str | None
     manufacturer: str | None
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 @dataclass(frozen=True)

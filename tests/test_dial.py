@@ -1,16 +1,25 @@
 """Tests for pychromecast.dial."""
 
+from dataclasses import replace
+from typing import Any
+import urllib.error
 import urllib.request
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 
+from pychromecast.const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from pychromecast.dial import (
+    _get_eureka_info,
     _get_group_info,
-    get_host_from_zc_service_info,
     _url_encode_hostname,
     _url_host_header,
+    get_cast_type,
+    get_device_info,
+    get_host_from_zc_service_info,
 )
+from pychromecast.models import CastInfo, HostServiceInfo
 
 HOSTNAMES = [
     # (hostname, hostname encoded for use in a url)
@@ -146,3 +155,131 @@ def test_get_host_from_zc_service_info(
 def test_get_host_from_zc_service_info_none() -> None:
     """Test that a missing service info gives no host."""
     assert get_host_from_zc_service_info(None) == (None, None)
+
+
+MAC_ADDRESS = "00:00:5E:00:53:01"
+UUID_STR = "12345678-1234-1234-1234-123456789abc"
+
+STATUS: dict[str, Any] = {
+    "name": "Speaker",
+    "device_info": {
+        "mac_address": MAC_ADDRESS,
+        "product_name": "product",
+        "ssdp_udn": UUID_STR,
+    },
+    "build_info": {"cast_build_revision": "1.2.3"},
+}
+
+
+def test_get_device_info_details() -> None:
+    """Test that device details are read from device_info and build_info."""
+    with patch(
+        "pychromecast.dial._get_status", return_value=("192.0.2.1", STATUS)
+    ) as get_status:
+        device_status = get_device_info("192.0.2.1")
+    assert get_status.call_args[0][2] == (
+        "/setup/eureka_info?params=device_info,name,build_info"
+    )
+    assert device_status is not None
+    assert device_status.mac_address == MAC_ADDRESS
+    assert device_status.product_name == "product"
+    assert device_status.cast_build_revision == "1.2.3"
+
+
+def test_get_device_info_no_details() -> None:
+    """Test that missing device details give None."""
+    status = {"name": "Speaker", "device_info": {}}
+    with patch("pychromecast.dial._get_status", return_value=("192.0.2.1", status)):
+        device_status = get_device_info("192.0.2.1")
+    assert device_status is not None
+    assert device_status.mac_address is None
+    assert device_status.product_name is None
+    assert device_status.cast_build_revision is None
+
+
+def _cast_info(port: int = 8009) -> CastInfo:
+    return CastInfo(
+        {HostServiceInfo("192.0.2.1", port)},
+        UUID(UUID_STR),
+        "Chromecast Audio",
+        "Speaker",
+        "192.0.2.1",
+        port,
+        None,
+        None,
+    )
+
+
+def test_get_cast_type_keeps_details() -> None:
+    """Test that get_cast_type fills in the type and manufacturer only."""
+    status = {
+        **STATUS,
+        "device_info": {
+            **STATUS["device_info"],
+            "capabilities": {"display_supported": False},
+            "manufacturer": "Google Inc.",
+        },
+    }
+    cast_info = replace(_cast_info(), mac_address="00:00:5E:00:53:02")
+    with patch(
+        "pychromecast.dial._get_status", return_value=("192.0.2.1", status)
+    ) as get_status:
+        result = get_cast_type(cast_info)
+    assert get_status.call_args[0][2] == "/setup/eureka_info?params=device_info,name"
+    assert result.cast_type == CAST_TYPE_AUDIO
+    assert result.manufacturer == "Google Inc."
+    assert result.mac_address == "00:00:5E:00:53:02"
+    assert result.product_name is None
+    assert result.cast_build_revision is None
+
+
+def test_get_cast_type_display() -> None:
+    """Test that a device with a display is a chromecast."""
+    with patch("pychromecast.dial._get_status", return_value=("192.0.2.1", STATUS)):
+        result = get_cast_type(_cast_info())
+    assert result.cast_type == CAST_TYPE_CHROMECAST
+    assert result.manufacturer == "Unknown manufacturer"
+
+
+def test_get_cast_type_group() -> None:
+    """Test that a group is not queried."""
+    with patch("pychromecast.dial._get_status") as get_status:
+        result = get_cast_type(_cast_info(port=32000))
+    get_status.assert_not_called()
+    assert result.cast_type == CAST_TYPE_GROUP
+    assert result.manufacturer == "Google Inc."
+
+
+@pytest.mark.parametrize(
+    "side_effect",
+    [
+        urllib.error.URLError("unreachable"),
+        ValueError("not json"),
+    ],
+)
+def test_get_cast_type_failed(side_effect: Any) -> None:
+    """Test the defaults when the device info can't be fetched."""
+    cast_info = replace(
+        _cast_info(), mac_address=MAC_ADDRESS, cast_build_revision="1.2.3"
+    )
+    with patch("pychromecast.dial._get_status", side_effect=side_effect):
+        result = get_cast_type(cast_info)
+    assert result.cast_type == CAST_TYPE_CHROMECAST
+    assert result.manufacturer == "Unknown manufacturer"
+    # Known details are kept
+    assert result.mac_address == MAC_ADDRESS
+    assert result.cast_build_revision == "1.2.3"
+
+
+def test_get_eureka_info_falls_back_to_http() -> None:
+    """Test that eureka_info is requested over HTTP if HTTPS fails."""
+    with patch(
+        "pychromecast.dial._get_status",
+        side_effect=[urllib.error.URLError("no https"), ("192.0.2.1", STATUS)],
+    ) as get_status:
+        status = _get_eureka_info(set(), None, ["device_info", "name"], 30, None)
+    assert status == STATUS
+    assert [call[0][2:5] for call in get_status.call_args_list] == [
+        ("/setup/eureka_info?params=device_info,name", True, 15),
+        ("/setup/eureka_info?params=device_info,name", False, 15),
+    ]
