@@ -227,3 +227,45 @@ def test_log_disabled_level_is_skipped(caplog: pytest.LogCaptureFixture) -> None
         logger.debug("Volume %s", "100%")
 
     assert caplog.records == []
+
+
+def test_connection_retry_logging() -> None:
+    """Only the first retry is logged at INFO; exhaustion remains an error."""
+    client = object.__new__(SocketClient)
+    client.fn = "Test Chromecast"
+    client.host = "192.0.2.1"
+    client.port = 8009
+    client.services = {HostServiceInfo("192.0.2.1", 8009)}
+    client.tries = 3
+    client.retry_wait = 0
+    client.timeout = 1
+    client.zconf = None
+    client.socket = None
+    client.stop = Mock()
+    client.stop.is_set.return_value = False
+    client.selector = Mock()
+    client.logger = Mock()
+    client._request_callbacks = {}
+    client._report_connection_status = Mock()
+
+    with (
+        patch("pychromecast.socket_client.socket.create_connection") as connect,
+        patch("pychromecast.socket_client.get_host_from_service") as resolve,
+        patch("pychromecast.socket_client.time.sleep"),
+    ):
+        connect.side_effect = OSError("Connection refused")
+        resolve.return_value = ("192.0.2.1", 8009, None)
+        with pytest.raises(ChromecastConnectionError):
+            client.initialize_connection()
+
+    retry_message = "Failed to connect to service %s, retrying in %.1fs"
+    assert (
+        sum(call.args[0] == retry_message for call in client.logger.info.call_args_list)
+        == 1
+    )
+    assert (
+        sum(call.args[0] == retry_message for call in client.logger.debug.call_args_list)
+        == 2
+    )
+    client.logger.error.assert_called_once()
+    assert "Failed to connect. No retries." in client.logger.error.call_args.args[0]
