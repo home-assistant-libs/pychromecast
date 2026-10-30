@@ -239,6 +239,7 @@ def get_cast_type(
         cast_info.port,
         cast_type,
         manufacturer,
+        device_capabilities=cast_info.device_capabilities,
     )
 
 

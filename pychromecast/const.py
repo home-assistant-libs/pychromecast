@@ -2,12 +2,30 @@
 Chromecast constants
 """
 
+from enum import IntFlag
+
 # Regular chromecast, supports video/audio
 CAST_TYPE_CHROMECAST = "cast"
 # Cast Audio device, supports only audio
 CAST_TYPE_AUDIO = "audio"
 # Cast Audio group device, supports only audio
 CAST_TYPE_GROUP = "group"
+
+
+class CastCapability(IntFlag):
+    """Capabilities of a cast device.
+
+    Cast devices report them as a bitmask, in mDNS and over the cast connection.
+    Only the known bits are named, other bits are kept.
+    """
+
+    VIDEO_OUT = 1 << 0
+    VIDEO_IN = 1 << 1
+    AUDIO_OUT = 1 << 2
+    AUDIO_IN = 1 << 3
+    DEV_MODE = 1 << 4
+    MULTIZONE_GROUP = 1 << 5
+
 
 # Default command timeout
 REQUEST_TIMEOUT = 10.0
