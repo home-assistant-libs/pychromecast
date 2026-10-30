@@ -10,6 +10,8 @@ from uuid import UUID
 
 import zeroconf
 
+from .const import CastCapability
+
 # pylint: disable=invalid-name
 ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
 if hasattr(zeroconf, "EventLoopBlocked"):
@@ -29,6 +31,7 @@ class CastInfo:
     port: int
     cast_type: str | None
     manufacturer: str | None
+    device_capabilities: CastCapability | None = None
 
 
 @dataclass(frozen=True)
