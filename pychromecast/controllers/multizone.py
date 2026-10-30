@@ -8,7 +8,7 @@ import abc
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 from uuid import UUID
 
 from . import BaseController, CallbackType
@@ -53,6 +53,43 @@ class PlaybackSession:
     stream_transfer_supported: bool | None
 
 
+class MultizoneVolume(TypedDict, total=False):
+    """Volume of a device in a multizone status."""
+
+    level: float
+    muted: bool
+
+
+class MultizoneDevice(TypedDict):
+    """A device in a multizone status, or a device added or updated message."""
+
+    deviceId: str
+    name: str
+    capabilities: NotRequired[int]
+    volume: NotRequired[MultizoneVolume]
+
+
+class MultizonePlaybackSession(TypedDict, total=False):
+    """The playback session in a multizone status."""
+
+    appAllowsGrouping: bool
+    isVideoContent: bool
+    streamTransferSupported: bool
+
+
+class MultizoneStatus(TypedDict):
+    """The status of a MULTIZONE_STATUS message.
+
+    isVideoGroup is only reported by groups, playbackSession only while a
+    session is attached to the endpoint.
+    """
+
+    devices: list[MultizoneDevice]
+    isMultichannel: NotRequired[bool]
+    isVideoGroup: NotRequired[bool]
+    playbackSession: NotRequired[MultizonePlaybackSession]
+
+
 @dataclass(frozen=True)
 class SessionEndpoint:
     """Endpoint which currently owns a playback session."""
@@ -85,7 +122,7 @@ def _normalize_device_id(device_id: str) -> str:
         return device_id
 
 
-def _parse_playback_session(data: dict[str, Any]) -> PlaybackSession:
+def _parse_playback_session(data: MultizonePlaybackSession) -> PlaybackSession:
     return PlaybackSession(
         data.get("appAllowsGrouping"),
         data.get("isVideoContent"),
@@ -434,9 +471,8 @@ class MultizoneController(BaseController):
     ) -> bool:
         """Called when a multizone message is received."""
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
-            uuid = data["device"]["deviceId"]
-            name = data["device"]["name"]
-            self._add_member(uuid, name)
+            device: MultizoneDevice = data["device"]
+            self._add_member(device["deviceId"], device["name"])
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_REMOVED:
@@ -445,14 +481,15 @@ class MultizoneController(BaseController):
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_UPDATED:
-            uuid = data["device"]["deviceId"]
-            name = data["device"]["name"]
-            self._add_member(uuid, name)
+            device = data["device"]
+            self._add_member(device["deviceId"], device["name"])
             return True
 
         if data[MESSAGE_TYPE] == TYPE_MULTIZONE_STATUS:
-            members = data["status"]["devices"]
-            members = {member["deviceId"]: member["name"] for member in members}
+            status: MultizoneStatus = data["status"]
+            members = {
+                member["deviceId"]: member["name"] for member in status["devices"]
+            }
             removed_members = list(set(self._members.keys()) - set(members.keys()))
             added_members = list(set(members.keys()) - set(self._members.keys()))
             _LOGGER.debug(
@@ -467,7 +504,7 @@ class MultizoneController(BaseController):
             for uuid in added_members:
                 self._add_member(uuid, members[uuid])
 
-            playback_session = data["status"].get("playbackSession")
+            playback_session = status.get("playbackSession")
             self._playback_session = (
                 _parse_playback_session(playback_session)
                 if playback_session is not None
