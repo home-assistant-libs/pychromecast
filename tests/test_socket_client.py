@@ -269,3 +269,39 @@ def test_connection_retry_logging() -> None:
     )
     client.logger.error.assert_called_once()
     assert "Failed to connect. No retries." in client.logger.error.call_args.args[0]
+
+
+def test_connection_failure_during_stop_logs_debug() -> None:
+    """A connection failure during requested shutdown is not an error log."""
+    client = object.__new__(SocketClient)
+    client.fn = "Test Chromecast"
+    client.host = "192.0.2.1"
+    client.port = 8009
+    client.services = {HostServiceInfo("192.0.2.1", 8009)}
+    client.tries = 3
+    client.retry_wait = 5
+    client.timeout = 1
+    client.zconf = None
+    client.socket = None
+    client.stop = Mock()
+    client.stop.is_set.side_effect = [False, True]
+    client.selector = Mock()
+    client.logger = Mock()
+    client._request_callbacks = {}
+    client._report_connection_status = Mock()
+
+    with (
+        patch("pychromecast.socket_client.socket.create_connection") as connect,
+        patch("pychromecast.socket_client.get_host_from_service") as resolve,
+    ):
+        connect.side_effect = OSError("Host is unreachable")
+        resolve.return_value = ("192.0.2.1", 8009, None)
+        with pytest.raises(ChromecastConnectionError):
+            client.initialize_connection()
+
+    client.logger.debug.assert_any_call(
+        "Failed to connect: %s. aborting due to stop signal.",
+        connect.side_effect,
+    )
+    client.logger.error.assert_not_called()
+    client.logger.info.assert_not_called()
