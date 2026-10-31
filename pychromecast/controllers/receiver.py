@@ -4,6 +4,7 @@ on the Chromecast.
 """
 
 import abc
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
@@ -20,7 +21,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse, chain_on_success
-from . import BaseController, CallbackType
+from . import BaseController, CallbackType, add_listener
 
 APP_ID = "appId"
 ERROR_REASON = "reason"
@@ -127,17 +128,25 @@ class ReceiverController(BaseController):
 
         return False
 
-    def register_status_listener(self, listener: CastStatusListener) -> None:
+    def register_status_listener(
+        self, listener: CastStatusListener
+    ) -> Callable[[], None]:
         """Register a status listener for when a new Chromecast status
         has been received. Listeners will be called with
-        listener.new_cast_status(status)"""
-        self._status_listeners.append(listener)
+        listener.new_cast_status(status)
 
-    def register_launch_error_listener(self, listener: LaunchErrorListener) -> None:
+        Returns a function which unregisters the listener."""
+        return add_listener(self._status_listeners, listener)
+
+    def register_launch_error_listener(
+        self, listener: LaunchErrorListener
+    ) -> Callable[[], None]:
         """Register a listener for when a new launch error message
         has been received. Listeners will be called with
-        listener.new_launch_error(launch_failure)"""
-        self._launch_error_listeners.append(listener)
+        listener.new_launch_error(launch_failure)
+
+        Returns a function which unregisters the listener."""
+        return add_listener(self._launch_error_listeners, listener)
 
     def update_status(
         self,

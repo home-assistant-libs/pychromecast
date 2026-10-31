@@ -18,6 +18,7 @@ import ssl
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from struct import pack, unpack
 from typing import Any
@@ -26,7 +27,7 @@ import zeroconf
 
 from .config import APP_AUDIBLE
 from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
-from .controllers import BaseController, CallbackType
+from .controllers import BaseController, CallbackType, add_listener
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
@@ -899,11 +900,15 @@ class SocketClient(threading.Thread, CastStatusListener):
             no_add_request_id=no_add_request_id,
         )
 
-    def register_connection_listener(self, listener: ConnectionStatusListener) -> None:
+    def register_connection_listener(
+        self, listener: ConnectionStatusListener
+    ) -> Callable[[], None]:
         """Register a connection listener for when the socket connection
         changes. Listeners will be called with
-        listener.new_connection_status(status)"""
-        self._connection_listeners.append(listener)
+        listener.new_connection_status(status)
+
+        Returns a function which unregisters the listener."""
+        return add_listener(self._connection_listeners, listener)
 
     def _ensure_channel_connected(self, destination_id: str) -> None:
         """Ensure we opened a channel to destination_id."""
