@@ -1,6 +1,6 @@
 beautifulsoup4==4.15.0
 ruff==0.17.2
-mypy==2.4.0
+mypy==2.4.1
 PlexAPI==4.17.2
 pylint==4.1.3
 pytest==9.1.1
