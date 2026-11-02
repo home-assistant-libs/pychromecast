@@ -591,6 +591,7 @@ def test_connection_retry_logging() -> None:
     client.selector = Mock()
     client.logger = Mock()
     client._request_callbacks = {}
+    client._socket_lock = threading.RLock()
     client._report_connection_status = Mock()
 
     with (
