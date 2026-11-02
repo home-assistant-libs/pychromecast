@@ -115,12 +115,14 @@ class ReceiverController(BaseController):
 
         data is message.payload_utf8 interpreted as a JSON dict.
         """
-        if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
+        message_type = data.get(MESSAGE_TYPE)
+
+        if message_type == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 
             return True
 
-        if data[MESSAGE_TYPE] == TYPE_LAUNCH_ERROR:
+        if message_type == TYPE_LAUNCH_ERROR:
             self._process_launch_error(data)
 
             return True
