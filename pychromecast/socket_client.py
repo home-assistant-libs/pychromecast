@@ -282,6 +282,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = None
         self.session_id = None
 
+        self.connecting = True
         retry_log_fun = self.logger.error
 
         # Dict keeping track of individual retry delay for each named service
