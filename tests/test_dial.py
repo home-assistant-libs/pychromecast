@@ -1,16 +1,21 @@
 """Tests for pychromecast.dial."""
 
+import urllib.error
 import urllib.request
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 
+from pychromecast.const import CastCapability
 from pychromecast.dial import (
     _get_group_info,
+    get_cast_type,
     get_host_from_zc_service_info,
     _url_encode_hostname,
     _url_host_header,
 )
+from pychromecast.models import CastInfo, HostServiceInfo
 
 HOSTNAMES = [
     # (hostname, hostname encoded for use in a url)
@@ -146,3 +151,23 @@ def test_get_host_from_zc_service_info(
 def test_get_host_from_zc_service_info_none() -> None:
     """Test that a missing service info gives no host."""
     assert get_host_from_zc_service_info(None) == (None, None)
+
+
+def test_get_cast_type_keeps_device_capabilities() -> None:
+    """Test that get_cast_type keeps the device capabilities."""
+    cast_info = CastInfo(
+        {HostServiceInfo("192.0.2.1", 8009)},
+        UUID("12345678-1234-1234-1234-123456789abc"),
+        "Speaker model",
+        "Speaker",
+        "192.0.2.1",
+        8009,
+        None,
+        None,
+        device_capabilities=CastCapability(0),
+    )
+    with patch(
+        "pychromecast.dial._get_status", side_effect=urllib.error.URLError("down")
+    ):
+        result = get_cast_type(cast_info)
+    assert result.device_capabilities == CastCapability(0)

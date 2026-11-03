@@ -14,7 +14,14 @@ from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, CAST_TYPES, MF_GOOGLE
+from .const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_CHROMECAST,
+    CAST_TYPE_GROUP,
+    CAST_TYPES,
+    MF_GOOGLE,
+    CastCapability,
+)
 from .dial import (
     get_device_info,
     get_multizone_status,
@@ -32,6 +39,42 @@ HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _parse_device_capabilities(value: str | None) -> CastCapability | None:
+    """Parse the ca value of a TXT record, a decimal bitmask."""
+    if not value or not value.isdecimal():
+        return None
+    return CastCapability(int(value))
+
+
+def _cast_type_from_capabilities(capabilities: CastCapability | None) -> str | None:
+    """Return the cast type for the capabilities, None if they don't tell."""
+    if capabilities is None:
+        return None
+    if CastCapability.VIDEO_OUT in capabilities:
+        return CAST_TYPE_CHROMECAST
+    if CastCapability.MULTIZONE_GROUP in capabilities:
+        return CAST_TYPE_GROUP
+    if CastCapability.AUDIO_OUT in capabilities:
+        return CAST_TYPE_AUDIO
+    return None
+
+
+def _cast_type_from_model_or_capabilities(
+    port: int, model_name: str, capabilities: CastCapability | None
+) -> tuple[str | None, str | None]:
+    """Return the cast type and manufacturer of a service.
+
+    A service on another port than 8009 is a group. The cast type of a model which
+    isn't known is taken from the capabilities.
+    """
+    if port != 8009:
+        return CAST_TYPE_GROUP, MF_GOOGLE
+    cast_type, manufacturer = CAST_TYPES.get(model_name.lower(), (None, None))
+    if cast_type is None:
+        cast_type = _cast_type_from_capabilities(capabilities)
+    return cast_type, manufacturer
 
 
 class AbstractCastListener(abc.ABC):
@@ -217,6 +260,10 @@ class ZeroConfListener(zeroconf.ServiceListener):
 
         friendly_name = get_value("fn")
         model_name = get_value("md") or "Unknown model name"
+        device_capabilities = _parse_device_capabilities(get_value("ca"))
+        cast_type, manufacturer = _cast_type_from_model_or_capabilities(
+            service.port, model_name, device_capabilities
+        )
         uuid_str = get_value("id")
 
         if not uuid_str:
@@ -241,15 +288,6 @@ class ZeroConfListener(zeroconf.ServiceListener):
 
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
-            cast_type: str | None
-            manufacturer: str | None
-            if service.port != 8009:
-                cast_type = CAST_TYPE_GROUP
-                manufacturer = MF_GOOGLE
-            else:
-                cast_type, manufacturer = CAST_TYPES.get(
-                    model_name.lower(), (None, None)
-                )
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
                     {service_info},
@@ -260,6 +298,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     service.port,
                     cast_type,
                     manufacturer,
+                    device_capabilities=device_capabilities,
                 )
             else:
                 # Update stored information
@@ -274,6 +313,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     service.port,
                     cast_type,
                     manufacturer,
+                    device_capabilities=device_capabilities,
                 )
 
         callback(uuid, name)
@@ -528,6 +568,7 @@ class HostBrowser(threading.Thread):
                 port,
                 cast_type,
                 manufacturer,
+                device_capabilities=self._devices[uuid].device_capabilities,
             )
 
         name = f"{host}:{port}"
