@@ -273,7 +273,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if (key is not None and key in self._retries)
             }
 
-            attempted = False
+            attempted = skipped = False
             for service in self.services.copy():
                 if self.stop.is_set():
                     raise PyChromecastStopped("Socket client's thread is stopped.")
@@ -282,6 +282,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     service, {"delay": self.retry_wait, "next_retry": now}
                 )
                 if now < retry["next_retry"]:
+                    skipped = True
                     continue
                 attempted = True
                 try:
@@ -382,9 +383,10 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self._backoff(service)
                     retry_log_fun = self.logger.debug
 
-            # Only sleep if we have another retry remaining, a round which only
-            # skipped services in backoff isn't a try
-            if tries is None or tries > 1 or not attempted:
+            # A round which only skipped services in backoff isn't a try
+            waiting = skipped and not attempted
+            # Only sleep if we have another retry remaining
+            if tries is None or tries > 1 or waiting:
                 self.logger.debug(
                     "Not connected, sleeping for %.1fs. Services: %s",
                     self.retry_wait,
@@ -393,7 +395,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if self.stop.wait(self.retry_wait):
                     raise PyChromecastStopped("Socket client's thread is stopped.")
 
-            if tries and attempted:
+            if tries and not waiting:
                 tries -= 1
 
         self.logger.error("Failed to connect. No retries.")

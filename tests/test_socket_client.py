@@ -1047,3 +1047,17 @@ def test_lost_connection_reconnects(socket_client: SocketClient, cause: str) -> 
     assert statuses == [CONNECTION_STATUS_LOST, CONNECTION_STATUS_DISCONNECTED]
     callback.assert_called_once_with(False, None)
     assert socket_client.socket is None
+
+
+def test_connection_without_services_uses_tries(socket_client: SocketClient) -> None:
+    """Test a client without services gives up when out of tries."""
+    socket_client.services = set()
+    socket_client.tries = 2
+
+    with (
+        patch.object(socket_client.stop, "wait", return_value=False) as wait,
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    wait.assert_called_once_with(socket_client.retry_wait)
