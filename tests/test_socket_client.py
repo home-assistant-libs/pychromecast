@@ -724,3 +724,28 @@ def test_socket_error_while_stopping(
 
     assert all(record.levelno < logging.WARNING for record in caplog.records)
     assert not socket_client._force_recon  # pylint: disable=protected-access
+
+
+def test_stopped_while_handling_messages(socket_client: SocketClient) -> None:
+    """Test a stop while handling messages ends the worker after the messages."""
+    msgs = [_message('{"n": 1}'), _message('{"n": 2}')]
+    sock = FakeSocket(socket_client, b"".join(_frame(msg) for msg in msgs))
+    sock.timeout = 0
+    # Make the fake socket readable
+    sock._pair[1].send(b"x")  # pylint: disable=protected-access
+    received: list[dict] = []
+
+    def receive_message(_message: CastMessage, data: dict) -> bool:
+        received.append(data)
+        socket_client.disconnect()
+        return True
+
+    handler = MagicMock(namespace="urn:x-cast:test")
+    handler.receive_message.side_effect = receive_message
+    socket_client.register_handler(handler)
+
+    with patch.object(socket_client, "initialize_connection"):
+        socket_client.run()
+
+    assert received == [{"n": 1}, {"n": 2}]
+    assert socket_client.is_stopped

@@ -610,11 +610,6 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.socketpair[0].recv(128)
 
         for message in messages:
-            # If we are stopped after receiving a message we skip the message
-            # and tear down the connection
-            if self.stop.is_set():
-                raise InterruptLoop()
-
             # See if any handlers will accept this message
             data = _dict_from_message_payload(message)
             self._route_message(message, data)
@@ -624,9 +619,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                 callback_function := self._request_callbacks.pop(data[REQUEST_ID], None)
             ):
                 callback_function(True, data)
-
-        if self.stop.is_set():
-            raise InterruptLoop()
 
     def _check_connection(self) -> None:
         """Checks if the connection is active, and if not reconnect."""
