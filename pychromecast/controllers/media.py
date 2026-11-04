@@ -4,6 +4,7 @@ on the Chromecast.
 """
 
 import abc
+from collections.abc import Callable
 from datetime import datetime, timezone
 from dataclasses import dataclass
 import logging
@@ -17,7 +18,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse
-from . import CallbackType, QuickPlayController
+from . import CallbackType, QuickPlayController, Listeners
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -571,7 +572,7 @@ class MediaController(BaseMediaPlayer):
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
-        self._status_listeners: list[MediaStatusListener] = []
+        self._status_listeners: Listeners[MediaStatusListener] = Listeners()
 
     def channel_connected(self) -> None:
         """Called when media channel is connected. Will update status."""
@@ -594,10 +595,14 @@ class MediaController(BaseMediaPlayer):
 
         return False
 
-    def register_status_listener(self, listener: MediaStatusListener) -> None:
+    def register_status_listener(
+        self, listener: MediaStatusListener
+    ) -> Callable[[], None]:
         """Register a listener for new media statuses. A new status will
-        call listener.new_media_status(status)"""
-        self._status_listeners.append(listener)
+        call listener.new_media_status(status)
+
+        Returns a function which unregisters the listener."""
+        return self._status_listeners.add(listener)
 
     def update_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Send message to update the status."""
@@ -776,7 +781,7 @@ class MediaController(BaseMediaPlayer):
         """Called when controller is destroyed."""
         super().tear_down()
 
-        self._status_listeners = []
+        self._status_listeners.clear()
 
 
 class DefaultMediaReceiverController(BaseMediaPlayer):

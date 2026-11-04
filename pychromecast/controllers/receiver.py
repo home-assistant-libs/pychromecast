@@ -4,6 +4,7 @@ on the Chromecast.
 """
 
 import abc
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
@@ -20,7 +21,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse, chain_on_success
-from . import BaseController, CallbackType
+from . import BaseController, CallbackType, Listeners
 
 APP_ID = "appId"
 ERROR_REASON = "reason"
@@ -96,8 +97,8 @@ class ReceiverController(BaseController):
         self.launch_failure: LaunchFailure | None = None
         self.cast_type = cast_type
 
-        self._status_listeners: list[CastStatusListener] = []
-        self._launch_error_listeners: list[LaunchErrorListener] = []
+        self._status_listeners: Listeners[CastStatusListener] = Listeners()
+        self._launch_error_listeners: Listeners[LaunchErrorListener] = Listeners()
 
     def disconnected(self) -> None:
         """Called when disconnected. Will erase status."""
@@ -129,17 +130,25 @@ class ReceiverController(BaseController):
 
         return False
 
-    def register_status_listener(self, listener: CastStatusListener) -> None:
+    def register_status_listener(
+        self, listener: CastStatusListener
+    ) -> Callable[[], None]:
         """Register a status listener for when a new Chromecast status
         has been received. Listeners will be called with
-        listener.new_cast_status(status)"""
-        self._status_listeners.append(listener)
+        listener.new_cast_status(status)
 
-    def register_launch_error_listener(self, listener: LaunchErrorListener) -> None:
+        Returns a function which unregisters the listener."""
+        return self._status_listeners.add(listener)
+
+    def register_launch_error_listener(
+        self, listener: LaunchErrorListener
+    ) -> Callable[[], None]:
         """Register a listener for when a new launch error message
         has been received. Listeners will be called with
-        listener.new_launch_error(launch_failure)"""
-        self._launch_error_listeners.append(listener)
+        listener.new_launch_error(launch_failure)
+
+        Returns a function which unregisters the listener."""
+        return self._launch_error_listeners.add(listener)
 
     def update_status(
         self,
@@ -354,4 +363,4 @@ class ReceiverController(BaseController):
         self.status = None
         self.launch_failure = None
 
-        self._status_listeners = []
+        self._status_listeners.clear()
