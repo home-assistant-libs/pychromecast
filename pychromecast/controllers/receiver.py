@@ -115,12 +115,14 @@ class ReceiverController(BaseController):
 
         data is message.payload_utf8 interpreted as a JSON dict.
         """
-        if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
+        message_type = data.get(MESSAGE_TYPE)
+
+        if message_type == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 
             return True
 
-        if data[MESSAGE_TYPE] == TYPE_LAUNCH_ERROR:
+        if message_type == TYPE_LAUNCH_ERROR:
             self._process_launch_error(data)
 
             return True
@@ -280,7 +282,7 @@ class ReceiverController(BaseController):
 
         try:
             app_data: dict = status_data["applications"][0]
-        except (KeyError, IndexError):
+        except KeyError, IndexError:
             app_data = {}
 
         is_audio = cast_type in (CAST_TYPE_AUDIO, CAST_TYPE_GROUP)

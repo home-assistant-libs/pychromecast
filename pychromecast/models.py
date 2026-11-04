@@ -2,13 +2,13 @@
 Chromecast types
 """
 
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass
 from uuid import UUID
 
 import zeroconf
+
+from .const import CastCapability
 
 # pylint: disable=invalid-name
 ZEROCONF_ERRORS: tuple[type[Exception], ...] = (IOError, asyncio.TimeoutError)
@@ -29,6 +29,10 @@ class CastInfo:
     port: int
     cast_type: str | None
     manufacturer: str | None
+    device_capabilities: CastCapability | None = None
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 @dataclass(frozen=True)

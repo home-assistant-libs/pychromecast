@@ -7,10 +7,8 @@ Without him this would not have been possible.
 """
 
 # pylint: disable=too-many-lines
-from __future__ import annotations
 
 import abc
-import errno
 import json
 import logging
 import selectors
@@ -134,10 +132,19 @@ class _SocketClientLogger(logging.LoggerAdapter):
         super().__init__(logger)
         self._client = client
 
-    def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
+    def log(self, level: int, msg: object, *args: object, **kwargs: Any) -> None:
         """Add the prefix, the name and address may change while connecting."""
+        if not self.isEnabledFor(level):
+            return
         client = self._client
-        return f"[{client.fn or ''}({client.host}):{client.port}] {msg}", kwargs
+        prefix = f"[{client.fn or ''}({client.host}):{client.port}]"
+        if args:
+            # The message is formatted with args, the name or a scoped IPv6
+            # address may contain %
+            prefix = prefix.replace("%", "%%")
+        # Skip this frame so records name the real caller
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        self.logger.log(level, f"{prefix} {msg}", *args, **kwargs)
 
 
 class ConnectionStatusListener(abc.ABC):
@@ -221,7 +228,11 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.connecting = True
         self.first_connection = True
-        self.socket: socket.socket | ssl.SSLSocket | None = None
+        self.socket: ssl.SSLSocket | None = None
+        # Guards the socket, which isn't thread safe, and the sending state
+        self._socket_lock = threading.RLock()
+        # Received data not yet parsed into complete messages
+        self._recv_buffer = b""
         self.selector = selectors.DefaultSelector()
         self.wakeup_selector_key = self.selector.register(
             self.socketpair[0], selectors.EVENT_READ
@@ -243,20 +254,28 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.receiver_controller.register_status_listener(self)
 
-    def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches
+    def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches, too-many-locals
         self,
     ) -> None:
         """Initialize a socket to a Chromecast, retrying as necessary."""
         tries = self.tries
 
-        if self.socket is not None:
-            self.selector.unregister(self.socket)
-            self.socket.close()
-            self.socket = None
-            self.remote_selector_key = None
+        with self._socket_lock:
+            if self.socket is not None:
+                self.selector.unregister(self.socket)
+                self.socket.close()
+                self.socket = None
+                self.remote_selector_key = None
+
+            callbacks = list(self._request_callbacks.values())
+            self._recv_buffer = b""
+            self._request_id = 0
+            self._request_callbacks = {}
+            self._open_channels = []
+            self.connecting = True
 
         # Make sure nobody is blocking.
-        for callback_function in self._request_callbacks.values():
+        for callback_function in callbacks:
             try:
                 callback_function(False, None)
             except Exception:  # pylint: disable=broad-except
@@ -265,12 +284,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
-        self._request_id = 0
-        self._request_callbacks = {}
-        self._open_channels = []
 
-        self.connecting = True
-        retry_log_fun = self.logger.error
+        retry_log_fun = self.logger.info
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -308,11 +323,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                         self.socket = None
                         self.remote_selector_key = None
 
-                    self.socket = new_socket()
-                    self.remote_selector_key = self.selector.register(
-                        self.socket, selectors.EVENT_READ
-                    )
-                    self.socket.settimeout(self.timeout)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -331,7 +341,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             try:
                                 # Mypy does not understand that we catch errors, ignore it
                                 self.fn = service_info.properties[b"fn"].decode("utf-8")  # type: ignore[union-attr]
-                            except (AttributeError, KeyError, UnicodeError):
+                            except AttributeError, KeyError, UnicodeError:
                                 pass
                         self.logger.debug(
                             "Resolved service %s to %s:%s", service, host, port
@@ -353,11 +363,20 @@ class SocketClient(threading.Thread, CastStatusListener):
                         continue
 
                     self.logger.debug("Connecting")
-                    self.socket.connect((self.host, self.port))
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
-                    self.socket = context.wrap_socket(self.socket)
+                    raw_socket = socket.create_connection(
+                        (self.host, self.port), self.timeout
+                    )
+                    try:
+                        self.socket = context.wrap_socket(raw_socket)
+                    except BaseException:
+                        raw_socket.close()
+                        raise
+                    self.remote_selector_key = self.selector.register(
+                        self.socket, selectors.EVENT_READ
+                    )
                     self.connecting = False
                     self._force_recon = False
                     self._report_connection_status(
@@ -424,7 +443,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         try:
             # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
-        except socket.error:
+        except OSError:
             # The socketpair may already be closed during shutdown, ignore it
             pass
 
@@ -577,29 +596,33 @@ class SocketClient(threading.Thread, CastStatusListener):
         ready = self.selector.select(SELECT_TIMEOUT)
 
         can_read = {key for key, _ in ready}
-        # read message from chromecast
-        message = None
+        # read messages from chromecast
+        messages: list[CastMessage] = []
         if self.remote_selector_key in can_read and not self._force_recon:
-            message = self._read_message()
+            messages = self._read_messages()
 
         if self.wakeup_selector_key in can_read:
             # Clear the socket's buffer
             self.socketpair[0].recv(128)
 
-        # If we are stopped after receiving a message we skip the message
-        # and tear down the connection
+        for message in messages:
+            # If we are stopped after receiving a message we skip the message
+            # and tear down the connection
+            if self.stop.is_set():
+                raise InterruptLoop()
+
+            # See if any handlers will accept this message
+            data = _dict_from_message_payload(message)
+            self._route_message(message, data)
+
+            # A sender may remove the callback concurrently if writing fails
+            if REQUEST_ID in data and (
+                callback_function := self._request_callbacks.pop(data[REQUEST_ID], None)
+            ):
+                callback_function(True, data)
+
         if self.stop.is_set():
             raise InterruptLoop()
-
-        if not message:
-            return
-
-        # See if any handlers will accept this message
-        data = _dict_from_message_payload(message)
-        self._route_message(message, data)
-
-        if REQUEST_ID in data and data[REQUEST_ID] in self._request_callbacks:
-            self._request_callbacks.pop(data[REQUEST_ID])(True, data)
 
     def _check_connection(self) -> None:
         """
@@ -620,7 +643,8 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         if reset:
             self.receiver_controller.disconnected()
-            for channel in self._open_channels:
+            # disconnect_channel removes the channel from the list
+            for channel in list(self._open_channels):
                 self.disconnect_channel(channel)
             self._report_connection_status(
                 ConnectionStatus(
@@ -665,7 +689,8 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def _cleanup(self) -> None:
         """Cleanup open channels and handlers"""
-        for channel in self._open_channels:
+        # disconnect_channel removes the channel from the list
+        for channel in list(self._open_channels):
             try:
                 self.disconnect_channel(channel)
             except Exception:  # pylint: disable=broad-except
@@ -713,40 +738,62 @@ class SocketClient(threading.Thread, CastStatusListener):
                     "Exception thrown when calling connection listener"
                 )
 
-    def _read_bytes_from_socket(self, msglen: int) -> bytes:
-        """Read bytes from the socket."""
+    def _read_bytes_from_socket(self) -> bytes:
+        """Read one TLS record from the socket without waiting for more.
+
+        Data left in the socket wakes the selector again, which lets senders
+        and stop in between reads.
+        """
         # It is a programming error if this is called when we don't have a socket
         assert self.socket is not None
 
         chunks = []
-        bytes_recd = 0
-        while bytes_recd < msglen:
-            if self.stop.is_set():
-                raise InterruptLoop("Stopped while reading from socket")
+        events = selectors.EVENT_READ
+        with self._socket_lock:
+            self.socket.settimeout(0)
             try:
-                chunk = self.socket.recv(min(msglen - bytes_recd, 2048))
+                chunk = self.socket.recv(65536)
                 if chunk == b"":
                     raise ChromecastConnectionClosed("Connection was closed by remote")
                 chunks.append(chunk)
-                bytes_recd += len(chunk)
-            except TimeoutError:
-                self.logger.debug("timeout in : _read_bytes_from_socket")
-                continue
+                # Decrypted data is not seen by the selector, only an SSLSocket
+                # is read from
+                while pending := self.socket.pending():
+                    chunks.append(self.socket.recv(pending))
+            except ssl.SSLWantReadError:
+                pass
+            except ssl.SSLWantWriteError:
+                # The read is retried when TLS can write what it needs to, also
+                # waiting for reads would busy-loop while the socket is readable
+                events = selectors.EVENT_WRITE
+            finally:
+                self.socket.settimeout(self.timeout)
+
+        assert self.remote_selector_key is not None
+        if self.remote_selector_key.events != events:
+            self.remote_selector_key = self.selector.modify(self.socket, events)
+
         return b"".join(chunks)
 
-    def _read_message(self) -> CastMessage:
-        """Reads a message from the socket and converts it to a message."""
-        # first 4 bytes is Big-Endian payload length
-        payload_info = self._read_bytes_from_socket(4)
-        read_len = unpack(">I", payload_info)[0]
+    def _read_messages(self) -> list[CastMessage]:
+        """Read the messages available on the socket.
 
-        # now read the payload
-        payload = self._read_bytes_from_socket(read_len)
+        A partial message is kept until the rest of it has been received.
+        """
+        self._recv_buffer += self._read_bytes_from_socket()
 
-        message = CastMessage()
-        message.ParseFromString(payload)
+        messages = []
+        # each message is prefixed with its Big-Endian 4 byte length
+        while len(self._recv_buffer) >= 4:
+            (read_len,) = unpack(">I", self._recv_buffer[:4])
+            if len(self._recv_buffer) < 4 + read_len:
+                break
+            message = CastMessage()
+            message.ParseFromString(self._recv_buffer[4 : 4 + read_len])
+            self._recv_buffer = self._recv_buffer[4 + read_len :]
+            messages.append(message)
 
-        return message
+        return messages
 
     # pylint: disable=too-many-arguments, too-many-branches
     def send_message(
@@ -766,9 +813,45 @@ class SocketClient(threading.Thread, CastStatusListener):
         # data is a dict that will be converted to json
         # wait_for_response only works if we have a request id
 
+        # Callbacks are called without holding the lock
+        try:
+            with self._socket_lock:
+                sent = self._send_message_locked(
+                    destination_id,
+                    namespace,
+                    data,
+                    inc_session_id=inc_session_id,
+                    callback_function=callback_function,
+                    no_add_request_id=no_add_request_id,
+                    force=force,
+                )
+        except PyChromecastStopped, NotConnected:
+            if callback_function:
+                callback_function(False, None)
+            raise
+
+        if callback_function and (not sent or no_add_request_id):
+            callback_function(sent, None)
+
+    def _send_message_locked(
+        self,
+        destination_id: str,
+        namespace: str,
+        data: dict,
+        *,
+        inc_session_id: bool,
+        callback_function: CallbackType | None,
+        no_add_request_id: bool,
+        force: bool,
+    ) -> bool:
+        """Send a message, the socket lock must be held.
+
+        Returns False if writing to the socket failed.
+        """
         # If channel is not open yet, connect to it.
         self._ensure_channel_connected(destination_id)
 
+        request_id = None
         if not no_add_request_id:
             request_id = self._gen_request_id()
             data[REQUEST_ID] = request_id
@@ -796,31 +879,24 @@ class SocketClient(threading.Thread, CastStatusListener):
             self.logger.debug("Sending: %s", _message_to_string(msg, data))
 
         if not force and self.stop.is_set():
-            if callback_function:
-                callback_function(False, None)
             raise PyChromecastStopped("Socket client's thread is stopped.")
-        if not self.connecting and not self._force_recon:
-            # We have a socket
-            assert self.socket is not None
-
-            try:
-                if callback_function:
-                    if not no_add_request_id:
-                        self._request_callbacks[request_id] = callback_function
-                    else:
-                        callback_function(True, None)
-                self.socket.sendall(be_size + msg.SerializeToString())
-            except socket.error as exc:
-                if callback_function:
-                    callback_function(False, None)
-                if not no_add_request_id:
-                    self._request_callbacks.pop(request_id, None)
-                self._force_recon = True
-                self.logger.warning("Error writing to socket: %s", exc)
-        else:
-            if callback_function:
-                callback_function(False, None)
+        if self.connecting or self._force_recon:
             raise NotConnected(f"Chromecast {self.host}:{self.port} is connecting...")
+
+        # We have a socket
+        assert self.socket is not None
+
+        if callback_function and request_id is not None:
+            self._request_callbacks[request_id] = callback_function
+        try:
+            self.socket.sendall(be_size + msg.SerializeToString())
+        except OSError as exc:
+            if request_id is not None:
+                self._request_callbacks.pop(request_id, None)
+            self._force_recon = True
+            self.logger.warning("Error writing to socket: %s", exc)
+            return False
+        return True
 
     def send_platform_message(
         self,
@@ -883,31 +959,42 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def _ensure_channel_connected(self, destination_id: str) -> None:
         """Ensure we opened a channel to destination_id."""
-        if destination_id not in self._open_channels:
+        with self._socket_lock:
+            if destination_id in self._open_channels:
+                return
+            # Added before sending, as the CONNECT itself goes to the channel
             self._open_channels.append(destination_id)
 
-            self.send_message(
-                destination_id,
-                NS_CONNECTION,
-                {
-                    MESSAGE_TYPE: TYPE_CONNECT,
-                    "origin": {},
-                    "userAgent": "PyChromecast",
-                    "senderInfo": {
-                        "sdkType": 2,
-                        "version": "15.605.1.3",
-                        "browserVersion": "44.0.2403.30",
-                        "platform": 4,
-                        "systemVersion": "Macintosh; Intel Mac OS X10_10_3",
-                        "connectionType": 1,
+            try:
+                self.send_message(
+                    destination_id,
+                    NS_CONNECTION,
+                    {
+                        MESSAGE_TYPE: TYPE_CONNECT,
+                        "origin": {},
+                        "userAgent": "PyChromecast",
+                        "senderInfo": {
+                            "sdkType": 2,
+                            "version": "15.605.1.3",
+                            "browserVersion": "44.0.2403.30",
+                            "platform": 4,
+                            "systemVersion": "Macintosh; Intel Mac OS X10_10_3",
+                            "connectionType": 1,
+                        },
                     },
-                },
-                no_add_request_id=True,
-            )
+                    no_add_request_id=True,
+                )
+            except Exception:
+                # Not sent, so it must be sent on the next connection
+                self._open_channels.remove(destination_id)
+                raise
 
     def disconnect_channel(self, destination_id: str) -> None:
         """Disconnect a channel with destination_id."""
-        if destination_id in self._open_channels:
+        # Locked so a sender opening the channel can't remove it in between
+        with self._socket_lock:
+            if destination_id not in self._open_channels:
+                return
             try:
                 self.send_message(
                     destination_id,
@@ -923,7 +1010,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             self._open_channels.remove(destination_id)
 
-            self.handle_channel_disconnected()
+        self.handle_channel_disconnected()
 
     def handle_channel_disconnected(self) -> None:
         """Handles a channel being disconnected."""
@@ -965,29 +1052,3 @@ class ConnectionController(BaseController):
             return True
 
         return False
-
-
-def new_socket() -> socket.socket:
-    """
-    Create a new socket with OS-specific parameters
-
-    Try to set SO_REUSEPORT for BSD-flavored systems if it's an option.
-    Catches errors if not.
-    """
-    new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    try:
-        # noinspection PyUnresolvedReferences
-        reuseport = socket.SO_REUSEPORT
-    except AttributeError:
-        pass
-    else:
-        try:
-            new_sock.setsockopt(socket.SOL_SOCKET, reuseport, 1)
-        except (OSError, socket.error) as err:
-            # OSError on python 3, socket.error on python 2
-            if err.errno != errno.ENOPROTOOPT:
-                raise
-
-    return new_sock
