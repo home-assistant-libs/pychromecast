@@ -3,7 +3,7 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 
 import abc
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import partial
 import logging
 from typing import TYPE_CHECKING, Any, Protocol
@@ -18,27 +18,33 @@ if TYPE_CHECKING:
     from ..socket_client import SocketClient
 
 
-def add_listener[T](listeners: list[T], listener: T) -> Callable[[], None]:
-    """Add a listener to a list, returns a function which removes it again.
+class Listeners[T]:
+    """Registered listeners, notified in the order they were added."""
 
-    Only the first call of the function removes the listener, so it can't remove
-    a later registration of the same listener.
-    """
-    listeners.append(listener)
-    removed = False
+    def __init__(self) -> None:
+        # Keyed by a token per registration, the same listener can be added twice
+        self._listeners: dict[object, T] = {}
 
-    def remove_listener() -> None:
-        nonlocal removed
-        if removed:
-            return
-        removed = True
-        # Compare by identity, an equal listener is another registration
-        for index, registered in enumerate(listeners):
-            if registered is listener:
-                del listeners[index]
-                return
+    def add(self, listener: T) -> Callable[[], None]:
+        """Add a listener, returns a function which removes it again."""
+        token = object()
+        self._listeners[token] = listener
 
-    return remove_listener
+        def remove_listener() -> None:
+            self._listeners.pop(token, None)
+
+        return remove_listener
+
+    def clear(self) -> None:
+        """Remove all listeners."""
+        self._listeners.clear()
+
+    def __iter__(self) -> Iterator[T]:
+        """Iterate over a copy, a listener may remove itself when notified."""
+        return iter(list(self._listeners.values()))
+
+    def __len__(self) -> int:
+        return len(self._listeners)
 
 
 class SendMessageFunc(Protocol):

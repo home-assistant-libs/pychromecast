@@ -26,7 +26,7 @@ import zeroconf
 
 from .config import APP_AUDIBLE
 from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
-from .controllers import BaseController, CallbackType, add_listener
+from .controllers import BaseController, CallbackType, Listeners
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
@@ -238,7 +238,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         # dict mapping namespace on Controller objects
         self._handlers: dict[str, set[BaseController]] = defaultdict(set)
-        self._connection_listeners: list[ConnectionStatusListener] = []
+        self._connection_listeners: Listeners[ConnectionStatusListener] = Listeners()
 
         self.receiver_controller = ReceiverController(cast_type)
         self.media_controller = MediaController()
@@ -725,7 +725,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def _report_connection_status(self, status: ConnectionStatus) -> None:
         """Report a change in the connection status to any listeners"""
-        for listener in list(self._connection_listeners):
+        for listener in self._connection_listeners:
             try:
                 self.logger.debug(
                     "connection listener: %x (%s) %s",
@@ -960,7 +960,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         listener.new_connection_status(status)
 
         Returns a function which unregisters the listener."""
-        return add_listener(self._connection_listeners, listener)
+        return self._connection_listeners.add(listener)
 
     def _ensure_channel_connected(self, destination_id: str) -> None:
         """Ensure we opened a channel to destination_id."""

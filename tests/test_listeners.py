@@ -67,3 +67,18 @@ def test_unregister_equal_listener() -> None:
 
     first.new_cast_status.assert_called_once()
     second.new_cast_status.assert_not_called()
+
+
+def test_listener_registered_twice() -> None:
+    """Test each registration of the same listener is removed on its own."""
+    controller = ReceiverController()
+    listener = MagicMock()
+    unregister = controller.register_status_listener(listener)
+    controller.register_status_listener(listener)
+
+    controller._process_get_status(STATUS)  # pylint: disable=protected-access
+    assert listener.new_cast_status.call_count == 2
+
+    unregister()
+    controller._process_get_status(STATUS)  # pylint: disable=protected-access
+    assert listener.new_cast_status.call_count == 3

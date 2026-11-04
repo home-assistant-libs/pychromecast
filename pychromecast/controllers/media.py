@@ -18,7 +18,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse
-from . import CallbackType, QuickPlayController, add_listener
+from . import CallbackType, QuickPlayController, Listeners
 
 STREAM_TYPE_UNKNOWN = "UNKNOWN"
 STREAM_TYPE_BUFFERED = "BUFFERED"
@@ -572,7 +572,7 @@ class MediaController(BaseMediaPlayer):
         self.media_session_id = 0
         self.status = MediaStatus()
         self.session_active_event = threading.Event()
-        self._status_listeners: list[MediaStatusListener] = []
+        self._status_listeners: Listeners[MediaStatusListener] = Listeners()
 
     def channel_connected(self) -> None:
         """Called when media channel is connected. Will update status."""
@@ -602,7 +602,7 @@ class MediaController(BaseMediaPlayer):
         call listener.new_media_status(status)
 
         Returns a function which unregisters the listener."""
-        return add_listener(self._status_listeners, listener)
+        return self._status_listeners.add(listener)
 
     def update_status(self, *, callback_function: CallbackType | None = None) -> None:
         """Send message to update the status."""
@@ -763,7 +763,7 @@ class MediaController(BaseMediaPlayer):
 
     def _fire_status_changed(self) -> None:
         """Tells listeners of a changed status."""
-        for listener in list(self._status_listeners):
+        for listener in self._status_listeners:
             try:
                 listener.new_media_status(self.status)
             except Exception:  # pylint: disable=broad-except
@@ -771,7 +771,7 @@ class MediaController(BaseMediaPlayer):
 
     def _fire_load_failed(self, queue_item_id: int, error_code: int) -> None:
         """Tells listeners of a changed status."""
-        for listener in list(self._status_listeners):
+        for listener in self._status_listeners:
             try:
                 listener.load_media_failed(queue_item_id, error_code)
             except Exception:  # pylint: disable=broad-except
@@ -781,7 +781,7 @@ class MediaController(BaseMediaPlayer):
         """Called when controller is destroyed."""
         super().tear_down()
 
-        self._status_listeners = []
+        self._status_listeners.clear()
 
 
 class DefaultMediaReceiverController(BaseMediaPlayer):
