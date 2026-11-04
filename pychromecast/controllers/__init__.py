@@ -97,9 +97,9 @@ class BaseController(abc.ABC):
     def is_active(self) -> bool:
         """True if the controller is connected to a socket client and the
         Chromecast is running an app that supports this controller."""
-        socket_client = self._socket_client
         return (
-            socket_client is not None and self.namespace in socket_client.app_namespaces
+            self._socket_client is not None
+            and self.namespace in self._socket_client.app_namespaces
         )
 
     def launch(
@@ -118,13 +118,12 @@ class BaseController(abc.ABC):
                 callback_function(False, None)
             return
 
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             if callback_function:
                 callback_function(False, None)
             raise ControllerNotRegistered
 
-        socket_client.receiver_controller.launch_app(
+        self._socket_client.receiver_controller.launch_app(
             self.supporting_app_id,
             force_launch=force_launch,
             callback_function=callback_function,
@@ -141,8 +140,6 @@ class BaseController(abc.ABC):
 
     def unregistered(self) -> None:
         """Called when a controller is unregistered."""
-        # Possibly from another thread than a sender, which reads these once
-        self._socket_client = None
         self._message_func = None
 
     def channel_connected(self) -> None:
@@ -165,16 +162,15 @@ class BaseController(abc.ABC):
 
         Will raise a NotConnected exception if not connected.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             if callback_function:
                 callback_function(False, None)
             raise ControllerNotRegistered
 
-        receiver_ctrl = socket_client.receiver_controller
+        receiver_ctrl = self._socket_client.receiver_controller
 
         if not self.target_platform and (
-            self.namespace not in socket_client.app_namespaces
+            self.namespace not in self._socket_client.app_namespaces
             or (self.app_must_match and receiver_ctrl.app_id != self.supporting_app_id)
         ):
             if self.supporting_app_id is not None:

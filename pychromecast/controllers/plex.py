@@ -332,11 +332,10 @@ class PlexController(BaseController):
         Args:
             percent (int): Percent of volume to be set.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        return socket_client.receiver_controller.set_volume(percent / 100)
+        return self._socket_client.receiver_controller.set_volume(percent / 100)
 
     def volume_up(self, delta: float = 0.1) -> float:
         """Increment volume by 0.1 (or delta) unless at max.
@@ -360,14 +359,13 @@ class PlexController(BaseController):
         Args:
             status (None, optional): Override for on/off.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
         if status is None:
             status = not self.status.volume_muted
 
-        socket_client.receiver_controller.set_volume_muted(status)
+        self._socket_client.receiver_controller.set_volume_muted(status)
 
     def show_media(self, media: Playable | None = None, **kwargs: Any) -> None:
         """Show media item's info on screen."""
@@ -387,11 +385,10 @@ class PlexController(BaseController):
 
     def quit_app(self) -> None:
         """Quit the Plex app."""
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        socket_client.receiver_controller.stop_app()
+        self._socket_client.receiver_controller.stop_app()
 
     @property
     def status(self) -> PlexMediaStatus:
@@ -401,11 +398,10 @@ class PlexController(BaseController):
             pychromecast.controllers.media.MediaStatus: Slightly modified status with patched
                                                         method for episode_title.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        status = socket_client.media_controller.status
+        status = self._socket_client.media_controller.status
         status.episode_title = episode_title  # type: ignore[attr-defined]
         return cast(PlexMediaStatus, status)
 
@@ -500,11 +496,10 @@ class PlexController(BaseController):
 
     def join(self, timeout: float | None = None) -> None:
         """Join the thread."""
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        socket_client.join(timeout=timeout)
+        self._socket_client.join(timeout=timeout)
 
     def disconnect(self, timeout: float | None = None) -> None:
         """Disconnect the controller.
@@ -513,11 +508,10 @@ class PlexController(BaseController):
                         operation in seconds (or fractions thereof). Or None
                         to block forever. Set to 0 to not block.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        socket_client.disconnect()
+        self._socket_client.disconnect()
         self.join(timeout=timeout)
 
 

@@ -35,23 +35,22 @@ class HeartbeatController(BaseController):
 
         data is message.payload_utf8 interpreted as a JSON dict.
         """
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
-        if socket_client.is_stopped:
+        if self._socket_client.is_stopped:
             return True
 
         if data[MESSAGE_TYPE] == TYPE_PING:
             try:
-                socket_client.send_message(
+                self._socket_client.send_message(
                     PLATFORM_DESTINATION_ID,
                     self.namespace,
                     {MESSAGE_TYPE: TYPE_PONG},
                     no_add_request_id=True,
                 )
             except PyChromecastStopped:
-                socket_client.logger.debug(
+                self._socket_client.logger.debug(
                     "Heartbeat error when sending response, "
                     "Chromecast connection has stopped"
                 )
@@ -66,15 +65,14 @@ class HeartbeatController(BaseController):
 
     def ping(self) -> None:
         """Send a ping message."""
-        socket_client = self._socket_client
-        if socket_client is None:
+        if self._socket_client is None:
             raise ControllerNotRegistered
 
         self.last_ping = time.time()
         try:
             self.send_message({MESSAGE_TYPE: TYPE_PING})
         except NotConnected:
-            socket_client.logger.error(
+            self._socket_client.logger.error(
                 "Chromecast is disconnected. Cannot ping until reconnected."
             )
 

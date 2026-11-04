@@ -518,10 +518,9 @@ class BaseMediaPlayer(QuickPlayController):
             }
 
         if enqueue:
-            socket_client = self._socket_client
-            if socket_client is None:
+            if self._socket_client is None:
                 raise ControllerNotRegistered
-            status = socket_client.media_controller.status
+            status = self._socket_client.media_controller.status
             msg: dict[str, Any] = {
                 "mediaSessionId": status.media_session_id,
                 "items": [
