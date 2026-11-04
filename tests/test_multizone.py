@@ -498,12 +498,26 @@ def test_no_session_endpoint(
     assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
 
 
-def test_update_session_devices_no_session() -> None:
-    """Test an error is raised when the endpoint runs no session."""
-    manager = _manager([_speaker_a(None), _speaker_b()])
+@pytest.mark.parametrize(
+    ("devices", "groups", "endpoint"),
+    [
+        ([_speaker_a(None)], [], SPEAKER_A),
+        # Followers run a session of their own, but report no playback session
+        ([_speaker_a(owner=False)], [], SPEAKER_A),
+        # A dynamic group the session has left
+        ([_speaker_a()], [_group([SPEAKER_A])], GROUP_UUID),
+    ],
+)
+def test_update_session_devices_no_session(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint], endpoint: str
+) -> None:
+    """Test an error is raised when the endpoint owns no session."""
+    manager = _manager([*devices, _speaker_b()], groups)
 
-    with pytest.raises(RequestFailed, match="runs no session"):
-        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+    with pytest.raises(RequestFailed, match="owns no session"):
+        manager.update_session_devices(UUID(endpoint), add={UUID(SPEAKER_B)})
+    for device in [*devices, *groups]:
+        assert {data["type"] for data in device.sent} == {"GET_STATUS"}
 
 
 def test_update_session_devices_unmanaged_endpoint() -> None:

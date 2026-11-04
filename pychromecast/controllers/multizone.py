@@ -442,7 +442,7 @@ class MultizoneManager:
         add_multizone. Blocks until the change is done, returns None if nothing
         changes.
 
-        Raises RequestFailed if the endpoint isn't managed or runs no session, no
+        Raises RequestFailed if the endpoint isn't managed or owns no session, no
         device would be left, a device isn't managed or the change fails, and
         RequestTimeout if there's no response.
         """
@@ -450,11 +450,12 @@ class MultizoneManager:
         if group is None:
             raise RequestFailed(f"set playback devices, {endpoint} isn't managed")
         session_id = group["monitor"].session_id
-        if session_id is None:
-            raise RequestFailed(f"set playback devices, {endpoint} runs no session")
+        session_members = self._session_members(group)
+        if session_id is None or not session_members:
+            raise RequestFailed(f"set playback devices, {endpoint} owns no session")
         controller = group["controller"]
 
-        members = {UUID(member) for member in controller.members}
+        members = {UUID(member) for member in session_members}
         target = (members - remove) | add
         if target == members:
             return None
