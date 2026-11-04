@@ -300,8 +300,10 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     device_capabilities=device_capabilities,
                 )
             else:
-                # Update stored information
-                services = self._devices[uuid].services
+                # Update stored information, mDNS has no device details so keep
+                # what the host browser polled
+                cast_info = self._devices[uuid]
+                services = cast_info.services
                 services.add(service_info)
                 self._devices[uuid] = CastInfo(
                     services,
@@ -313,6 +315,9 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     cast_type,
                     manufacturer,
                     device_capabilities=device_capabilities,
+                    mac_address=cast_info.mac_address,
+                    product_name=cast_info.product_name,
+                    cast_build_revision=cast_info.cast_build_revision,
                 )
 
         callback(uuid, name)
@@ -327,6 +332,9 @@ class _PolledDevice(NamedTuple):
     uuid: UUID
     cast_type: str
     manufacturer: str
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 class HostStatus:
@@ -453,6 +461,9 @@ class HostBrowser(threading.Thread):
                     device_status.uuid,
                     device_status.cast_type,
                     device_status.manufacturer,
+                    device_status.mac_address,
+                    device_status.product_name,
+                    device_status.cast_build_revision,
                 )
             )
             uuids.append(device_status.uuid)
@@ -527,10 +538,18 @@ class HostBrowser(threading.Thread):
         if uuid in self._devices:
             callback = self._cast_listener.update_cast
             cast_info = self._devices[uuid]
-            if (
-                service_info in cast_info.services
-                and cast_info.model_name == device.model_name
-                and cast_info.friendly_name == device.friendly_name
+            if service_info in cast_info.services and (
+                cast_info.model_name,
+                cast_info.friendly_name,
+                cast_info.mac_address,
+                cast_info.product_name,
+                cast_info.cast_build_revision,
+            ) == (
+                device.model_name,
+                device.friendly_name,
+                device.mac_address,
+                device.product_name,
+                device.cast_build_revision,
             ):
                 # No changes, return
                 return
@@ -554,6 +573,9 @@ class HostBrowser(threading.Thread):
             device.cast_type,
             device.manufacturer,
             device_capabilities=device_capabilities,
+            mac_address=device.mac_address,
+            product_name=device.product_name,
+            cast_build_revision=device.cast_build_revision,
         )
 
         name = f"{host}:{port}"

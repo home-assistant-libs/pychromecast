@@ -169,6 +169,23 @@ def get_ssl_context() -> ssl.SSLContext:
     return context
 
 
+def _get_eureka_info(
+    services: set[HostServiceInfo | MDNSServiceInfo],
+    zconf: zeroconf.Zeroconf | None,
+    params: list[str],
+    timeout: float,
+    context: ssl.SSLContext | None,
+) -> Any:
+    """Query the eureka_info of a cast device."""
+    path = f"/setup/eureka_info?params={','.join(params)}"
+    # Try connection with SSL first, and if it fails fall back to non-SSL
+    try:
+        _, status = _get_status(services, zconf, path, True, timeout / 2, context)
+    except urllib.error.HTTPError, urllib.error.URLError:
+        _, status = _get_status(services, zconf, path, False, timeout / 2, context)
+    return status
+
+
 def get_cast_type(
     cast_info: CastInfo,
     zconf: zeroconf.Zeroconf | None = None,
@@ -184,25 +201,9 @@ def get_cast_type(
     else:
         try:
             display_supported = True
-            # Try connection with SSL first, and if it fails fall back to non-SSL
-            try:
-                _, status = _get_status(
-                    cast_info.services,
-                    zconf,
-                    "/setup/eureka_info?params=device_info,name",
-                    True,
-                    timeout / 2,
-                    context,
-                )
-            except urllib.error.HTTPError, urllib.error.URLError:
-                _, status = _get_status(
-                    cast_info.services,
-                    zconf,
-                    "/setup/eureka_info?params=device_info,name",
-                    False,
-                    timeout / 2,
-                    context,
-                )
+            status = _get_eureka_info(
+                cast_info.services, zconf, ["device_info", "name"], timeout, context
+            )
             if "device_info" in status:
                 device_info = status["device_info"]
 
@@ -226,7 +227,6 @@ def get_cast_type(
                 err,
                 cast_info.services,
             )
-            cast_type = CAST_TYPE_CHROMECAST
 
     return CastInfo(
         cast_info.services,
@@ -238,6 +238,9 @@ def get_cast_type(
         cast_type,
         manufacturer,
         device_capabilities=cast_info.device_capabilities,
+        mac_address=cast_info.mac_address,
+        product_name=cast_info.product_name,
+        cast_build_revision=cast_info.cast_build_revision,
     )
 
 
@@ -254,25 +257,9 @@ def get_device_info(  # pylint: disable=too-many-locals
         if services is None:
             services = {HostServiceInfo(host, 8009)}
 
-        # Try connection with SSL first, and if it fails fall back to non-SSL
-        try:
-            _, status = _get_status(
-                services,
-                zconf,
-                "/setup/eureka_info?params=device_info,name",
-                True,
-                timeout / 2,
-                context,
-            )
-        except urllib.error.HTTPError, urllib.error.URLError:
-            _, status = _get_status(
-                services,
-                zconf,
-                "/setup/eureka_info?params=device_info,name",
-                False,
-                timeout / 2,
-                context,
-            )
+        status = _get_eureka_info(
+            services, zconf, ["device_info", "name", "build_info"], timeout, context
+        )
 
         cast_type = CAST_TYPE_CHROMECAST
         display_supported = True
@@ -281,6 +268,9 @@ def get_device_info(  # pylint: disable=too-many-locals
         model_name = "Unknown model name"
         multizone_supported = False
         udn = None
+        mac_address = None
+        product_name = None
+        cast_build_revision = None
 
         if "device_info" in status:
             device_info = status["device_info"]
@@ -292,6 +282,8 @@ def get_device_info(  # pylint: disable=too-many-locals
             model_name = device_info.get("model_name", model_name)
             manufacturer = device_info.get("manufacturer", manufacturer)
             udn = device_info.get("ssdp_udn", None)
+            mac_address = device_info.get("mac_address", None)
+            product_name = device_info.get("product_name", None)
         else:
             udn = status.get("ssdp_udn", None)
 
@@ -302,6 +294,9 @@ def get_device_info(  # pylint: disable=too-many-locals
         if udn:
             uuid = UUID(udn.replace("-", ""))
 
+        if build_info := status.get("build_info"):
+            cast_build_revision = build_info.get("cast_build_revision")
+
         return DeviceStatus(
             friendly_name,
             model_name,
@@ -309,6 +304,9 @@ def get_device_info(  # pylint: disable=too-many-locals
             uuid,
             cast_type,
             multizone_supported,
+            mac_address,
+            product_name,
+            cast_build_revision,
         )
 
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as err:
@@ -440,3 +438,6 @@ class DeviceStatus:
     uuid: UUID | None
     cast_type: str
     multizone_supported: bool
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
