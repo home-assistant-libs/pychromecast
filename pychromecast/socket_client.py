@@ -575,7 +575,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.exception(
                     "Unhandled exception in worker thread, attempting reconnect",
                 )
-                time.sleep(self.retry_wait)
+                self.stop.wait(self.retry_wait)
 
         self.logger.debug("Thread done...")
         # Clean up
@@ -688,7 +688,12 @@ class SocketClient(threading.Thread, CastStatusListener):
             )
 
     def _cleanup(self) -> None:
-        """Cleanup open channels and handlers"""
+        """Cleanup open channels and handlers
+
+        The worker is done, so the client is stopped, also when it stopped
+        because it failed to connect.
+        """
+        self.stop.set()
         # disconnect_channel removes the channel from the list
         for channel in list(self._open_channels):
             try:

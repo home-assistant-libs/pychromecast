@@ -444,6 +444,44 @@ def test_stopped_during_worker_does_not_log_exception() -> None:
     client._cleanup.assert_called_once()
 
 
+def test_failed_connection_stops_client(socket_client: SocketClient) -> None:
+    """Test a client which gave up connecting is stopped."""
+    with patch.object(
+        socket_client,
+        "initialize_connection",
+        side_effect=ChromecastConnectionError("Failed to connect"),
+    ):
+        socket_client.run()
+
+    assert socket_client.is_stopped
+    with pytest.raises(PyChromecastStopped):
+        socket_client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
+
+
+def test_worker_retry_wait_interrupted_by_stop() -> None:
+    """Test the wait before reconnecting after an error ends when stopped."""
+    client = object.__new__(SocketClient)
+
+    client.fn = "Test Chromecast"
+    client.host = "192.0.2.1"
+    client.port = 8009
+    client.retry_wait = 30
+
+    client.stop = Mock()
+    client.stop.is_set.side_effect = [False, False, True]
+    client._run_once = Mock(side_effect=RuntimeError("Unexpected"))
+    client.initialize_connection = Mock()
+    client.heartbeat_controller = Mock()
+    client.logger = Mock()
+    client._cleanup = Mock()
+    client._force_recon = False
+
+    client.run()
+
+    client.stop.wait.assert_called_once_with(30)
+    client._cleanup.assert_called_once()
+
+
 def test_stopped_exception_exits_worker() -> None:
     """A stopped socket client exits the worker loop cleanly."""
     client = object.__new__(SocketClient)
