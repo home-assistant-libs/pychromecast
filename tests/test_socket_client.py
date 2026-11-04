@@ -715,7 +715,7 @@ def test_connection_stopped_before_connecting(
 def test_socket_error_logged_without_traceback(
     socket_client: SocketClient, caplog: pytest.LogCaptureFixture, error: OSError
 ) -> None:
-    """Test a socket error is logged on one line, the traceback at debug."""
+    """Test a socket error is logged on one line at info, the traceback at debug."""
     with (
         patch.object(socket_client, "initialize_connection"),
         patch.object(
@@ -725,10 +725,14 @@ def test_socket_error_logged_without_traceback(
     ):
         socket_client.run()
 
-    errors = [record for record in caplog.records if record.levelno >= logging.ERROR]
-    assert len(errors) == 1
-    assert "Socket error, attempting reconnect" in errors[0].getMessage()
-    assert errors[0].exc_info is None
+    [logged] = [
+        record
+        for record in caplog.records
+        if "Socket error, attempting reconnect" in record.getMessage()
+    ]
+    assert logged.levelno == logging.INFO
+    assert logged.exc_info is None
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
     assert any(
         record.levelno == logging.DEBUG and record.exc_info is not None
         for record in caplog.records

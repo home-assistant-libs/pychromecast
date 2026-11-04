@@ -556,7 +556,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             except OSError as exc:
                 self._force_recon = True
-                self.logger.error("Socket error, attempting reconnect: %s", exc)
+                self.logger.info("Socket error, attempting reconnect: %s", exc)
                 self.logger.debug("Socket error", exc_info=True)
 
             except Exception:  # pylint: disable=broad-except
@@ -666,8 +666,7 @@ class SocketClient(threading.Thread, CastStatusListener):
     def _cleanup(self) -> None:
         """Cleanup open channels and handlers
 
-        The worker is done, so the client is stopped, also when it stopped
-        because it failed to connect.
+        Stops the client, it can't be used once the worker is done.
         """
         self.stop.set()
         # disconnect_channel removes the channel from the list
