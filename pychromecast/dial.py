@@ -2,8 +2,6 @@
 Implements the DIAL-protocol to communicate with the Chromecast
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from http import HTTPStatus
 import ipaddress

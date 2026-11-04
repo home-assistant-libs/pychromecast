@@ -7,7 +7,6 @@ Without him this would not have been possible.
 """
 
 # pylint: disable=too-many-lines
-from __future__ import annotations
 
 import abc
 import json
@@ -442,7 +441,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         try:
             # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
-        except socket.error:
+        except OSError:
             # The socketpair may already be closed during shutdown, ignore it
             pass
 
@@ -591,7 +590,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             except ChromecastConnectionClosed as exc:
                 self._force_recon = True
                 self.logger.debug("%s", exc)
-            except socket.error as exc:
+            except OSError as exc:
                 self._force_recon = True
                 self.logger.error("Error reading from socket: %s", exc)
 
@@ -891,7 +890,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._request_callbacks[request_id] = callback_function
         try:
             self.socket.sendall(be_size + msg.SerializeToString())
-        except socket.error as exc:
+        except OSError as exc:
             if request_id is not None:
                 self._request_callbacks.pop(request_id, None)
             self._force_recon = True
