@@ -606,7 +606,10 @@ class SocketClient(threading.Thread, CastStatusListener):
             if REQUEST_ID in data and (
                 callback_function := self._request_callbacks.pop(data[REQUEST_ID], None)
             ):
-                callback_function(True, data)
+                try:
+                    callback_function(True, data)
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception("Unhandled exception in callback function")
 
     def _check_connection(self) -> None:
         """Checks if the connection is active, and if not reconnect."""

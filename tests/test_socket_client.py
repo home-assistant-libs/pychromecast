@@ -783,3 +783,28 @@ def test_stopped_while_handling_messages(socket_client: SocketClient) -> None:
 
     assert received == [{"n": 1}, {"n": 2}]
     assert socket_client.is_stopped
+
+
+@pytest.mark.parametrize(
+    "error", [ChromecastConnectionError("Failed"), OSError("Bad"), ValueError("Bad")]
+)
+def test_callback_exception_keeps_connection(
+    socket_client: SocketClient, error: Exception
+) -> None:
+    """Test an exception from a request callback is logged, the client goes on."""
+    msg = _message('{"requestId": 1}')
+    sock = FakeSocket(socket_client, _frame(msg))
+    sock.timeout = 0
+    # Make the fake socket readable
+    sock._pair[1].send(b"x")  # pylint: disable=protected-access
+    callback = MagicMock(side_effect=error)
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    socket_client.heartbeat_controller.reset()
+
+    with patch.object(socket_client.logger, "exception") as log_exception:
+        socket_client._run_once()  # pylint: disable=protected-access
+
+    callback.assert_called_once_with(True, {"requestId": 1})
+    log_exception.assert_called_once()
+    assert not socket_client._force_recon  # pylint: disable=protected-access
+    assert not socket_client.is_stopped
