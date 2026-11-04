@@ -32,7 +32,7 @@ def _mdns_update(
     port: int = 8009,
 ) -> None:
     service = MagicMock(port=port, server=None)
-    service.parsed_addresses.return_value = [HOST]
+    service.parsed_scoped_addresses.return_value = [HOST]
     service.properties = {
         b"fn": b"Speaker",
         b"md": model,
@@ -97,6 +97,7 @@ def test_mdns_cast_type_from_device_capabilities(
     _mdns_update(devices, ca, model, port)
 
     cast_info = devices[UUID(UUID_STR)]
+    assert cast_info.host == HOST
     assert cast_info.cast_type == cast_type
     assert cast_info.manufacturer == manufacturer
 
