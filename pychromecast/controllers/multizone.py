@@ -328,7 +328,12 @@ class MultizoneManager:
 
         The members of a group are told about the group's status. Returns the
         multizone controller of the device or group, for registering listeners.
+        Must be called before the cast is started, the status is requested
+        when it connects.
         """
+        assert not group_cast.socket_client.is_alive(), (
+            "add_multizone must be called before the cast is started"
+        )
         controller = MultizoneController(group_cast.uuid)
         monitor: _EndpointMonitor
         if group_cast.cast_type == CAST_TYPE_GROUP:

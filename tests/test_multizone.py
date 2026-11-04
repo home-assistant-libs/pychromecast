@@ -308,6 +308,7 @@ class FakeEndpoint:
         host: str = "192.0.2.1",
     ) -> None:
         self.cast = MagicMock(uuid=UUID(uuid), cast_info=_cast_info(uuid, host))
+        self.cast.socket_client.is_alive.return_value = False
         self.cast.status.session_id = session_id
         self.cast.register_handler.side_effect = self._register
         self._status_listeners: list[Any] = []
@@ -611,6 +612,15 @@ def test_remove_device() -> None:
     speaker_b.cast.unregister_handler.assert_called_once_with(speaker_b.controller)
     with pytest.raises(RequestFailed, match="no address known"):
         manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+
+def test_add_multizone_started_cast() -> None:
+    """Test a cast must be added before it's started."""
+    speaker_a = _speaker_a()
+    speaker_a.cast.socket_client.is_alive.return_value = True
+
+    with pytest.raises(AssertionError, match="before the cast is started"):
+        MultizoneManager().add_multizone(speaker_a.cast)
 
 
 def test_multizone_manager_members() -> None:
