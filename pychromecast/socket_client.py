@@ -518,14 +518,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         """
         return self.stop.is_set()
 
-    def run(self) -> None:
-        """Connect to the cast and start polling the socket."""
-        try:
-            self._run()
-        finally:
-            self.logger.debug("Thread done...")
-            self._cleanup()
-
     def _run(self) -> None:
         """Connect and poll the socket until stopped."""
         try:
@@ -571,6 +563,14 @@ class SocketClient(threading.Thread, CastStatusListener):
                     "Unhandled exception in worker thread, attempting reconnect"
                 )
                 self.stop.wait(self.retry_wait)
+
+    def run(self) -> None:
+        """Connect to the cast and start polling the socket."""
+        try:
+            self._run()
+        finally:
+            self.logger.debug("Thread done...")
+            self._cleanup()
 
     def _run_once(self) -> None:
         """Receive from the socket and handle data."""
