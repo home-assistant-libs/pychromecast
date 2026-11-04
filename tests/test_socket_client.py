@@ -398,6 +398,33 @@ def test_connect_wraps_before_registering(socket_client: SocketClient) -> None:
     raw_socket.close.assert_not_called()
 
 
+def test_connect_closes_socket_on_failed_attempt(
+    socket_client: SocketClient,
+) -> None:
+    """Test the socket is closed when an attempt fails after connecting."""
+    tls_socket, peer = socket.socketpair()
+    context = MagicMock()
+    context.wrap_socket.return_value = tls_socket
+    wakeup = socket_client.wakeup_selector_key
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext", return_value=context),
+        patch.object(
+            socket_client.receiver_controller,
+            "update_status",
+            side_effect=NotConnected("Not connected"),
+        ),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+    peer.close()
+
+    assert tls_socket.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+    assert list(socket_client.selector.get_map().values()) == [wakeup]
+
+
 def test_connect_closes_raw_socket_on_failed_wrap(
     socket_client: SocketClient,
 ) -> None:
@@ -586,6 +613,7 @@ def test_connection_retry_logging() -> None:
     client.timeout = 1
     client.zconf = None
     client.socket = None
+    client.remote_selector_key = None
     client.stop = Mock()
     client.stop.is_set.return_value = False
     client.selector = Mock()

@@ -257,11 +257,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         tries = self.tries
 
         with self._socket_lock:
-            if self.socket is not None:
-                self.selector.unregister(self.socket)
-                self.socket.close()
-                self.socket = None
-                self.remote_selector_key = None
+            self._close_socket()
 
             callbacks = list(self._request_callbacks.values())
             self._recv_buffer = b""
@@ -312,13 +308,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
-                    if self.socket is not None:
-                        # If we retry connecting, we need to clean up the socket again
-                        self.selector.unregister(self.socket)
-                        self.socket.close()
-                        self.socket = None
-                        self.remote_selector_key = None
-
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -398,6 +387,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 # calls to receiver_controller and heartbeat_controller.
                 except (OSError, NotConnected) as err:
                     self.connecting = True
+                    self._close_socket()
                     if self.stop.is_set():
                         self.logger.error(
                             "Failed to connect: %s. aborting due to stop signal.", err
@@ -434,6 +424,16 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.stop.set()
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
+
+    def _close_socket(self) -> None:
+        """Close the socket to the Chromecast, if any."""
+        with self._socket_lock:
+            if self.remote_selector_key is not None:
+                self.selector.unregister(self.remote_selector_key.fileobj)
+                self.remote_selector_key = None
+            if self.socket is not None:
+                self.socket.close()
+                self.socket = None
 
     def disconnect(self) -> None:
         """Disconnect socket connection to Chromecast device"""
