@@ -21,7 +21,12 @@ from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name
     CastMessage,
 )
 from pychromecast.models import HostServiceInfo
-from pychromecast.socket_client import NS_CONNECTION, SocketClient, _SocketClientLogger
+from pychromecast.socket_client import (
+    CONNECTION_STATUS_DISCONNECTED,
+    NS_CONNECTION,
+    SocketClient,
+    _SocketClientLogger,
+)
 
 
 def _lock_held(client: SocketClient) -> bool:
@@ -445,7 +450,9 @@ def test_stopped_during_worker_does_not_log_exception() -> None:
 
 
 def test_failed_connection_stops_client(socket_client: SocketClient) -> None:
-    """Test a client which gave up connecting is stopped."""
+    """Test a client which gave up connecting is stopped and reports it."""
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
     with patch.object(
         socket_client,
         "initialize_connection",
@@ -454,6 +461,11 @@ def test_failed_connection_stops_client(socket_client: SocketClient) -> None:
         socket_client.run()
 
     assert socket_client.is_stopped
+    listener.new_connection_status.assert_called_once()
+    assert (
+        listener.new_connection_status.call_args.args[0].status
+        == CONNECTION_STATUS_DISCONNECTED
+    )
     with pytest.raises(PyChromecastStopped):
         socket_client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
 
