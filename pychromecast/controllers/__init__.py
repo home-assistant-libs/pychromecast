@@ -41,7 +41,8 @@ class Listeners[T]:
 
     def __iter__(self) -> Iterator[T]:
         """Iterate over a copy, a listener may remove itself when notified."""
-        return iter(list(self._listeners.values()))
+        # dict.copy is atomic, also without the GIL
+        return iter(self._listeners.copy().values())
 
     def __len__(self) -> int:
         return len(self._listeners)
