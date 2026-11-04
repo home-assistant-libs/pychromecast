@@ -2,8 +2,6 @@
 Implements the DIAL-protocol to communicate with the Chromecast
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from http import HTTPStatus
 import ipaddress
@@ -183,7 +181,7 @@ def _get_eureka_info(
     # Try connection with SSL first, and if it fails fall back to non-SSL
     try:
         _, status = _get_status(services, zconf, path, True, timeout / 2, context)
-    except (urllib.error.HTTPError, urllib.error.URLError):
+    except urllib.error.HTTPError, urllib.error.URLError:
         _, status = _get_status(services, zconf, path, False, timeout / 2, context)
     return status
 

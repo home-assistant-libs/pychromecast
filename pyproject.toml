@@ -11,7 +11,7 @@ readme       = "README.rst"
 authors      = [
     {name = "Paulus Schoutsen", email = "paulus@paulusschoutsen.nl"}
 ]
-requires-python = ">=3.11.0"
+requires-python = ">=3.14.0"
 dependencies = [
     "protobuf>=4.25.1",
     "zeroconf>=0.128.1",

@@ -7,7 +7,6 @@ Without him this would not have been possible.
 """
 
 # pylint: disable=too-many-lines
-from __future__ import annotations
 
 import abc
 import json
@@ -338,7 +337,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             try:
                                 # Mypy does not understand that we catch errors, ignore it
                                 self.fn = service_info.properties[b"fn"].decode("utf-8")  # type: ignore[union-attr]
-                            except (AttributeError, KeyError, UnicodeError):
+                            except AttributeError, KeyError, UnicodeError:
                                 pass
                         self.logger.debug(
                             "Resolved service %s to %s:%s", service, host, port
@@ -442,7 +441,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         try:
             # Write to the socket to interrupt the worker thread
             self.socketpair[1].send(b"x")
-        except socket.error:
+        except OSError:
             # The socketpair may already be closed during shutdown, ignore it
             pass
 
@@ -591,7 +590,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             except ChromecastConnectionClosed as exc:
                 self._force_recon = True
                 self.logger.debug("%s", exc)
-            except socket.error as exc:
+            except OSError as exc:
                 self._force_recon = True
                 self.logger.error("Error reading from socket: %s", exc)
 
@@ -826,7 +825,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     no_add_request_id=no_add_request_id,
                     force=force,
                 )
-        except (PyChromecastStopped, NotConnected):
+        except PyChromecastStopped, NotConnected:
             if callback_function:
                 callback_function(False, None)
             raise
@@ -891,7 +890,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._request_callbacks[request_id] = callback_function
         try:
             self.socket.sendall(be_size + msg.SerializeToString())
-        except socket.error as exc:
+        except OSError as exc:
             if request_id is not None:
                 self._request_callbacks.pop(request_id, None)
             self._force_recon = True

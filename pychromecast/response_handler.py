@@ -1,7 +1,5 @@
 """Helpers and types related to waiting for a command response."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 import logging
 import threading
