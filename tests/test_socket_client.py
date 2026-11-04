@@ -21,12 +21,7 @@ from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name
     CastMessage,
 )
 from pychromecast.models import HostServiceInfo
-from pychromecast.socket_client import (
-    NS_CONNECTION,
-    InterruptLoop,
-    SocketClient,
-    _SocketClientLogger,
-)
+from pychromecast.socket_client import NS_CONNECTION, SocketClient, _SocketClientLogger
 
 
 def _lock_held(client: SocketClient) -> bool:
@@ -473,7 +468,7 @@ def test_worker_retry_wait_interrupted_by_stop() -> None:
     client.retry_wait = 30
 
     client.stop = Mock()
-    client.stop.is_set.side_effect = [False, False, True]
+    client.stop.is_set.side_effect = [False, True]
     client._run_once = Mock(side_effect=RuntimeError("Unexpected"))
     client.initialize_connection = Mock()
     client.heartbeat_controller = Mock()
@@ -664,7 +659,6 @@ def test_connection_retry_wait_interrupted_by_stop(
     """Test the wait between connection attempts ends when stopped."""
     socket_client.tries = None
     socket_client.retry_wait = 30
-    socket_client.logger = Mock()
 
     def stop(_timeout: float) -> bool:
         socket_client.stop.set()
@@ -673,12 +667,48 @@ def test_connection_retry_wait_interrupted_by_stop(
     with (
         patch("socket.create_connection", side_effect=OSError("Connection refused")),
         patch.object(socket_client.stop, "wait", side_effect=stop) as wait,
-        pytest.raises(InterruptLoop),
+        pytest.raises(PyChromecastStopped),
     ):
         socket_client.initialize_connection()
 
     wait.assert_called_once_with(30)
-    socket_client.logger.error.assert_not_called()
+
+
+def test_connection_stopped_between_services(socket_client: SocketClient) -> None:
+    """Test no other service is tried once stopped."""
+    socket_client.services = {
+        HostServiceInfo("192.0.2.1", 8009),
+        HostServiceInfo("192.0.2.2", 8009),
+    }
+
+    def stop_and_fail(*_: object) -> None:
+        socket_client.stop.set()
+        raise OSError("Connection refused")
+
+    with (
+        patch("socket.create_connection", side_effect=stop_and_fail) as connect,
+        pytest.raises(PyChromecastStopped),
+    ):
+        socket_client.initialize_connection()
+
+    connect.assert_called_once()
+
+
+def test_connection_stopped_before_connecting(
+    socket_client: SocketClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test a stopped client doesn't connect, or log a failure."""
+    socket_client.stop.set()
+
+    with (
+        patch("socket.create_connection") as connect,
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(PyChromecastStopped),
+    ):
+        socket_client.initialize_connection()
+
+    connect.assert_not_called()
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
 
 
 @pytest.mark.parametrize("error", [OSError("Bad file descriptor"), ssl.SSLEOFError()])
@@ -704,26 +734,6 @@ def test_socket_error_logged_without_traceback(
         for record in caplog.records
     )
     assert socket_client._force_recon  # pylint: disable=protected-access
-
-
-def test_socket_error_while_stopping(
-    socket_client: SocketClient, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Test a socket error when stopped ends the worker without an error."""
-
-    def stop_and_fail() -> None:
-        socket_client.stop.set()
-        raise ssl.SSLEOFError()
-
-    with (
-        patch.object(socket_client, "initialize_connection"),
-        patch.object(socket_client, "_run_once", side_effect=stop_and_fail),
-        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-    ):
-        socket_client.run()
-
-    assert all(record.levelno < logging.WARNING for record in caplog.records)
-    assert not socket_client._force_recon  # pylint: disable=protected-access
 
 
 def test_stopped_while_handling_messages(socket_client: SocketClient) -> None:

@@ -67,10 +67,6 @@ TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
 
-class InterruptLoop(Exception):
-    """The chromecast has been manually stopped."""
-
-
 def _dict_from_message_payload(message: CastMessage) -> dict:
     """Parses a PB2 message as a JSON dict."""
     try:
@@ -257,7 +253,10 @@ class SocketClient(threading.Thread, CastStatusListener):
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches, too-many-locals
         self,
     ) -> None:
-        """Initialize a socket to a Chromecast, retrying as necessary."""
+        """Initialize a socket to a Chromecast, retrying as necessary.
+
+        Raises PyChromecastStopped when stopped.
+        """
         tries = self.tries
 
         with self._socket_lock:
@@ -300,7 +299,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             retry["delay"] = min(retry["delay"] * 2, 300)
             retries[service] = retry
 
-        while not self.stop.is_set() and (tries is None or tries > 0):
+        while tries is None or tries > 0:
             # Prune retries dict
             retries = {
                 key: retries[key]
@@ -309,6 +308,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             }
 
             for service in self.services.copy():
+                if self.stop.is_set():
+                    raise PyChromecastStopped("Socket client's thread is stopped.")
                 now = time.time()
                 retry = retries.get(
                     service, {"delay": self.retry_wait, "next_retry": now}
@@ -400,11 +401,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 # OSError raised if connecting to the socket fails, NotConnected raised
                 # if another thread tries - and fails - to send a message before the
                 # calls to receiver_controller and heartbeat_controller.
-                except (OSError, NotConnected) as err:
+                except OSError, NotConnected:
                     self.connecting = True
-                    if self.stop.is_set():
-                        raise InterruptLoop() from err
-
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_FAILED,
@@ -427,13 +425,11 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.retry_wait,
                     self.services,
                 )
-                self.stop.wait(self.retry_wait)
+                if self.stop.wait(self.retry_wait):
+                    raise PyChromecastStopped("Socket client's thread is stopped.")
 
             if tries:
                 tries -= 1
-
-        if self.stop.is_set():
-            raise InterruptLoop()
 
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
@@ -534,7 +530,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             self._cleanup()
             return
 
-        except InterruptLoop:
+        except PyChromecastStopped:
             self._cleanup()
             return
 
@@ -551,7 +547,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 )
                 break
 
-            except InterruptLoop, PyChromecastStopped:
+            except PyChromecastStopped:
                 break
 
             except ChromecastConnectionClosed as exc:
@@ -559,22 +555,11 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.logger.debug("%s", exc)
 
             except OSError as exc:
-                if self.stop.is_set():
-                    self.logger.debug("Socket error while stopping", exc_info=True)
-                    break
-
                 self._force_recon = True
                 self.logger.error("Socket error, attempting reconnect: %s", exc)
                 self.logger.debug("Socket error", exc_info=True)
 
             except Exception:  # pylint: disable=broad-except
-                if self.stop.is_set():
-                    self.logger.debug(
-                        "Unhandled exception in worker thread while stopping",
-                        exc_info=True,
-                    )
-                    break
-
                 self._force_recon = True
                 self.logger.exception(
                     "Unhandled exception in worker thread, attempting reconnect"
