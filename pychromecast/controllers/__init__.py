@@ -26,10 +26,19 @@ _ListenerT = TypeVar("_ListenerT")
 def add_listener(
     listeners: list[_ListenerT], listener: _ListenerT
 ) -> Callable[[], None]:
-    """Add a listener to a list, returns a function which removes it again."""
+    """Add a listener to a list, returns a function which removes it again.
+
+    Only the first call of the function removes the listener, so it can't remove
+    a later registration of the same listener.
+    """
     listeners.append(listener)
+    removed = False
 
     def remove_listener() -> None:
+        nonlocal removed
+        if removed:
+            return
+        removed = True
         with suppress(ValueError):
             listeners.remove(listener)
 
