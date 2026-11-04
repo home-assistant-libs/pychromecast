@@ -32,6 +32,9 @@ class CastInfo:
     cast_type: str | None
     manufacturer: str | None
     device_capabilities: CastCapability | None = None
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 @dataclass(frozen=True)
