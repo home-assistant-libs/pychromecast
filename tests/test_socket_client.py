@@ -398,6 +398,71 @@ def test_connect_wraps_before_registering(socket_client: SocketClient) -> None:
     raw_socket.close.assert_not_called()
 
 
+def test_connect_closes_socket_on_failed_attempt(
+    socket_client: SocketClient,
+) -> None:
+    """Test the socket is closed when an attempt fails after connecting."""
+    tls_socket, peer = socket.socketpair()
+    context = MagicMock()
+    context.wrap_socket.return_value = tls_socket
+    wakeup = socket_client.wakeup_selector_key
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext", return_value=context),
+        patch.object(
+            socket_client.receiver_controller,
+            "update_status",
+            side_effect=NotConnected("Not connected"),
+        ),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+    peer.close()
+
+    assert tls_socket.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+    assert list(socket_client.selector.get_map().values()) == [wakeup]
+
+
+def test_connect_closes_socket_on_failed_register(
+    socket_client: SocketClient,
+) -> None:
+    """Test a socket which couldn't be registered is closed, not unregistered."""
+    tls_socket, peer = socket.socketpair()
+    context = MagicMock()
+    context.wrap_socket.return_value = tls_socket
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext", return_value=context),
+        patch.object(
+            socket_client.selector, "register", side_effect=OSError("register failed")
+        ),
+        patch.object(socket_client.selector, "unregister") as unregister,
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+    peer.close()
+
+    unregister.assert_not_called()
+    assert tls_socket.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+
+
+def test_cleanup_closes_socket(socket_client: SocketClient) -> None:
+    """Test the socket is closed and unregistered when cleaning up."""
+    sock = FakeSocket(socket_client)
+    wakeup = socket_client.wakeup_selector_key
+    with patch.object(socket_client.selector, "close"):
+        socket_client._cleanup()  # pylint: disable=protected-access
+        assert list(socket_client.selector.get_map().values()) == [wakeup]
+
+    assert sock.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+
+
 def test_connect_closes_raw_socket_on_failed_wrap(
     socket_client: SocketClient,
 ) -> None:
