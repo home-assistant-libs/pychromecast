@@ -1,7 +1,5 @@
 """Discovers Chromecasts on the network using mDNS/zeroconf."""
 
-from __future__ import annotations
-
 import abc
 from collections.abc import Callable
 import functools
@@ -10,12 +8,25 @@ import logging
 import ssl
 import threading
 import time
+from typing import NamedTuple
 from uuid import UUID
 
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP, CAST_TYPES, MF_GOOGLE
-from .dial import get_device_info, get_multizone_status, get_ssl_context
+from .const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_CHROMECAST,
+    CAST_TYPE_GROUP,
+    CAST_TYPES,
+    MF_GOOGLE,
+    CastCapability,
+)
+from .dial import (
+    get_device_info,
+    get_multizone_status,
+    get_ssl_context,
+    get_host_from_zc_service_info,
+)
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
 
 DISCOVER_TIMEOUT = 5
@@ -27,6 +38,42 @@ HOST_BROWSER_BLOCKED_MODEL_PREFIXES = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _parse_device_capabilities(value: str | None) -> CastCapability | None:
+    """Parse the ca value of a TXT record, a decimal bitmask."""
+    if not value or not value.isdecimal():
+        return None
+    return CastCapability(int(value))
+
+
+def _cast_type_from_capabilities(capabilities: CastCapability | None) -> str | None:
+    """Return the cast type for the capabilities, None if they don't tell."""
+    if capabilities is None:
+        return None
+    if CastCapability.VIDEO_OUT in capabilities:
+        return CAST_TYPE_CHROMECAST
+    if CastCapability.MULTIZONE_GROUP in capabilities:
+        return CAST_TYPE_GROUP
+    if CastCapability.AUDIO_OUT in capabilities:
+        return CAST_TYPE_AUDIO
+    return None
+
+
+def _cast_type_from_model_or_capabilities(
+    port: int, model_name: str, capabilities: CastCapability | None
+) -> tuple[str | None, str | None]:
+    """Return the cast type and manufacturer of a service.
+
+    A service on another port than 8009 is a group. The cast type of a model which
+    isn't known is taken from the capabilities.
+    """
+    if port != 8009:
+        return CAST_TYPE_GROUP, MF_GOOGLE
+    cast_type, manufacturer = CAST_TYPES.get(model_name.lower(), (None, None))
+    if cast_type is None:
+        cast_type = _cast_type_from_capabilities(capabilities)
+    return cast_type, manufacturer
 
 
 class AbstractCastListener(abc.ABC):
@@ -200,9 +247,7 @@ class ZeroConfListener(zeroconf.ServiceListener):
                 return value
             return value.decode("utf-8")
 
-        addresses = service.parsed_addresses()
-        host = addresses[0] if addresses else service.server
-
+        host, _ = get_host_from_zc_service_info(service)
         if host is None:
             _LOGGER.debug(
                 "_add_update_service failed to get host for %s, %s", typ, name
@@ -214,6 +259,10 @@ class ZeroConfListener(zeroconf.ServiceListener):
 
         friendly_name = get_value("fn")
         model_name = get_value("md") or "Unknown model name"
+        device_capabilities = _parse_device_capabilities(get_value("ca"))
+        cast_type, manufacturer = _cast_type_from_model_or_capabilities(
+            service.port, model_name, device_capabilities
+        )
         uuid_str = get_value("id")
 
         if not uuid_str:
@@ -238,15 +287,6 @@ class ZeroConfListener(zeroconf.ServiceListener):
 
         # Lock because the HostBrowser may also add or remove items
         with self._services_lock:
-            cast_type: str | None
-            manufacturer: str | None
-            if service.port != 8009:
-                cast_type = CAST_TYPE_GROUP
-                manufacturer = MF_GOOGLE
-            else:
-                cast_type, manufacturer = CAST_TYPES.get(
-                    model_name.lower(), (None, None)
-                )
             if uuid not in self._devices:
                 self._devices[uuid] = CastInfo(
                     {service_info},
@@ -257,10 +297,13 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     service.port,
                     cast_type,
                     manufacturer,
+                    device_capabilities=device_capabilities,
                 )
             else:
-                # Update stored information
-                services = self._devices[uuid].services
+                # Update stored information, mDNS has no device details so keep
+                # what the host browser polled
+                cast_info = self._devices[uuid]
+                services = cast_info.services
                 services.add(service_info)
                 self._devices[uuid] = CastInfo(
                     services,
@@ -271,9 +314,27 @@ class ZeroConfListener(zeroconf.ServiceListener):
                     service.port,
                     cast_type,
                     manufacturer,
+                    device_capabilities=device_capabilities,
+                    mac_address=cast_info.mac_address,
+                    product_name=cast_info.product_name,
+                    cast_build_revision=cast_info.cast_build_revision,
                 )
 
         callback(uuid, name)
+
+
+class _PolledDevice(NamedTuple):
+    """A device or group found by polling a host."""
+
+    port: int
+    friendly_name: str
+    model_name: str
+    uuid: UUID
+    cast_type: str
+    manufacturer: str
+    mac_address: str | None = None
+    product_name: str | None = None
+    cast_build_revision: str | None = None
 
 
 class HostStatus:
@@ -348,7 +409,7 @@ class HostBrowser(threading.Thread):
         # Iterate over a copy because other threads may modify the known_hosts list
         known_hosts = list(self._known_hosts.keys())
         for host in known_hosts:
-            devices: list[tuple[int, str, str, UUID, str, str]] = []
+            devices: list[_PolledDevice] = []
             uuids: list[UUID] = []
             if self.stop.is_set():
                 break
@@ -393,13 +454,16 @@ class HostBrowser(threading.Thread):
             # We got device_status, try to get multizone status, then update devices
             hoststatus.failcount = 0
             devices.append(
-                (
+                _PolledDevice(
                     8009,
                     device_status.friendly_name,
                     device_status.model_name,
                     device_status.uuid,
                     device_status.cast_type,
                     device_status.manufacturer,
+                    device_status.mac_address,
+                    device_status.product_name,
+                    device_status.cast_build_revision,
                 )
             )
             uuids.append(device_status.uuid)
@@ -421,7 +485,7 @@ class HostBrowser(threading.Thread):
                     if group.port is None or group.uuid is None or group.host != host:
                         continue
                     devices.append(
-                        (
+                        _PolledDevice(
                             group.port,
                             group.friendly_name,
                             "Google Cast Group",
@@ -437,31 +501,15 @@ class HostBrowser(threading.Thread):
     def _update_devices(
         self,
         host: str,
-        devices: list[tuple[int, str, str, UUID, str, str]],
+        devices: list[_PolledDevice],
         host_uuids: list[UUID],
     ) -> None:
         callbacks: list[Callable[[], None]] = []
 
         # Lock because the ZeroConfListener may also add or remove items
         with self._services_lock:
-            for (
-                port,
-                friendly_name,
-                model_name,
-                uuid,
-                cast_type,
-                manufacturer,
-            ) in devices:
-                self._add_host_service(
-                    host,
-                    port,
-                    friendly_name,
-                    model_name,
-                    uuid,
-                    callbacks,
-                    cast_type,
-                    manufacturer,
-                )
+            for device in devices:
+                self._add_host_service(host, device, callbacks)
 
             for uuid in self._devices:
                 for service in self._devices[uuid].services.copy():
@@ -479,53 +527,56 @@ class HostBrowser(threading.Thread):
     def _add_host_service(
         self,
         host: str,
-        port: int,
-        friendly_name: str,
-        model_name: str,
-        uuid: UUID,
+        device: _PolledDevice,
         callbacks: list[Callable[[], None]],
-        cast_type: str,
-        manufacturer: str,
     ) -> None:
+        uuid = device.uuid
+        port = device.port
         service_info = HostServiceInfo(host, port)
 
         callback = self._cast_listener.add_cast
         if uuid in self._devices:
             callback = self._cast_listener.update_cast
             cast_info = self._devices[uuid]
-            if (
-                service_info in cast_info.services
-                and cast_info.model_name == model_name
-                and cast_info.friendly_name == friendly_name
+            if service_info in cast_info.services and (
+                cast_info.model_name,
+                cast_info.friendly_name,
+                cast_info.mac_address,
+                cast_info.product_name,
+                cast_info.cast_build_revision,
+            ) == (
+                device.model_name,
+                device.friendly_name,
+                device.mac_address,
+                device.product_name,
+                device.cast_build_revision,
             ):
                 # No changes, return
                 return
 
+        services: set[HostServiceInfo | MDNSServiceInfo]
+        device_capabilities = None
         if uuid not in self._devices:
-            self._devices[uuid] = CastInfo(
-                {service_info},
-                uuid,
-                model_name,
-                friendly_name,
-                host,
-                port,
-                cast_type,
-                manufacturer,
-            )
+            services = {service_info}
         else:
             # Update stored information
             services = self._devices[uuid].services
             services.add(service_info)
-            self._devices[uuid] = CastInfo(
-                services,
-                uuid,
-                model_name,
-                friendly_name,
-                host,
-                port,
-                cast_type,
-                manufacturer,
-            )
+            device_capabilities = self._devices[uuid].device_capabilities
+        self._devices[uuid] = CastInfo(
+            services,
+            uuid,
+            device.model_name,
+            device.friendly_name,
+            host,
+            port,
+            device.cast_type,
+            device.manufacturer,
+            device_capabilities=device_capabilities,
+            mac_address=device.mac_address,
+            product_name=device.product_name,
+            cast_build_revision=device.cast_build_revision,
+        )
 
         name = f"{host}:{port}"
         _LOGGER.debug(
@@ -686,6 +737,11 @@ def stop_discovery(cast_browser: CastBrowser) -> None:
     cast_browser.stop_discovery()
 
 
+def create_zeroconf() -> zeroconf.Zeroconf:
+    """Create a zeroconf instance doing mDNS over IPv4."""
+    return zeroconf.Zeroconf(ip_version=zeroconf.IPVersion.V4Only)
+
+
 def discover_chromecasts(
     max_devices: int | None = None,
     timeout: float = DISCOVER_TIMEOUT,
@@ -716,7 +772,7 @@ def discover_chromecasts(
             discover_complete.set()
 
     discover_complete = threading.Event()
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 
@@ -767,7 +823,7 @@ def discover_listed_chromecasts(
 
     discover_complete = threading.Event()
 
-    zconf = zeroconf_instance or zeroconf.Zeroconf()
+    zconf = zeroconf_instance or create_zeroconf()
     browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
     browser.start_discovery()
 

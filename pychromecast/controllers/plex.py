@@ -2,8 +2,6 @@
 Controller to interface with the Plex-app.
 """
 
-from __future__ import annotations
-
 from copy import deepcopy
 from functools import partial
 import json

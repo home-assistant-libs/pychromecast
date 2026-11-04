@@ -1,13 +1,12 @@
 """Tests for the multizone controller."""
 
-from functools import partial
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
 
-from pychromecast.controllers import add_listener
+from pychromecast.controllers import Listeners
 from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
@@ -311,13 +310,11 @@ class FakeEndpoint:
         self.cast.socket_client.is_alive.return_value = False
         self.cast.status.session_id = session_id
         self.cast.register_handler.side_effect = self._register
-        self._status_listeners: list[Any] = []
-        self._connection_listeners: list[Any] = []
-        self.cast.register_status_listener.side_effect = partial(
-            add_listener, self._status_listeners
-        )
-        self.cast.register_connection_listener.side_effect = partial(
-            add_listener, self._connection_listeners
+        self._status_listeners: Listeners[Any] = Listeners()
+        self._connection_listeners: Listeners[Any] = Listeners()
+        self.cast.register_status_listener.side_effect = self._status_listeners.add
+        self.cast.register_connection_listener.side_effect = (
+            self._connection_listeners.add
         )
         self.members = members
         self.playback_session = playback_session

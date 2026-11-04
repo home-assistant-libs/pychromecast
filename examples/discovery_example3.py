@@ -10,7 +10,12 @@ from uuid import UUID
 
 import pychromecast
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -29,6 +34,7 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 parser.add_argument(
     "--verbose", help="Full display of discovered devices", action="store_true"
 )
@@ -49,7 +55,10 @@ if args.uuid:
     uuids.append(UUID(args.uuid))
 
 devices, browser = pychromecast.discovery.discover_listed_chromecasts(
-    friendly_names=friendly_names, uuids=uuids, known_hosts=args.known_host
+    friendly_names=friendly_names,
+    uuids=uuids,
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
 )
 # Shut down discovery
 browser.stop_discovery()

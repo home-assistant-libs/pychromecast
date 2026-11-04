@@ -2,8 +2,6 @@
 Controller to monitor audio group members.
 """
 
-from __future__ import annotations
-
 import abc
 import logging
 from collections.abc import Callable, Iterable, Set as AbstractSet
@@ -12,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
 
-from . import BaseController, CallbackType, add_listener
+from . import BaseController, CallbackType, Listeners
 from .media import MediaController, MediaStatusListener, MediaStatus
 from .receiver import CastStatus, CastStatusListener
 from ..const import CAST_TYPE_GROUP, MESSAGE_TYPE
@@ -612,7 +610,7 @@ class MultizoneController(BaseController):
     def __init__(self, uuid: UUID) -> None:
         self._members: dict[str, str] = {}
         self._playback_session: PlaybackSession | None = None
-        self._status_listeners: list[MultiZoneControllerListener] = []
+        self._status_listeners: Listeners[MultiZoneControllerListener] = Listeners()
         self._uuid = str(uuid)
         super().__init__(MULTIZONE_NAMESPACE, target_platform=True)
 
@@ -626,7 +624,7 @@ class MultizoneController(BaseController):
                 name,
                 self._members,
             )
-            for listener in list(self._status_listeners):
+            for listener in self._status_listeners:
                 listener.multizone_member_added(uuid)
 
     def _remove_member(self, uuid: str) -> None:
@@ -638,7 +636,7 @@ class MultizoneController(BaseController):
             name,
             self._members,
         )
-        for listener in list(self._status_listeners):
+        for listener in self._status_listeners:
             listener.multizone_member_removed(uuid)
 
     def register_listener(
@@ -652,7 +650,7 @@ class MultizoneController(BaseController):
 
         Returns a function which unregisters the listener.
         """
-        return add_listener(self._status_listeners, listener)
+        return self._status_listeners.add(listener)
 
     @property
     def members(self) -> list[str]:
@@ -789,7 +787,7 @@ class MultizoneController(BaseController):
                 )
             self._playback_session = parsed_session
 
-            for listener in list(self._status_listeners):
+            for listener in self._status_listeners:
                 listener.multizone_status_received()
 
             return True
@@ -805,7 +803,7 @@ class MultizoneController(BaseController):
                     "(%s) Playback session moved to %s", self._uuid, endpoint.device_id
                 )
                 self._playback_session = None
-            for listener in list(self._status_listeners):
+            for listener in self._status_listeners:
                 listener.multizone_playback_session_updated(update)
             return True
 
@@ -819,4 +817,4 @@ class MultizoneController(BaseController):
         """Called when controller is destroyed."""
         super().tear_down()
 
-        self._status_listeners = []
+        self._status_listeners.clear()

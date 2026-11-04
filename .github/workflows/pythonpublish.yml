@@ -13,9 +13,9 @@ jobs:
     steps:
     - uses: actions/checkout@v7.0.1
     - name: Set up Python
-      uses: actions/setup-python@v7.0.0
+      uses: actions/setup-python@v7.1.0
       with:
-        python-version: '3.11'
+        python-version: '3.14'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip

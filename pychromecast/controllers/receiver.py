@@ -21,7 +21,7 @@ from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     CastMessage,
 )
 from ..response_handler import WaitResponse, chain_on_success
-from . import BaseController, CallbackType, add_listener
+from . import BaseController, CallbackType, Listeners
 
 APP_ID = "appId"
 ERROR_REASON = "reason"
@@ -97,8 +97,8 @@ class ReceiverController(BaseController):
         self.launch_failure: LaunchFailure | None = None
         self.cast_type = cast_type
 
-        self._status_listeners: list[CastStatusListener] = []
-        self._launch_error_listeners: list[LaunchErrorListener] = []
+        self._status_listeners: Listeners[CastStatusListener] = Listeners()
+        self._launch_error_listeners: Listeners[LaunchErrorListener] = Listeners()
 
     def disconnected(self) -> None:
         """Called when disconnected. Will erase status."""
@@ -116,12 +116,14 @@ class ReceiverController(BaseController):
 
         data is message.payload_utf8 interpreted as a JSON dict.
         """
-        if data[MESSAGE_TYPE] == TYPE_RECEIVER_STATUS:
+        message_type = data.get(MESSAGE_TYPE)
+
+        if message_type == TYPE_RECEIVER_STATUS:
             self._process_get_status(data)
 
             return True
 
-        if data[MESSAGE_TYPE] == TYPE_LAUNCH_ERROR:
+        if message_type == TYPE_LAUNCH_ERROR:
             self._process_launch_error(data)
 
             return True
@@ -136,7 +138,7 @@ class ReceiverController(BaseController):
         listener.new_cast_status(status)
 
         Returns a function which unregisters the listener."""
-        return add_listener(self._status_listeners, listener)
+        return self._status_listeners.add(listener)
 
     def register_launch_error_listener(
         self, listener: LaunchErrorListener
@@ -146,7 +148,7 @@ class ReceiverController(BaseController):
         listener.new_launch_error(launch_failure)
 
         Returns a function which unregisters the listener."""
-        return add_listener(self._launch_error_listeners, listener)
+        return self._launch_error_listeners.add(listener)
 
     def update_status(
         self,
@@ -289,7 +291,7 @@ class ReceiverController(BaseController):
 
         try:
             app_data: dict = status_data["applications"][0]
-        except (KeyError, IndexError):
+        except KeyError, IndexError:
             app_data = {}
 
         is_audio = cast_type in (CAST_TYPE_AUDIO, CAST_TYPE_GROUP)
@@ -361,4 +363,4 @@ class ReceiverController(BaseController):
         self.status = None
         self.launch_failure = None
 
-        self._status_listeners = []
+        self._status_listeners.clear()

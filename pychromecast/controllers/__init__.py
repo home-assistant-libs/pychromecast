@@ -2,14 +2,11 @@
 Provides controllers to handle specific namespaces in Chromecast communication.
 """
 
-from __future__ import annotations
-
 import abc
-from collections.abc import Callable
-from contextlib import suppress
+from collections.abc import Callable, Iterator
 from functools import partial
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
@@ -20,20 +17,35 @@ from ..response_handler import CallbackType, chain_on_success
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
 
-_ListenerT = TypeVar("_ListenerT")
 
+class Listeners[T]:
+    """Registered listeners, notified in the order they were added."""
 
-def add_listener(
-    listeners: list[_ListenerT], listener: _ListenerT
-) -> Callable[[], None]:
-    """Add a listener to a list, returns a function which removes it again."""
-    listeners.append(listener)
+    def __init__(self) -> None:
+        # Keyed by a token per registration, the same listener can be added twice
+        self._listeners: dict[object, T] = {}
 
-    def remove_listener() -> None:
-        with suppress(ValueError):
-            listeners.remove(listener)
+    def add(self, listener: T) -> Callable[[], None]:
+        """Add a listener, returns a function which removes it again."""
+        token = object()
+        self._listeners[token] = listener
 
-    return remove_listener
+        def remove_listener() -> None:
+            self._listeners.pop(token, None)
+
+        return remove_listener
+
+    def clear(self) -> None:
+        """Remove all listeners."""
+        self._listeners.clear()
+
+    def __iter__(self) -> Iterator[T]:
+        """Iterate over a copy, a listener may remove itself when notified."""
+        # dict.copy is atomic, also without the GIL
+        return iter(self._listeners.copy().values())
+
+    def __len__(self) -> int:
+        return len(self._listeners)
 
 
 class SendMessageFunc(Protocol):
@@ -128,7 +140,6 @@ class BaseController(abc.ABC):
 
     def unregistered(self) -> None:
         """Called when a controller is unregistered."""
-        self._socket_client = None
         self._message_func = None
 
     def channel_connected(self) -> None:

@@ -12,7 +12,12 @@ from time import sleep
 import pychromecast
 from pychromecast import quick_play
 
-from .common import add_log_arguments, configure_logging
+from .common import (
+    add_log_arguments,
+    add_network_arguments,
+    configure_logging,
+    create_zeroconf,
+)
 
 # Enable deprecation warnings etc.
 if not sys.warnoptions:
@@ -35,6 +40,7 @@ parser.add_argument(
     action="append",
 )
 add_log_arguments(parser)
+add_network_arguments(parser)
 parser.add_argument("--program", help="Areena Program ID", default="1-50649659")
 parser.add_argument("--audio_language", help="audio_language", default="")
 parser.add_argument("--text_language", help="text_language", default="off")
@@ -50,7 +56,7 @@ def get_kaltura_id(program_id: str) -> str:
     """
     # yledl is not available in CI, silence import warnings
     from yledl.extractors import extractor_factory  # type: ignore[import-untyped]
-    from yledl.ffprobe import NullProbe  # type: ignore[import-untyped]
+    from yledl.ffmpeg import NullProbe  # type: ignore[import-untyped]
     from yledl.http import HttpClient  # type: ignore[import-untyped]
     from yledl.io import IOContext  # type: ignore[import-untyped]
     from yledl.localization import TranslationChooser  # type: ignore[import-untyped]
@@ -75,7 +81,9 @@ def get_kaltura_id(program_id: str) -> str:
 
 
 chromecasts, browser = pychromecast.get_listed_chromecasts(
-    friendly_names=[args.cast], known_hosts=args.known_host
+    friendly_names=[args.cast],
+    known_hosts=args.known_host,
+    zeroconf_instance=create_zeroconf(args),
 )
 if not chromecasts:
     print(f'No chromecast with name "{args.cast}" discovered')
