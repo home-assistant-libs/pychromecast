@@ -209,13 +209,10 @@ class BaseController(abc.ABC):
         no_add_request_id: bool = False,
     ) -> None:
         """Send a message."""
-        message_func = self._message_func
-        if message_func is None:
-            if callback_function:
-                callback_function(False, None)
-            raise ControllerNotRegistered
+        if TYPE_CHECKING:
+            assert self._message_func
 
-        message_func(
+        self._message_func(
             self.namespace,
             data,
             inc_session_id=inc_session_id,
