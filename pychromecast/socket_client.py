@@ -199,6 +199,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger = _SocketClientLogger(logging.getLogger(__name__), self)
 
         self._force_recon = False
+        # Wait before the next connection attempt, after an unexpected error
+        self._reconnect_wait = False
 
         self.cast_type = cast_type
         self.fn: str | None = None  # pylint:disable=invalid-name
@@ -284,6 +286,11 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.app_namespaces = []
         self.destination_id = None
         self.session_id = None
+
+        if self._reconnect_wait:
+            self._reconnect_wait = False
+            if self.stop.wait(self.retry_wait):
+                raise PyChromecastStopped("Socket client's thread is stopped.")
 
         retry_log_fun = self.logger.info
 
@@ -560,10 +567,10 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
+                self._reconnect_wait = True
                 self.logger.exception(
                     "Unhandled exception in worker thread, attempting reconnect"
                 )
-                self.stop.wait(self.retry_wait)
 
     def run(self) -> None:
         """Connect to the cast and start polling the socket."""

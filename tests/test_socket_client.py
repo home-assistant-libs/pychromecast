@@ -23,6 +23,7 @@ from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name
 from pychromecast.models import HostServiceInfo
 from pychromecast.socket_client import (
     CONNECTION_STATUS_DISCONNECTED,
+    CONNECTION_STATUS_LOST,
     NS_CONNECTION,
     SocketClient,
     _SocketClientLogger,
@@ -490,28 +491,52 @@ def test_unexpected_connection_error_cleans_up(socket_client: SocketClient) -> N
     )
 
 
-def test_worker_retry_wait_interrupted_by_stop() -> None:
-    """Test the wait before reconnecting after an error ends when stopped."""
-    client = object.__new__(SocketClient)
+def test_reconnect_waits_after_unexpected_error(socket_client: SocketClient) -> None:
+    """Test the connection is lost, then the reconnect waits until stopped."""
+    FakeSocket(socket_client)
+    socket_client.retry_wait = 30
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    callback = MagicMock()
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    run_once = socket_client._run_once  # pylint: disable=protected-access
+    connect = socket_client.initialize_connection
+    calls = {"connect": 0, "run_once": 0}
+    waited: list[tuple[float, bool, list[str]]] = []
 
-    client.fn = "Test Chromecast"
-    client.host = "192.0.2.1"
-    client.port = 8009
-    client.retry_wait = 30
+    def initialize_connection() -> None:
+        calls["connect"] += 1
+        # Already connected the first time
+        if calls["connect"] > 1:
+            connect()
 
-    client.stop = Mock()
-    client.stop.is_set.side_effect = [False, True]
-    client._run_once = Mock(side_effect=RuntimeError("Unexpected"))
-    client.initialize_connection = Mock()
-    client.heartbeat_controller = Mock()
-    client.logger = Mock()
-    client._cleanup = Mock()
-    client._force_recon = False
+    def run_once_or_fail() -> None:
+        calls["run_once"] += 1
+        if calls["run_once"] == 1:
+            raise RuntimeError("Unexpected")
+        assert calls["run_once"] == 2
+        run_once()
 
-    client.run()
+    def stop(timeout: float) -> bool:
+        statuses = [c.args[0].status for c in listener.new_connection_status.mock_calls]
+        waited.append((timeout, socket_client.is_connected, statuses))
+        callback.assert_called_once_with(False, None)
+        socket_client.stop.set()
+        return True
 
-    client.stop.wait.assert_called_once_with(30)
-    client._cleanup.assert_called_once()
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=initialize_connection
+        ),
+        patch.object(socket_client, "_run_once", side_effect=run_once_or_fail),
+        patch.object(socket_client.stop, "wait", side_effect=stop),
+        patch("socket.create_connection") as create_connection,
+    ):
+        socket_client.run()
+
+    assert waited == [(30, False, [CONNECTION_STATUS_LOST])]
+    create_connection.assert_not_called()
+    assert socket_client.is_stopped
 
 
 def test_stopped_exception_exits_worker() -> None:
