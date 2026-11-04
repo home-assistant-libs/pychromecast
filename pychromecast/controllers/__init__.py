@@ -3,6 +3,7 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 """
 
 import abc
+from collections.abc import Callable, Iterator
 from functools import partial
 import logging
 from typing import TYPE_CHECKING, Any, Protocol
@@ -15,6 +16,36 @@ from ..response_handler import CallbackType, chain_on_success
 
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
+
+
+class Listeners[T]:
+    """Registered listeners, notified in the order they were added."""
+
+    def __init__(self) -> None:
+        # Keyed by a token per registration, the same listener can be added twice
+        self._listeners: dict[object, T] = {}
+
+    def add(self, listener: T) -> Callable[[], None]:
+        """Add a listener, returns a function which removes it again."""
+        token = object()
+        self._listeners[token] = listener
+
+        def remove_listener() -> None:
+            self._listeners.pop(token, None)
+
+        return remove_listener
+
+    def clear(self) -> None:
+        """Remove all listeners."""
+        self._listeners.clear()
+
+    def __iter__(self) -> Iterator[T]:
+        """Iterate over a copy, a listener may remove itself when notified."""
+        # dict.copy is atomic, also without the GIL
+        return iter(self._listeners.copy().values())
+
+    def __len__(self) -> int:
+        return len(self._listeners)
 
 
 class SendMessageFunc(Protocol):
