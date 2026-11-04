@@ -484,7 +484,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = status.transport_id
         self.session_id = status.session_id
 
-        if new_channel and self.destination_id is not None:
+        if new_channel and self.destination_id is not None and not self.stop.is_set():
             # App quirk: If the Audible app is running, wait 1s after receiving cast status
             # before connecting to the media player channel. This is a workaround for
             # https://github.com/home-assistant-libs/pychromecast/issues/738

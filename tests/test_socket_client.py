@@ -1,6 +1,7 @@
 """Tests for pychromecast.socket_client."""
 
 from collections.abc import Generator
+import copy
 import logging
 import selectors
 import socket
@@ -833,3 +834,44 @@ def test_callback_exception_keeps_connection(
     log_exception.assert_called_once()
     assert not socket_client._force_recon  # pylint: disable=protected-access
     assert not socket_client.is_stopped
+
+
+RECEIVER_STATUS = {
+    "type": "RECEIVER_STATUS",
+    "status": {
+        "applications": [
+            {
+                "appId": "CC1AD845",
+                "displayName": "Default Media Receiver",
+                "namespaces": [{"name": "urn:x-cast:com.google.cast.media"}],
+                "sessionId": "session-1",
+                "statusText": "",
+                "transportId": "transport-1",
+            }
+        ],
+        "volume": {"level": 1.0, "muted": False},
+    },
+}
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+def test_app_channel_not_opened_when_stopped(
+    socket_client: SocketClient, caplog: pytest.LogCaptureFixture, stopped: bool
+) -> None:
+    """Test a status announcing an app opens its channel, unless stopped."""
+    sock = FakeSocket(socket_client)
+    if stopped:
+        socket_client.stop.set()
+
+    with caplog.at_level(logging.DEBUG):
+        socket_client.receiver_controller.receive_message(
+            MagicMock(), copy.deepcopy(RECEIVER_STATUS)
+        )
+
+    assert socket_client.session_id == "session-1"
+    assert socket_client.destination_id == "transport-1"
+    connected = [
+        msg.destination_id for msg in sock.sent if msg.namespace == NS_CONNECTION
+    ]
+    assert connected == ([] if stopped else ["transport-1"])
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
