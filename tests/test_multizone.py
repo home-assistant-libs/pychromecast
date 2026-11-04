@@ -308,6 +308,9 @@ class FakeEndpoint:
     ) -> None:
         self.cast = MagicMock(uuid=UUID(uuid), cast_info=_cast_info(uuid, host))
         self.cast.socket_client.is_alive.return_value = False
+        self.cast.socket_client.is_connected = False
+        self.cast.socket_client.host = host
+        self.cast.socket_client.port = 8009
         self.cast.status.session_id = session_id
         self.cast.register_handler.side_effect = self._register
         self._status_listeners: Listeners[Any] = Listeners()
@@ -332,6 +335,7 @@ class FakeEndpoint:
 
     def connect(self) -> None:
         """Report the connection and the receiver status, like a Chromecast."""
+        self.cast.socket_client.is_connected = True
         for listener in self._connection_listeners:
             listener.new_connection_status(
                 MagicMock(status=CONNECTION_STATUS_CONNECTED)
@@ -340,6 +344,7 @@ class FakeEndpoint:
 
     def lose_connection(self) -> None:
         """Report a lost connection, like a Chromecast."""
+        self.cast.socket_client.is_connected = False
         for listener in self._connection_listeners:
             listener.new_connection_status(MagicMock(status=CONNECTION_STATUS_LOST))
 
@@ -508,6 +513,29 @@ def test_update_session_devices_back_to_back() -> None:
     assert group.device_list() == {
         (SPEAKER_B, "192.0.2.11"),
         (KITCHEN_UUID, "192.0.2.12"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("connected", "address"), [(True, "192.0.2.21"), (False, "192.0.2.11")]
+)
+def test_update_session_devices_connected_address(
+    connected: bool, address: str
+) -> None:
+    """Test a device is sent with the address it's connected to, if connected."""
+    speaker_a = _speaker_a()
+    speaker_a.response = SESSION_UPDATED
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+    # Reconnected on another address
+    speaker_b.cast.socket_client.host = "192.0.2.21"
+    speaker_b.cast.socket_client.is_connected = connected
+
+    manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, address),
     }
 
 

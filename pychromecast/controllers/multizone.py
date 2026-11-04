@@ -6,7 +6,7 @@ import abc
 import logging
 from collections.abc import Callable, Iterable, Set as AbstractSet
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, TypedDict
 from uuid import UUID
 
@@ -92,6 +92,17 @@ def _parse_playback_session(data: dict[str, Any]) -> PlaybackSession:
         data.get("isVideoContent"),
         data.get("streamTransferSupported"),
     )
+
+
+def _connected_cast_info(cast: Chromecast) -> CastInfo:
+    """Return the cast info with the address the cast is connected to.
+
+    A reconnect may find the cast on another address than it was created with.
+    """
+    socket_client = cast.socket_client
+    if not socket_client.is_connected:
+        return cast.cast_info
+    return replace(cast.cast_info, host=socket_client.host, port=socket_client.port)
 
 
 def _parse_session_update(data: dict[str, Any]) -> PlaybackSessionUpdate:
@@ -474,7 +485,7 @@ class MultizoneManager:
                 raise RequestFailed(
                     f"set playback devices, no address known for device {uuid}"
                 )
-            devices.append(member["chromecast"].cast_info)
+            devices.append(_connected_cast_info(member["chromecast"]))
 
         _LOGGER.debug(
             "Setting the devices of session %s on %s to %s",
