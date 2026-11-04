@@ -1,6 +1,7 @@
 """Tests for pychromecast.socket_client."""
 
 from collections.abc import Generator
+import copy
 import logging
 import selectors
 import socket
@@ -21,7 +22,13 @@ from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name
     CastMessage,
 )
 from pychromecast.models import HostServiceInfo
-from pychromecast.socket_client import NS_CONNECTION, SocketClient, _SocketClientLogger
+from pychromecast.socket_client import (
+    CONNECTION_STATUS_DISCONNECTED,
+    CONNECTION_STATUS_LOST,
+    NS_CONNECTION,
+    SocketClient,
+    _SocketClientLogger,
+)
 
 
 def _lock_held(client: SocketClient) -> bool:
@@ -80,6 +87,7 @@ class FakeSocket:
             self, selectors.EVENT_READ
         )
         client.connecting = False
+        client._service = next(iter(client.services))  # pylint: disable=protected-access
 
     def fileno(self) -> int:
         """Return a file descriptor for the selector."""
@@ -509,6 +517,95 @@ def test_stopped_during_worker_does_not_log_exception() -> None:
     client._cleanup.assert_called_once()
 
 
+def test_failed_connection_stops_client(socket_client: SocketClient) -> None:
+    """Test a client which gave up connecting is stopped and reports it."""
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    with patch.object(
+        socket_client,
+        "initialize_connection",
+        side_effect=ChromecastConnectionError("Failed to connect"),
+    ):
+        socket_client.run()
+
+    assert socket_client.is_stopped
+    listener.new_connection_status.assert_called_once()
+    assert (
+        listener.new_connection_status.call_args.args[0].status
+        == CONNECTION_STATUS_DISCONNECTED
+    )
+    with pytest.raises(PyChromecastStopped):
+        socket_client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
+
+
+def test_unexpected_connection_error_cleans_up(socket_client: SocketClient) -> None:
+    """Test the client is stopped and reports it after an unexpected error."""
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=RuntimeError("boom")
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        socket_client.run()
+
+    assert socket_client.is_stopped
+    listener.new_connection_status.assert_called_once()
+    assert (
+        listener.new_connection_status.call_args.args[0].status
+        == CONNECTION_STATUS_DISCONNECTED
+    )
+
+
+def test_reconnect_waits_after_unexpected_error(socket_client: SocketClient) -> None:
+    """Test the connection is lost, then the reconnect waits until stopped."""
+    FakeSocket(socket_client)
+    socket_client.retry_wait = 30
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    callback = MagicMock()
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    run_once = socket_client._run_once  # pylint: disable=protected-access
+    connect = socket_client.initialize_connection
+    calls = {"connect": 0, "run_once": 0}
+    waited: list[tuple[float, bool, list[str]]] = []
+
+    def initialize_connection() -> None:
+        calls["connect"] += 1
+        # Already connected the first time
+        if calls["connect"] > 1:
+            connect()
+
+    def run_once_or_fail() -> None:
+        calls["run_once"] += 1
+        if calls["run_once"] == 1:
+            raise RuntimeError("Unexpected")
+        assert calls["run_once"] == 2
+        run_once()
+
+    def stop(timeout: float) -> bool:
+        statuses = [c.args[0].status for c in listener.new_connection_status.mock_calls]
+        waited.append((timeout, socket_client.is_connected, statuses))
+        callback.assert_called_once_with(False, None)
+        socket_client.stop.set()
+        return True
+
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=initialize_connection
+        ),
+        patch.object(socket_client, "_run_once", side_effect=run_once_or_fail),
+        patch.object(socket_client.stop, "wait", side_effect=stop),
+        patch("socket.create_connection") as create_connection,
+    ):
+        socket_client.run()
+
+    assert waited == [(30, False, [CONNECTION_STATUS_LOST])]
+    create_connection.assert_not_called()
+    assert socket_client.is_stopped
+
+
 def test_stopped_exception_exits_worker() -> None:
     """A stopped socket client exits the worker loop cleanly."""
     client = object.__new__(SocketClient)
@@ -666,3 +763,301 @@ def test_connection_retry_logging(
     ]
     assert len(errors) == 1
     assert "Failed to connect. No retries." in errors[0]
+
+
+def test_connection_retry_wait_interrupted_by_stop(
+    socket_client: SocketClient,
+) -> None:
+    """Test the wait between connection attempts ends when stopped."""
+    socket_client.tries = None
+    socket_client.retry_wait = 30
+
+    def stop(_timeout: float) -> bool:
+        socket_client.stop.set()
+        return True
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Connection refused")),
+        patch.object(socket_client.stop, "wait", side_effect=stop) as wait,
+        pytest.raises(PyChromecastStopped),
+    ):
+        socket_client.initialize_connection()
+
+    wait.assert_called_once_with(30)
+
+
+def test_connection_stopped_between_services(socket_client: SocketClient) -> None:
+    """Test no other service is tried once stopped."""
+    socket_client.services = {
+        HostServiceInfo("192.0.2.1", 8009),
+        HostServiceInfo("192.0.2.2", 8009),
+    }
+
+    def stop_and_fail(*_: object) -> None:
+        socket_client.stop.set()
+        raise OSError("Connection refused")
+
+    with (
+        patch("socket.create_connection", side_effect=stop_and_fail) as connect,
+        pytest.raises(PyChromecastStopped),
+    ):
+        socket_client.initialize_connection()
+
+    connect.assert_called_once()
+
+
+def test_connection_stopped_before_connecting(
+    socket_client: SocketClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test a stopped client doesn't connect, or log a failure."""
+    socket_client.stop.set()
+
+    with (
+        patch("socket.create_connection") as connect,
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(PyChromecastStopped),
+    ):
+        socket_client.initialize_connection()
+
+    connect.assert_not_called()
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
+
+
+@pytest.mark.parametrize("error", [OSError("Bad file descriptor"), ssl.SSLEOFError()])
+def test_socket_error_logged_without_traceback(
+    socket_client: SocketClient, caplog: pytest.LogCaptureFixture, error: OSError
+) -> None:
+    """Test a socket error is logged on one line at info, the traceback at debug."""
+
+    def connect() -> None:
+        socket_client._force_recon = False  # pylint: disable=protected-access
+
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=connect
+        ) as initialize_connection,
+        patch.object(
+            socket_client, "_run_once", side_effect=[error, PyChromecastStopped()]
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+    ):
+        socket_client.run()
+
+    [logged] = [
+        record
+        for record in caplog.records
+        if "Socket error, attempting reconnect" in record.getMessage()
+    ]
+    assert logged.levelno == logging.INFO
+    assert logged.exc_info is None
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
+    assert any(
+        record.levelno == logging.DEBUG and record.exc_info is not None
+        for record in caplog.records
+    )
+    # Reconnected
+    assert initialize_connection.call_count == 2
+
+
+def test_stopped_while_handling_messages(socket_client: SocketClient) -> None:
+    """Test a stop while handling messages ends the worker after the messages."""
+    msgs = [_message('{"n": 1}'), _message('{"n": 2}')]
+    sock = FakeSocket(socket_client, b"".join(_frame(msg) for msg in msgs))
+    sock.timeout = 0
+    # Make the fake socket readable
+    sock._pair[1].send(b"x")  # pylint: disable=protected-access
+    received: list[dict] = []
+
+    def receive_message(_message: CastMessage, data: dict) -> bool:
+        received.append(data)
+        socket_client.disconnect()
+        return True
+
+    handler = MagicMock(namespace="urn:x-cast:test")
+    handler.receive_message.side_effect = receive_message
+    socket_client.register_handler(handler)
+
+    with patch.object(socket_client, "initialize_connection"):
+        socket_client.run()
+
+    assert received == [{"n": 1}, {"n": 2}]
+    assert socket_client.is_stopped
+
+
+@pytest.mark.parametrize(
+    "error", [ChromecastConnectionError("Failed"), OSError("Bad"), ValueError("Bad")]
+)
+def test_callback_exception_keeps_connection(
+    socket_client: SocketClient, error: Exception
+) -> None:
+    """Test an exception from a request callback is logged, the client goes on."""
+    msg = _message('{"requestId": 1}')
+    sock = FakeSocket(socket_client, _frame(msg))
+    sock.timeout = 0
+    # Make the fake socket readable
+    sock._pair[1].send(b"x")  # pylint: disable=protected-access
+    callback = MagicMock(side_effect=error)
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    socket_client.heartbeat_controller.reset()
+
+    with patch.object(socket_client.logger, "exception") as log_exception:
+        socket_client._run_once()  # pylint: disable=protected-access
+
+    callback.assert_called_once_with(True, {"requestId": 1})
+    log_exception.assert_called_once()
+    assert not socket_client._force_recon  # pylint: disable=protected-access
+    assert not socket_client.is_stopped
+
+
+RECEIVER_STATUS = {
+    "type": "RECEIVER_STATUS",
+    "status": {
+        "applications": [
+            {
+                "appId": "CC1AD845",
+                "displayName": "Default Media Receiver",
+                "namespaces": [{"name": "urn:x-cast:com.google.cast.media"}],
+                "sessionId": "session-1",
+                "statusText": "",
+                "transportId": "transport-1",
+            }
+        ],
+        "volume": {"level": 1.0, "muted": False},
+    },
+}
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+def test_app_channel_not_opened_when_stopped(
+    socket_client: SocketClient, caplog: pytest.LogCaptureFixture, stopped: bool
+) -> None:
+    """Test a status announcing an app opens its channel, unless stopped."""
+    sock = FakeSocket(socket_client)
+    if stopped:
+        socket_client.stop.set()
+
+    with caplog.at_level(logging.DEBUG):
+        socket_client.receiver_controller.receive_message(
+            MagicMock(), copy.deepcopy(RECEIVER_STATUS)
+        )
+
+    assert socket_client.session_id == "session-1"
+    assert socket_client.destination_id == "transport-1"
+    connected = [
+        msg.destination_id for msg in sock.sent if msg.namespace == NS_CONNECTION
+    ]
+    assert connected == ([] if stopped else ["transport-1"])
+    assert all(record.levelno < logging.WARNING for record in caplog.records)
+
+
+def test_connection_skipped_round_is_not_a_try(socket_client: SocketClient) -> None:
+    """Test a round which only skips a service in backoff doesn't use a try."""
+    [service] = socket_client.services
+    socket_client._backoff(service)  # pylint: disable=protected-access
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")) as connect,
+        patch.object(socket_client.stop, "wait", return_value=False) as wait,
+        # Skipped, then tried and backed off
+        patch("time.time", side_effect=[0.0, 100.0, 100.0]),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client._retries[service]["next_retry"] = 50.0  # pylint: disable=protected-access
+        socket_client.initialize_connection()
+
+    connect.assert_called_once()
+    wait.assert_called_once_with(socket_client.retry_wait)
+
+
+def test_connection_backoff_kept_until_connected(socket_client: SocketClient) -> None:
+    """Test a failed service backs off in the next connection, until it connects."""
+    socket_client.tries = 1
+    [service] = socket_client.services
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    retry = socket_client._retries[service]  # pylint: disable=protected-access
+    assert retry["delay"] == 2 * socket_client.retry_wait
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    assert retry["delay"] == 4 * socket_client.retry_wait
+
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext"),
+        patch.object(socket_client.selector, "register"),
+        patch.object(socket_client.receiver_controller, "update_status"),
+        patch.object(socket_client.heartbeat_controller, "ping"),
+    ):
+        socket_client._retries[service]["next_retry"] = 0  # pylint: disable=protected-access
+        socket_client.initialize_connection()
+
+    assert socket_client.is_connected
+    assert service not in socket_client._retries  # pylint: disable=protected-access
+    assert socket_client._service == service  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("cause", ["heartbeat", "write"])
+def test_lost_connection_reconnects(socket_client: SocketClient, cause: str) -> None:
+    """Test a lost connection is torn down and reported, then reconnected."""
+    FakeSocket(socket_client)
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    callback = MagicMock()
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    calls = 0
+
+    def initialize_connection() -> None:
+        nonlocal calls
+        calls += 1
+        # Already connected the first time, stopped when reconnecting
+        if calls > 1:
+            raise PyChromecastStopped("Socket client's thread is stopped.")
+
+    def run_once() -> None:
+        if cause == "heartbeat":
+            with patch.object(
+                socket_client.heartbeat_controller, "is_expired", return_value=True
+            ):
+                run_once_real()
+        else:
+            # A sender failed to write
+            socket_client._force_recon = True  # pylint: disable=protected-access
+
+    run_once_real = socket_client._run_once  # pylint: disable=protected-access
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=initialize_connection
+        ),
+        patch.object(socket_client, "_run_once", side_effect=run_once),
+    ):
+        socket_client.run()
+
+    assert calls == 2
+    statuses = [c.args[0].status for c in listener.new_connection_status.mock_calls]
+    assert statuses == [CONNECTION_STATUS_LOST, CONNECTION_STATUS_DISCONNECTED]
+    callback.assert_called_once_with(False, None)
+    assert socket_client.socket is None
+
+
+def test_connection_without_services_uses_tries(socket_client: SocketClient) -> None:
+    """Test a client without services gives up when out of tries."""
+    socket_client.services = set()
+    socket_client.tries = 2
+
+    with (
+        patch.object(socket_client.stop, "wait", return_value=False) as wait,
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    wait.assert_called_once_with(socket_client.retry_wait)
