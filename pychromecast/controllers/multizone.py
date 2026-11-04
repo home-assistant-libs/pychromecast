@@ -373,11 +373,12 @@ class MultizoneManager:
             The group uuid, of which the cast is a member, has new status
         listener.multizone_new_cast_status(group_uuid, cast_status)
             The group uuid, of which the cast is a member, has new status
+        listener.multizone_sessions_changed()
+            The devices playing a playback session may have changed
+        listener.multizone_session_moved(group_uuid, endpoint, name)
+            The session of the cast, or of group uuid it's a member of, moved
         """
-        member_uuid_str = str(member_uuid)
-        if member_uuid_str not in self._casts:
-            self._casts[member_uuid_str] = {"listeners": [], "group_memberships": set()}
-        self._casts[member_uuid_str]["listeners"].append(listener)
+        self._member(str(member_uuid))["listeners"].append(listener)
 
     def deregister_listener(
         self, member_uuid: UUID, listener: MultiZoneManagerListener
@@ -446,6 +447,9 @@ class MultizoneManager:
         Raises RequestFailed if the endpoint isn't managed or owns no session, no
         device would be left, a device isn't managed or the change fails, and
         RequestTimeout if there's no response.
+
+        Must not be called from a listener callback, the response is received
+        by the thread which calls the listeners.
         """
         group = self._groups.get(str(endpoint))
         if group is None:
@@ -510,7 +514,7 @@ class MultizoneManager:
         for uuid in [group_uuid, *members]:
             if uuid not in self._casts:
                 continue
-            for listener in self._casts[uuid]["listeners"]:
+            for listener in list(self._casts[uuid]["listeners"]):
                 if listener not in listeners:
                     listeners.append(listener)
         for listener in listeners:
