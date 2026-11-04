@@ -211,18 +211,6 @@ class _EndpointMonitor(
 
     def multizone_status_received(self) -> None:
         """Report the new status."""
-        members = self._mz.members
-        if (
-            self._mz.playback_session is not None
-            and len(members) == 1
-            and members[0] != self._uuid
-        ):
-            # The manager ignores the session of a group the session has left
-            _LOGGER.debug(
-                "(%s) Reports a playback session, but its only member is %s",
-                self._uuid,
-                members[0],
-            )
         self._manager.on_sessions_changed()
 
     def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
@@ -591,8 +579,8 @@ class MultizoneManager:
         if group["monitor"].session_id is None or controller.playback_session is None:
             return []
         members = controller.members
-        # A dynamic group the session has left can keep reporting both for
-        # minutes, but its only member is then another device
+        # A dynamic group the session has left can keep reporting both for a
+        # while, but its only member is then another device
         if len(members) == 1 and members[0] != str(group["chromecast"].uuid):
             return []
         return members
