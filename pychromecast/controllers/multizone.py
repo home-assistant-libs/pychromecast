@@ -424,10 +424,17 @@ class MultizoneManager:
         the device plays no session. The devices playing the session are the
         members of the device or group.
         """
-        owner = self._find_session_owner(device)
-        if owner is None:
-            return None
-        return owner["chromecast"].uuid
+        # The device's own receiver status can't be used, the members of a group
+        # which don't host the session run a session of their own
+        device_str = str(device)
+        # A group isn't a member of its own session
+        own = self._groups.get(device_str)
+        if own is not None and self._session_members(own):
+            return own["chromecast"].uuid
+        for endpoint in list(self._groups.values()):
+            if device_str in self._session_members(endpoint):
+                return endpoint["chromecast"].uuid
+        return None
 
     def update_session_devices(
         self,
@@ -589,23 +596,6 @@ class MultizoneManager:
         if len(members) == 1 and members[0] != str(group["chromecast"].uuid):
             return []
         return members
-
-    def _find_session_owner(self, device: UUID) -> GroupInfo | None:
-        """Return the endpoint which owns the playback session a device plays.
-
-        The device's own receiver status can't be used, the members of a group
-        which don't host it run a session of their own. Returns None if the
-        device plays no session.
-        """
-        device_str = str(device)
-        # A group isn't a member of its own session
-        own = self._groups.get(device_str)
-        if own is not None and self._session_members(own):
-            return own
-        for endpoint in list(self._groups.values()):
-            if device_str in self._session_members(endpoint):
-                return endpoint
-        return None
 
 
 class MultizoneController(BaseController):
