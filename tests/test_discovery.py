@@ -206,7 +206,7 @@ def test_mdns_update_keeps_details() -> None:
         )
     }
     service = MagicMock(port=8009, server=None)
-    service.parsed_addresses.return_value = [HOST]
+    service.parsed_scoped_addresses.return_value = [HOST]
     service.properties = {
         b"fn": b"Renamed",
         b"md": b"Chromecast Audio",
@@ -220,6 +220,7 @@ def test_mdns_update_keeps_details() -> None:
 
     cast_info = devices[UUID(UUID_STR)]
     assert cast_info.friendly_name == "Renamed"
+    assert cast_info.host == HOST
     assert cast_info.mac_address == MAC_ADDRESS
     assert cast_info.product_name == "product"
     assert cast_info.cast_build_revision == "1.2.3"
