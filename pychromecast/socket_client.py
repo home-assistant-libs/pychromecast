@@ -726,7 +726,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def _report_connection_status(self, status: ConnectionStatus) -> None:
         """Report a change in the connection status to any listeners"""
-        for listener in self._connection_listeners:
+        for listener in list(self._connection_listeners):
             try:
                 self.logger.debug(
                     "connection listener: %x (%s) %s",

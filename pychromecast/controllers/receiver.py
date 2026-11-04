@@ -319,7 +319,7 @@ class ReceiverController(BaseController):
 
         self.logger.debug("Received status: %s", self.status)
 
-        for listener in self._status_listeners:
+        for listener in list(self._status_listeners):
             try:
                 listener.new_cast_status(self.status)
             except Exception:  # pylint: disable=broad-except
@@ -348,7 +348,7 @@ class ReceiverController(BaseController):
 
         self.logger.debug("Launch status: %s", launch_failure)
 
-        for listener in self._launch_error_listeners:
+        for listener in list(self._launch_error_listeners):
             try:
                 listener.new_launch_error(launch_failure)
             except Exception:  # pylint: disable=broad-except

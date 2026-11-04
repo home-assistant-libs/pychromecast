@@ -763,7 +763,7 @@ class MediaController(BaseMediaPlayer):
 
     def _fire_status_changed(self) -> None:
         """Tells listeners of a changed status."""
-        for listener in self._status_listeners:
+        for listener in list(self._status_listeners):
             try:
                 listener.new_media_status(self.status)
             except Exception:  # pylint: disable=broad-except
@@ -771,7 +771,7 @@ class MediaController(BaseMediaPlayer):
 
     def _fire_load_failed(self, queue_item_id: int, error_code: int) -> None:
         """Tells listeners of a changed status."""
-        for listener in self._status_listeners:
+        for listener in list(self._status_listeners):
             try:
                 listener.load_media_failed(queue_item_id, error_code)
             except Exception:  # pylint: disable=broad-except
