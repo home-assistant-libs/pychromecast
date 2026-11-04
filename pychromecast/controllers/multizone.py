@@ -440,7 +440,8 @@ class MultizoneManager:
 
         The endpoint is the device or group owning the session, see
         get_session_endpoint. All devices must have been added with
-        add_multizone. Blocks until the change is done, returns None if nothing
+        add_multizone. Blocks until the change is done, and the endpoint's
+        members are updated if the session stays on it. Returns None if nothing
         changes.
 
         Raises RequestFailed if the endpoint isn't managed or owns no session, no
@@ -489,7 +490,15 @@ class MultizoneManager:
         )
         waiter.wait_response()
         assert waiter.response is not None
-        return _parse_session_update(waiter.response)
+        update = _parse_session_update(waiter.response)
+        if update.session_endpoint is None:
+            # The response doesn't list the devices, wait for them so the next
+            # change starts from them
+            status = WaitResponse(timeout, "multizone status")
+            with suppress(PyChromecastError):
+                controller.update_members(callback_function=status.callback)
+                status.wait_response()
+        return update
 
     def on_endpoint_changed(self) -> None:
         """Tell the listeners the devices playing a session may have changed.

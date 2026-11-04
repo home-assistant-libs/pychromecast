@@ -1,7 +1,7 @@
 """Tests for the multizone controller."""
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -17,7 +17,7 @@ from pychromecast.controllers.multizone import (
     SessionEndpoint,
 )
 from pychromecast.const import CAST_TYPE_GROUP
-from pychromecast.error import RequestFailed
+from pychromecast.error import NotConnected, RequestFailed
 from pychromecast.socket_client import (
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_LOST,
@@ -319,6 +319,8 @@ class FakeEndpoint:
         self.members = members
         self.playback_session = playback_session
         self.response: dict = {"type": "INVALID_REQUEST"}
+        # Make SET_PLAYBACK_DEVICES change the members, like a device
+        self.apply_devices = False
         self.sent: list[dict] = []
         self.controller: MultizoneController | None = None
 
@@ -358,16 +360,18 @@ class FakeEndpoint:
             response = {"type": "MULTIZONE_STATUS", "requestId": 1, "status": status}
             self.controller.receive_message(MagicMock(), response)
         else:
+            if data["type"] == "SET_PLAYBACK_DEVICES" and self.apply_devices:
+                self.members = [device["deviceId"] for device in data["deviceList"]]
             response = self.response
         if callback_function := kwargs.get("callback_function"):
             callback_function(True, response)
 
     def device_list(self) -> set[tuple[str, str]]:
         """Return the devices and addresses of the last SET_PLAYBACK_DEVICES."""
-        assert self.sent[-1]["type"] == "SET_PLAYBACK_DEVICES"
+        message = [m for m in self.sent if m["type"] == "SET_PLAYBACK_DEVICES"][-1]
         return {
             (device["deviceId"], device["ipAddress"])
-            for device in self.sent[-1]["deviceList"]
+            for device in message["deviceList"]
         }
 
 
@@ -485,6 +489,44 @@ def test_update_session_devices_remove_from_group(device: str) -> None:
     endpoint = _session_endpoint(manager, device)
     manager.update_session_devices(endpoint, remove={UUID(SPEAKER_A)})
 
+    assert group.device_list() == {(SPEAKER_B, "192.0.2.11")}
+
+
+def test_update_session_devices_back_to_back() -> None:
+    """Test a change starts from the devices the previous change set."""
+    group = _group([SPEAKER_A, SPEAKER_B])
+    group.response = SESSION_UPDATED
+    group.apply_devices = True
+    speaker_c = FakeEndpoint(KITCHEN_UUID, None, [KITCHEN_UUID], None, "192.0.2.12")
+    manager = _manager(
+        [_speaker_a(owner=False), _speaker_b("973c31d5"), speaker_c], [group]
+    )
+
+    manager.update_session_devices(UUID(GROUP_UUID), add={UUID(KITCHEN_UUID)})
+    manager.update_session_devices(UUID(GROUP_UUID), remove={UUID(SPEAKER_A)})
+
+    assert group.device_list() == {
+        (SPEAKER_B, "192.0.2.11"),
+        (KITCHEN_UUID, "192.0.2.12"),
+    }
+
+
+def test_update_session_devices_status_not_received() -> None:
+    """Test a change is reported done, if the status after it can't be requested."""
+    group = _group([SPEAKER_A, SPEAKER_B])
+    group.response = SESSION_UPDATED
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+    assert group.controller is not None
+
+    with patch.object(
+        group.controller, "update_members", side_effect=NotConnected("connecting")
+    ) as update_members:
+        update = manager.update_session_devices(
+            UUID(GROUP_UUID), remove={UUID(SPEAKER_A)}
+        )
+
+    assert update is not None
+    update_members.assert_called_once()
     assert group.device_list() == {(SPEAKER_B, "192.0.2.11")}
 
 
