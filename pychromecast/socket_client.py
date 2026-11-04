@@ -577,8 +577,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         try:
             self._run()
         finally:
-            self.logger.debug("Thread done...")
             self._cleanup()
+            self.logger.debug("Thread done...")
 
     def _run_once(self) -> None:
         """Receive from the socket and handle data."""
