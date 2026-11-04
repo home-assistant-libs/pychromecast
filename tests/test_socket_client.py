@@ -87,6 +87,7 @@ class FakeSocket:
             self, selectors.EVENT_READ
         )
         client.connecting = False
+        client._service = next(iter(client.services))  # pylint: disable=protected-access
 
     def fileno(self) -> int:
         """Return a file descriptor for the selector."""
@@ -940,3 +941,59 @@ def test_app_channel_not_opened_when_stopped(
     ]
     assert connected == ([] if stopped else ["transport-1"])
     assert all(record.levelno < logging.WARNING for record in caplog.records)
+
+
+def test_connection_skipped_round_is_not_a_try(socket_client: SocketClient) -> None:
+    """Test a round which only skips a service in backoff doesn't use a try."""
+    [service] = socket_client.services
+    socket_client._backoff(service)  # pylint: disable=protected-access
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")) as connect,
+        patch.object(socket_client.stop, "wait", return_value=False) as wait,
+        # Skipped, then tried and backed off
+        patch("time.time", side_effect=[0.0, 100.0, 100.0]),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client._retries[service]["next_retry"] = 50.0  # pylint: disable=protected-access
+        socket_client.initialize_connection()
+
+    connect.assert_called_once()
+    wait.assert_called_once_with(socket_client.retry_wait)
+
+
+def test_connection_backoff_kept_until_connected(socket_client: SocketClient) -> None:
+    """Test a failed service backs off in the next connection, until it connects."""
+    socket_client.tries = 1
+    [service] = socket_client.services
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    retry = socket_client._retries[service]  # pylint: disable=protected-access
+    assert retry["delay"] == 2 * socket_client.retry_wait
+
+    with (
+        patch("socket.create_connection", side_effect=OSError("Refused")),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+
+    assert retry["delay"] == 4 * socket_client.retry_wait
+
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext"),
+        patch.object(socket_client.selector, "register"),
+        patch.object(socket_client.receiver_controller, "update_status"),
+        patch.object(socket_client.heartbeat_controller, "ping"),
+    ):
+        socket_client._retries[service]["next_retry"] = 0  # pylint: disable=protected-access
+        socket_client.initialize_connection()
+
+    assert socket_client.is_connected
+    assert service not in socket_client._retries  # pylint: disable=protected-access
+    assert socket_client._service == service  # pylint: disable=protected-access

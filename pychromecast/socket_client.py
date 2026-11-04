@@ -199,8 +199,10 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger = _SocketClientLogger(logging.getLogger(__name__), self)
 
         self._force_recon = False
-        # Wait before the next connection attempt, after an unexpected error
-        self._reconnect_wait = False
+        # Backoff per service, kept until the service connects
+        self._retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
+        # The service of the current connection
+        self._service: HostServiceInfo | MDNSServiceInfo | None = None
 
         self.cast_type = cast_type
         self.fn: str | None = None  # pylint:disable=invalid-name
@@ -283,43 +285,27 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.destination_id = None
         self.session_id = None
 
-        if self._reconnect_wait:
-            self._reconnect_wait = False
-            if self.stop.wait(self.retry_wait):
-                raise PyChromecastStopped("Socket client's thread is stopped.")
-
         retry_log_fun = self.logger.info
-
-        # Dict keeping track of individual retry delay for each named service
-        retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
-
-        def mdns_backoff(
-            service: HostServiceInfo | MDNSServiceInfo,
-            retry: dict[str, float],
-        ) -> None:
-            """Exponentional backoff for service name mdns lookups."""
-            now = time.time()
-            retry["next_retry"] = now + retry["delay"]
-            retry["delay"] = min(retry["delay"] * 2, 300)
-            retries[service] = retry
 
         while tries is None or tries > 0:
             # Prune retries dict
-            retries = {
-                key: retries[key]
+            self._retries = {
+                key: self._retries[key]
                 for key in self.services.copy()
-                if (key is not None and key in retries)
+                if (key is not None and key in self._retries)
             }
 
+            attempted = False
             for service in self.services.copy():
                 if self.stop.is_set():
                     raise PyChromecastStopped("Socket client's thread is stopped.")
                 now = time.time()
-                retry = retries.get(
+                retry = self._retries.get(
                     service, {"delay": self.retry_wait, "next_retry": now}
                 )
                 if now < retry["next_retry"]:
                     continue
+                attempted = True
                 try:
                     self._report_connection_status(
                         ConnectionStatus(
@@ -355,7 +341,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                                 service,
                             )
                         )
-                        mdns_backoff(service, retry)
+                        self._backoff(service)
                         # If zeroconf fails to receive the necessary data,
                         # try next service
                         continue
@@ -377,6 +363,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                     )
                     self.connecting = False
                     self._force_recon = False
+                    self._service = service
+                    self._retries.pop(service, None)
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTED,
@@ -413,11 +401,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                         service,
                         retry["delay"],
                     )
-                    mdns_backoff(service, retry)
+                    self._backoff(service)
                     retry_log_fun = self.logger.debug
 
-            # Only sleep if we have another retry remaining
-            if tries is None or tries > 1:
+            # Only sleep if we have another retry remaining, a round which only
+            # skipped services in backoff isn't a try
+            if tries is None or tries > 1 or not attempted:
                 self.logger.debug(
                     "Not connected, sleeping for %.1fs. Services: %s",
                     self.retry_wait,
@@ -426,11 +415,18 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if self.stop.wait(self.retry_wait):
                     raise PyChromecastStopped("Socket client's thread is stopped.")
 
-            if tries:
+            if tries and attempted:
                 tries -= 1
 
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
+
+    def _backoff(self, service: HostServiceInfo | MDNSServiceInfo) -> None:
+        """Don't try a service again until its delay has passed, doubling it."""
+        retry = self._retries.get(service, {"delay": self.retry_wait})
+        retry["next_retry"] = time.time() + retry["delay"]
+        retry["delay"] = min(retry["delay"] * 2, 300)
+        self._retries[service] = retry
 
     def _close_socket(self) -> None:
         """Close the socket to the Chromecast, if any."""
@@ -567,7 +563,9 @@ class SocketClient(threading.Thread, CastStatusListener):
 
             except Exception:  # pylint: disable=broad-except
                 self._force_recon = True
-                self._reconnect_wait = True
+                # Wait before connecting to the service again
+                if self._service is not None:
+                    self._backoff(self._service)
                 self.logger.exception(
                     "Unhandled exception in worker thread, attempting reconnect"
                 )
