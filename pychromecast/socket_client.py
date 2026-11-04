@@ -1041,18 +1041,19 @@ class ConnectionController(BaseController):
 
         data is message.payload_utf8 interpreted as a JSON dict.
         """
-        if self._socket_client is None:
+        socket_client = self._socket_client
+        if socket_client is None:
             raise ControllerNotRegistered
 
-        if self._socket_client.is_stopped:
+        if socket_client.is_stopped:
             return True
 
         if data[MESSAGE_TYPE] == TYPE_CLOSE:
             # The cast device is asking us to acknowledge closing this channel.
-            self._socket_client.disconnect_channel(message.source_id)
+            socket_client.disconnect_channel(message.source_id)
 
             # Schedule a status update so that a channel is created.
-            self._socket_client.receiver_controller.update_status()
+            socket_client.receiver_controller.update_status()
 
             return True
 
