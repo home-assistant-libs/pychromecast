@@ -470,6 +470,26 @@ def test_failed_connection_stops_client(socket_client: SocketClient) -> None:
         socket_client.send_message("receiver-0", "urn:x-cast:test", {"type": "TEST"})
 
 
+def test_unexpected_connection_error_cleans_up(socket_client: SocketClient) -> None:
+    """Test the client is stopped and reports it after an unexpected error."""
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=RuntimeError("boom")
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        socket_client.run()
+
+    assert socket_client.is_stopped
+    listener.new_connection_status.assert_called_once()
+    assert (
+        listener.new_connection_status.call_args.args[0].status
+        == CONNECTION_STATUS_DISCONNECTED
+    )
+
+
 def test_worker_retry_wait_interrupted_by_stop() -> None:
     """Test the wait before reconnecting after an error ends when stopped."""
     client = object.__new__(SocketClient)

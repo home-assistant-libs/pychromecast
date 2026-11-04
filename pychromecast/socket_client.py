@@ -521,17 +521,22 @@ class SocketClient(threading.Thread, CastStatusListener):
     def run(self) -> None:
         """Connect to the cast and start polling the socket."""
         try:
+            self._run_worker()
+        finally:
+            self._cleanup()
+
+    def _run_worker(self) -> None:
+        """Connect and poll the socket until stopped."""
+        try:
             self.initialize_connection()
         except ChromecastConnectionError:
             self.logger.debug(
                 "Connection error to host closing down",
                 exc_info=True,
             )
-            self._cleanup()
             return
 
         except PyChromecastStopped:
-            self._cleanup()
             return
 
         self.heartbeat_controller.reset()
@@ -567,8 +572,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.stop.wait(self.retry_wait)
 
         self.logger.debug("Thread done...")
-        # Clean up
-        self._cleanup()
 
     def _run_once(self) -> None:
         """Receive from the socket and handle data."""
