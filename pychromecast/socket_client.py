@@ -703,11 +703,10 @@ class SocketClient(threading.Thread, CastStatusListener):
                 except Exception:  # pylint: disable=broad-except
                     pass
 
-        if self.socket is not None:
-            try:
-                self.socket.close()
-            except Exception:  # pylint: disable=broad-except
-                self.logger.exception("_cleanup")
+        try:
+            self._close_socket()
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception("_cleanup")
         self._report_connection_status(
             ConnectionStatus(
                 CONNECTION_STATUS_DISCONNECTED,

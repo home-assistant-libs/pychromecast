@@ -425,6 +425,19 @@ def test_connect_closes_socket_on_failed_attempt(
     assert list(socket_client.selector.get_map().values()) == [wakeup]
 
 
+def test_cleanup_closes_socket(socket_client: SocketClient) -> None:
+    """Test the socket is closed and unregistered when cleaning up."""
+    sock = FakeSocket(socket_client)
+    wakeup = socket_client.wakeup_selector_key
+    with patch.object(socket_client.selector, "close"):
+        socket_client._cleanup()  # pylint: disable=protected-access
+        assert list(socket_client.selector.get_map().values()) == [wakeup]
+
+    assert sock.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+
+
 def test_connect_closes_raw_socket_on_failed_wrap(
     socket_client: SocketClient,
 ) -> None:
