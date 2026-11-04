@@ -4,7 +4,6 @@ Provides controllers to handle specific namespaces in Chromecast communication.
 
 import abc
 from collections.abc import Callable
-from contextlib import suppress
 from functools import partial
 import logging
 from typing import TYPE_CHECKING, Any, Protocol
@@ -33,8 +32,11 @@ def add_listener[T](listeners: list[T], listener: T) -> Callable[[], None]:
         if removed:
             return
         removed = True
-        with suppress(ValueError):
-            listeners.remove(listener)
+        # Compare by identity, an equal listener is another registration
+        for index, registered in enumerate(listeners):
+            if registered is listener:
+                del listeners[index]
+                return
 
     return remove_listener
 

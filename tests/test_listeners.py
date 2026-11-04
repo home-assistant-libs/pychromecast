@@ -51,3 +51,19 @@ def test_unregister_keeps_later_registration() -> None:
     controller._process_get_status(STATUS)  # pylint: disable=protected-access
 
     listener.new_cast_status.assert_called_once()
+
+
+def test_unregister_equal_listener() -> None:
+    """Test unregistering removes the registered listener, not an equal one."""
+    controller = ReceiverController()
+    first = MagicMock()
+    second = MagicMock()
+    first.__eq__ = second.__eq__ = lambda self, other: True
+    controller.register_status_listener(first)
+    unregister = controller.register_status_listener(second)
+
+    unregister()
+    controller._process_get_status(STATUS)  # pylint: disable=protected-access
+
+    first.new_cast_status.assert_called_once()
+    second.new_cast_status.assert_not_called()
