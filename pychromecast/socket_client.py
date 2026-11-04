@@ -390,7 +390,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.connecting = True
                     self._close_socket()
                     if self.stop.is_set():
-                        self.logger.error(
+                        self.logger.debug(
                             "Failed to connect: %s. aborting due to stop signal.", err
                         )
                         raise ChromecastConnectionError("Failed to connect") from err
