@@ -427,14 +427,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.retry_wait,
                     self.services,
                 )
-                time.sleep(self.retry_wait)
+                self.stop.wait(self.retry_wait)
 
             if tries:
                 tries -= 1
 
-        self.logger.error(
-            "Failed to connect. No retries.",
-        )
+        if self.stop.is_set():
+            raise InterruptLoop()
+
+        self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
 
     def disconnect(self) -> None:
@@ -550,18 +551,21 @@ class SocketClient(threading.Thread, CastStatusListener):
                 )
                 break
 
-            except InterruptLoop:
-                break
-
-            except PyChromecastStopped:
+            except InterruptLoop, PyChromecastStopped:
                 break
 
             except ChromecastConnectionClosed as exc:
                 self._force_recon = True
-                self.logger.debug(
-                    "%s",
-                    exc,
-                )
+                self.logger.debug("%s", exc)
+
+            except OSError as exc:
+                if self.stop.is_set():
+                    self.logger.debug("Socket error while stopping", exc_info=True)
+                    break
+
+                self._force_recon = True
+                self.logger.error("Socket error, attempting reconnect: %s", exc)
+                self.logger.debug("Socket error", exc_info=True)
 
             except Exception:  # pylint: disable=broad-except
                 if self.stop.is_set():
@@ -573,7 +577,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
                 self._force_recon = True
                 self.logger.exception(
-                    "Unhandled exception in worker thread, attempting reconnect",
+                    "Unhandled exception in worker thread, attempting reconnect"
                 )
                 self.stop.wait(self.retry_wait)
 
@@ -625,12 +629,7 @@ class SocketClient(threading.Thread, CastStatusListener):
             raise InterruptLoop()
 
     def _check_connection(self) -> None:
-        """
-        Checks if the connection is active, and if not reconnect
-
-        :return: True if the connection is active, False if the connection was
-                 reset.
-        """
+        """Checks if the connection is active, and if not reconnect."""
         # check if connection is expired
         reset = False
         if self._force_recon:
