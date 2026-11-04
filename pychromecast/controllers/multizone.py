@@ -145,46 +145,6 @@ class MultiZoneControllerListener(abc.ABC):
         """The set of devices playing the session has changed."""
 
 
-class MultiZoneManagerListener(abc.ABC):
-    """Listener for receiving audio group events for a cast device."""
-
-    @abc.abstractmethod
-    def added_to_multizone(self, group_uuid: str) -> None:
-        """The cast has been added to group identified by group_uuid."""
-
-    @abc.abstractmethod
-    def removed_from_multizone(self, group_uuid: str) -> None:
-        """The cast has been removed from group identified by group_uuid."""
-
-    @abc.abstractmethod
-    def multizone_new_media_status(
-        self, group_uuid: str, media_status: MediaStatus
-    ) -> None:
-        """The group identified by group_uuid, of which the cast is a member, has new media status."""
-
-    @abc.abstractmethod
-    def multizone_new_cast_status(
-        self, group_uuid: str, cast_status: CastStatus
-    ) -> None:
-        """The group identified by group_uuid, of which the cast is a member, has new status."""
-
-    def multizone_sessions_changed(self) -> None:
-        """The devices playing a playback session may have changed.
-
-        Not abstract to keep existing listeners working.
-        """
-
-    def multizone_session_moved(
-        self, group_uuid: str, endpoint: SessionEndpoint, name: str
-    ) -> None:
-        """The session of a device or group moved to endpoint, named name.
-
-        Called for the device or group and its members. The endpoint may not be
-        managed yet, for example a new dynamic group. Not abstract to keep
-        existing listeners working.
-        """
-
-
 class _EndpointMonitor(
     CastStatusListener, ConnectionStatusListener, MultiZoneControllerListener
 ):
@@ -271,6 +231,46 @@ class _EndpointMonitor(
         endpoint = update.session_endpoint
         if endpoint is not None:
             self._manager.on_session_moved(self._uuid, endpoint, update.name)
+
+
+class MultiZoneManagerListener(abc.ABC):
+    """Listener for receiving audio group events for a cast device."""
+
+    @abc.abstractmethod
+    def added_to_multizone(self, group_uuid: str) -> None:
+        """The cast has been added to group identified by group_uuid."""
+
+    @abc.abstractmethod
+    def removed_from_multizone(self, group_uuid: str) -> None:
+        """The cast has been removed from group identified by group_uuid."""
+
+    @abc.abstractmethod
+    def multizone_new_media_status(
+        self, group_uuid: str, media_status: MediaStatus
+    ) -> None:
+        """The group identified by group_uuid, of which the cast is a member, has new media status."""
+
+    @abc.abstractmethod
+    def multizone_new_cast_status(
+        self, group_uuid: str, cast_status: CastStatus
+    ) -> None:
+        """The group identified by group_uuid, of which the cast is a member, has new status."""
+
+    def multizone_sessions_changed(self) -> None:
+        """The devices playing a playback session may have changed.
+
+        Not abstract to keep existing listeners working.
+        """
+
+    def multizone_session_moved(
+        self, group_uuid: str, endpoint: SessionEndpoint, name: str
+    ) -> None:
+        """The session of a device or group moved to endpoint, named name.
+
+        Called for the device or group and its members. The endpoint may not be
+        managed yet, for example a new dynamic group. Not abstract to keep
+        existing listeners working.
+        """
 
 
 class _GroupMonitor(
