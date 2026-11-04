@@ -7,7 +7,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from functools import partial
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..error import UnsupportedNamespace, ControllerNotRegistered
 from ..generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
@@ -18,12 +18,8 @@ from ..response_handler import CallbackType, chain_on_success
 if TYPE_CHECKING:
     from ..socket_client import SocketClient
 
-_ListenerT = TypeVar("_ListenerT")
 
-
-def add_listener(
-    listeners: list[_ListenerT], listener: _ListenerT
-) -> Callable[[], None]:
+def add_listener[T](listeners: list[T], listener: T) -> Callable[[], None]:
     """Add a listener to a list, returns a function which removes it again.
 
     Only the first call of the function removes the listener, so it can't remove
