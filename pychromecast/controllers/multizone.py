@@ -2,8 +2,6 @@
 Controller to monitor audio group members.
 """
 
-from __future__ import annotations
-
 import abc
 import logging
 from collections.abc import Callable, Iterable

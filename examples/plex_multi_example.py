@@ -17,7 +17,6 @@ pip install plexapi
 """
 
 # pylint: disable=invalid-name
-from __future__ import annotations
 
 import argparse
 import sys

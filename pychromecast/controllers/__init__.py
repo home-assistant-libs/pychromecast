@@ -2,8 +2,6 @@
 Provides controllers to handle specific namespaces in Chromecast communication.
 """
 
-from __future__ import annotations
-
 import abc
 from collections.abc import Callable
 from contextlib import suppress
