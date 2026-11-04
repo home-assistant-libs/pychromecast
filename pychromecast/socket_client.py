@@ -263,28 +263,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         Raises PyChromecastStopped when stopped.
         """
         tries = self.tries
-
-        with self._socket_lock:
-            self._close_socket()
-
-            callbacks = list(self._request_callbacks.values())
-            self._recv_buffer = b""
-            self._request_id = 0
-            self._request_callbacks = {}
-            self._open_channels = []
-            self.connecting = True
-
-        # Make sure nobody is blocking.
-        for callback_function in callbacks:
-            try:
-                callback_function(False, None)
-            except Exception:  # pylint: disable=broad-except
-                self.logger.exception("Unhandled exception in callback function")
-
-        self.app_namespaces = []
-        self.destination_id = None
-        self.session_id = None
-
         retry_log_fun = self.logger.info
 
         while tries is None or tries > 0:
@@ -523,52 +501,49 @@ class SocketClient(threading.Thread, CastStatusListener):
         return self.stop.is_set()
 
     def _run(self) -> None:
-        """Connect and poll the socket until stopped."""
-        try:
-            self.initialize_connection()
-        except ChromecastConnectionError:
-            self.logger.debug(
-                "Connection error to host closing down",
-                exc_info=True,
-            )
-            return
-
-        except PyChromecastStopped:
-            return
-
-        self.heartbeat_controller.reset()
+        """Connect and poll the socket, and reconnect when lost, until stopped."""
         self.logger.debug("Thread started...")
-        while not self.stop.is_set():
+        while True:
             try:
-                self._run_once()
-
+                self.initialize_connection()
             except ChromecastConnectionError:
                 self.logger.debug(
                     "Connection error to host closing down",
                     exc_info=True,
                 )
-                break
+                return
 
             except PyChromecastStopped:
-                break
+                return
 
-            except ChromecastConnectionClosed as exc:
-                self._force_recon = True
-                self.logger.debug("%s", exc)
+            while not self.stop.is_set() and not self._force_recon:
+                try:
+                    self._run_once()
 
-            except OSError as exc:
-                self._force_recon = True
-                self.logger.info("Socket error, attempting reconnect: %s", exc)
-                self.logger.debug("Socket error", exc_info=True)
+                except PyChromecastStopped:
+                    return
 
-            except Exception:  # pylint: disable=broad-except
-                self._force_recon = True
-                # Wait before connecting to the service again
-                if self._service is not None:
-                    self._backoff(self._service)
-                self.logger.exception(
-                    "Unhandled exception in worker thread, attempting reconnect"
-                )
+                except ChromecastConnectionClosed as exc:
+                    self._force_recon = True
+                    self.logger.debug("%s", exc)
+
+                except OSError as exc:
+                    self._force_recon = True
+                    self.logger.info("Socket error, attempting reconnect: %s", exc)
+                    self.logger.debug("Socket error", exc_info=True)
+
+                except Exception:  # pylint: disable=broad-except
+                    self._force_recon = True
+                    # Wait before connecting to the service again
+                    if self._service is not None:
+                        self._backoff(self._service)
+                    self.logger.exception(
+                        "Unhandled exception in worker thread, attempting reconnect"
+                    )
+
+            if self.stop.is_set():
+                return
+            self._connection_lost()
 
     def run(self) -> None:
         """Connect to the cast and start polling the socket."""
@@ -580,13 +555,15 @@ class SocketClient(threading.Thread, CastStatusListener):
 
     def _run_once(self) -> None:
         """Receive from the socket and handle data."""
-        self._check_connection()
+        if self.heartbeat_controller.is_expired():
+            self.logger.info("Heartbeat timeout, resetting connection")
+            self._force_recon = True
+            return
 
-        # A connection has been established at this point by self._check_connection
         assert self.socket is not None
 
         # Poll the socket and the socketpair, with a timeout of SELECT_TIMEOUT
-        # The timeout ensures we call _check_connection often enough to avoid
+        # The timeout ensures we check the heartbeat often enough to avoid
         # the HeartbeatController from detecting a timeout
         # The socketpair allow us to be interrupted on shutdown without waiting
         # for the SELECT_TIMEOUT timout to expire
@@ -616,29 +593,37 @@ class SocketClient(threading.Thread, CastStatusListener):
                 except Exception:  # pylint: disable=broad-except
                     self.logger.exception("Unhandled exception in callback function")
 
-    def _check_connection(self) -> None:
-        """Checks if the connection is active, and if not reconnect."""
-        # check if connection is expired
-        reset = False
-        if self._force_recon:
-            self.logger.debug("Forced reconnection")
-            reset = True
-
-        elif self.heartbeat_controller.is_expired():
-            self.logger.info("Heartbeat timeout, resetting connection")
-            reset = True
-
-        if reset:
-            self.receiver_controller.disconnected()
-            # disconnect_channel removes the channel from the list
-            for channel in list(self._open_channels):
-                self.disconnect_channel(channel)
-            self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
-                )
+    def _connection_lost(self) -> None:
+        """Tear down a lost connection, and report it."""
+        self.receiver_controller.disconnected()
+        # disconnect_channel removes the channel from the list
+        for channel in list(self._open_channels):
+            self.disconnect_channel(channel)
+        self._report_connection_status(
+            ConnectionStatus(
+                CONNECTION_STATUS_LOST, NetworkAddress(self.host, self.port), None
             )
-            self.initialize_connection()
+        )
+        with self._socket_lock:
+            self._close_socket()
+
+            callbacks = list(self._request_callbacks.values())
+            self._recv_buffer = b""
+            self._request_id = 0
+            self._request_callbacks = {}
+            self._open_channels = []
+            self.connecting = True
+
+        # Make sure nobody is blocking.
+        for callback_function in callbacks:
+            try:
+                callback_function(False, None)
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception("Unhandled exception in callback function")
+
+        self.app_namespaces = []
+        self.destination_id = None
+        self.session_id = None
 
     def _route_message(self, message: CastMessage, data: dict) -> None:
         """Route message to any handlers on the message namespace"""

@@ -828,8 +828,14 @@ def test_socket_error_logged_without_traceback(
     socket_client: SocketClient, caplog: pytest.LogCaptureFixture, error: OSError
 ) -> None:
     """Test a socket error is logged on one line at info, the traceback at debug."""
+
+    def connect() -> None:
+        socket_client._force_recon = False  # pylint: disable=protected-access
+
     with (
-        patch.object(socket_client, "initialize_connection"),
+        patch.object(
+            socket_client, "initialize_connection", side_effect=connect
+        ) as initialize_connection,
         patch.object(
             socket_client, "_run_once", side_effect=[error, PyChromecastStopped()]
         ),
@@ -849,7 +855,8 @@ def test_socket_error_logged_without_traceback(
         record.levelno == logging.DEBUG and record.exc_info is not None
         for record in caplog.records
     )
-    assert socket_client._force_recon  # pylint: disable=protected-access
+    # Reconnected
+    assert initialize_connection.call_count == 2
 
 
 def test_stopped_while_handling_messages(socket_client: SocketClient) -> None:
@@ -997,3 +1004,46 @@ def test_connection_backoff_kept_until_connected(socket_client: SocketClient) ->
     assert socket_client.is_connected
     assert service not in socket_client._retries  # pylint: disable=protected-access
     assert socket_client._service == service  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("cause", ["heartbeat", "write"])
+def test_lost_connection_reconnects(socket_client: SocketClient, cause: str) -> None:
+    """Test a lost connection is torn down and reported, then reconnected."""
+    FakeSocket(socket_client)
+    listener = MagicMock()
+    socket_client.register_connection_listener(listener)
+    callback = MagicMock()
+    socket_client._request_callbacks[1] = callback  # pylint: disable=protected-access
+    calls = 0
+
+    def initialize_connection() -> None:
+        nonlocal calls
+        calls += 1
+        # Already connected the first time, stopped when reconnecting
+        if calls > 1:
+            raise PyChromecastStopped("Socket client's thread is stopped.")
+
+    def run_once() -> None:
+        if cause == "heartbeat":
+            with patch.object(
+                socket_client.heartbeat_controller, "is_expired", return_value=True
+            ):
+                run_once_real()
+        else:
+            # A sender failed to write
+            socket_client._force_recon = True  # pylint: disable=protected-access
+
+    run_once_real = socket_client._run_once  # pylint: disable=protected-access
+    with (
+        patch.object(
+            socket_client, "initialize_connection", side_effect=initialize_connection
+        ),
+        patch.object(socket_client, "_run_once", side_effect=run_once),
+    ):
+        socket_client.run()
+
+    assert calls == 2
+    statuses = [c.args[0].status for c in listener.new_connection_status.mock_calls]
+    assert statuses == [CONNECTION_STATUS_LOST, CONNECTION_STATUS_DISCONNECTED]
+    callback.assert_called_once_with(False, None)
+    assert socket_client.socket is None
