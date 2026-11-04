@@ -234,9 +234,16 @@ class _EndpointMonitor(
             self._manager.on_sessions_changed()
 
     def new_connection_status(self, status: ConnectionStatus) -> None:
-        """Request status when connected."""
+        """Request status when connected, forget the session when disconnected."""
         if status.status == CONNECTION_STATUS_CONNECTED:
             self._request_status()
+        elif status.status in (
+            CONNECTION_STATUS_DISCONNECTED,
+            CONNECTION_STATUS_LOST,
+        ):
+            self._session_id = None
+            self._mz.reset_members()
+            self._manager.on_sessions_changed()
 
     def multizone_member_added(self, group_uuid: str) -> None:
         """Members are only changed by a status, or a broadcast of the change."""
@@ -297,15 +304,6 @@ class _GroupMonitor(
 
     def load_media_failed(self, queue_item_id: int, error_code: int) -> None:
         """Called when load media failed."""
-
-    def new_connection_status(self, status: ConnectionStatus) -> None:
-        """Handle reception of a new ConnectionStatus."""
-        super().new_connection_status(status)
-        if status.status in (
-            CONNECTION_STATUS_DISCONNECTED,
-            CONNECTION_STATUS_LOST,
-        ):
-            self._mz.reset_members()
 
     def multizone_member_added(self, group_uuid: str) -> None:
         """Handle added audio group member."""

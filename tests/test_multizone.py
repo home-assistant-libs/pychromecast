@@ -19,7 +19,10 @@ from pychromecast.controllers.multizone import (
 )
 from pychromecast.const import CAST_TYPE_GROUP
 from pychromecast.error import RequestFailed
-from pychromecast.socket_client import CONNECTION_STATUS_CONNECTED
+from pychromecast.socket_client import (
+    CONNECTION_STATUS_CONNECTED,
+    CONNECTION_STATUS_LOST,
+)
 from pychromecast.models import CastInfo
 
 GROUP_UUID = "9a4683f8-a265-4ec7-aab1-a70cb50f4ca7"
@@ -335,6 +338,11 @@ class FakeEndpoint:
             )
         self.new_cast_status()
 
+    def lose_connection(self) -> None:
+        """Report a lost connection, like a Chromecast."""
+        for listener in self._connection_listeners:
+            listener.new_connection_status(MagicMock(status=CONNECTION_STATUS_LOST))
+
     def new_cast_status(self) -> None:
         """Report the receiver status."""
         for listener in self._status_listeners:
@@ -415,6 +423,27 @@ def _session_endpoint(manager: MultizoneManager, device: str) -> UUID:
 
 
 SESSION_UPDATED = {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []}
+
+
+def test_session_forgotten_when_connection_lost() -> None:
+    """Test a device which loses its connection owns no session until it's back."""
+    speaker_a = FakeEndpoint(
+        SPEAKER_A, SESSION, [SPEAKER_A, SPEAKER_B], PLAYBACK_SESSION, "192.0.2.10"
+    )
+    manager = _manager([speaker_a, _speaker_b()])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_B), listener)
+    assert _session_endpoint(manager, SPEAKER_B) == UUID(SPEAKER_A)
+
+    speaker_a.lose_connection()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_B)) is None
+    assert manager.get_multizone_members(UUID(SPEAKER_A)) == []
+    listener.multizone_sessions_changed.assert_called_once_with()
+
+    speaker_a.connect()
+
+    assert _session_endpoint(manager, SPEAKER_B) == UUID(SPEAKER_A)
 
 
 def test_update_session_devices_add() -> None:
