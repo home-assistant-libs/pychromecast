@@ -425,6 +425,31 @@ def test_connect_closes_socket_on_failed_attempt(
     assert list(socket_client.selector.get_map().values()) == [wakeup]
 
 
+def test_connect_closes_socket_on_failed_register(
+    socket_client: SocketClient,
+) -> None:
+    """Test a socket which couldn't be registered is closed, not unregistered."""
+    tls_socket, peer = socket.socketpair()
+    context = MagicMock()
+    context.wrap_socket.return_value = tls_socket
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext", return_value=context),
+        patch.object(
+            socket_client.selector, "register", side_effect=OSError("register failed")
+        ),
+        patch.object(socket_client.selector, "unregister") as unregister,
+        pytest.raises(ChromecastConnectionError),
+    ):
+        socket_client.initialize_connection()
+    peer.close()
+
+    unregister.assert_not_called()
+    assert tls_socket.fileno() == -1
+    assert socket_client.socket is None
+    assert socket_client.remote_selector_key is None
+
+
 def test_cleanup_closes_socket(socket_client: SocketClient) -> None:
     """Test the socket is closed and unregistered when cleaning up."""
     sock = FakeSocket(socket_client)
