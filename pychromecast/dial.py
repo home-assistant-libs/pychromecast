@@ -196,7 +196,7 @@ def get_cast_type(
                     timeout / 2,
                     context,
                 )
-            except (urllib.error.HTTPError, urllib.error.URLError):
+            except urllib.error.HTTPError, urllib.error.URLError:
                 _, status = _get_status(
                     cast_info.services,
                     zconf,
@@ -266,7 +266,7 @@ def get_device_info(  # pylint: disable=too-many-locals
                 timeout / 2,
                 context,
             )
-        except (urllib.error.HTTPError, urllib.error.URLError):
+        except urllib.error.HTTPError, urllib.error.URLError:
             _, status = _get_status(
                 services,
                 zconf,

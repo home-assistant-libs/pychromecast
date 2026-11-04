@@ -338,7 +338,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             try:
                                 # Mypy does not understand that we catch errors, ignore it
                                 self.fn = service_info.properties[b"fn"].decode("utf-8")  # type: ignore[union-attr]
-                            except (AttributeError, KeyError, UnicodeError):
+                            except AttributeError, KeyError, UnicodeError:
                                 pass
                         self.logger.debug(
                             "Resolved service %s to %s:%s", service, host, port
@@ -826,7 +826,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     no_add_request_id=no_add_request_id,
                     force=force,
                 )
-        except (PyChromecastStopped, NotConnected):
+        except PyChromecastStopped, NotConnected:
             if callback_function:
                 callback_function(False, None)
             raise
