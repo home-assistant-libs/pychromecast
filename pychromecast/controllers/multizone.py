@@ -189,7 +189,7 @@ class _EndpointMonitor(
         if status.session_id != self._session_id:
             self._session_id = status.session_id
             self._request_status()
-            self._manager.on_sessions_changed()
+            self._manager.on_endpoint_changed()
 
     def new_connection_status(self, status: ConnectionStatus) -> None:
         """Request status when connected, forget the session when disconnected."""
@@ -201,17 +201,19 @@ class _EndpointMonitor(
         ):
             self._session_id = None
             self._mz.reset_members()
-            self._manager.on_sessions_changed()
+            self._manager.on_endpoint_changed()
 
     def multizone_member_added(self, group_uuid: str) -> None:
-        """Members are only changed by a status, or a broadcast of the change."""
+        """Report the new members."""
+        self._manager.on_endpoint_changed()
 
     def multizone_member_removed(self, group_uuid: str) -> None:
-        """Members are only changed by a status, or a broadcast of the change."""
+        """Report the new members."""
+        self._manager.on_endpoint_changed()
 
     def multizone_status_received(self) -> None:
-        """Report the new status."""
-        self._manager.on_sessions_changed()
+        """Report the updated members and playback session."""
+        self._manager.on_endpoint_changed()
 
     def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
         """Request status when the devices playing the session change."""
@@ -294,10 +296,12 @@ class _GroupMonitor(
     def multizone_member_added(self, group_uuid: str) -> None:
         """Handle added audio group member."""
         self._manager.on_group_member_added(self._uuid, group_uuid)
+        super().multizone_member_added(group_uuid)
 
     def multizone_member_removed(self, group_uuid: str) -> None:
         """Handle removed audio group member."""
         self._manager.on_group_member_removed(self._uuid, group_uuid)
+        super().multizone_member_removed(group_uuid)
 
 
 class MultizoneManager:
@@ -346,7 +350,7 @@ class MultizoneManager:
             group["chromecast"].unregister_handler(group["controller"])
         for member in self._casts.values():
             member["group_memberships"].discard(group_uuid_str)
-        self.on_sessions_changed()
+        self.on_endpoint_changed()
 
     def register_listener(
         self, member_uuid: UUID, listener: MultiZoneManagerListener
@@ -487,10 +491,11 @@ class MultizoneManager:
         assert waiter.response is not None
         return _parse_session_update(waiter.response)
 
-    def on_sessions_changed(self) -> None:
+    def on_endpoint_changed(self) -> None:
         """Tell the listeners the devices playing a session may have changed.
 
-        Called by the monitors of the managed devices and groups.
+        Called when the session id, members or playback session of a managed
+        device or group changed, or when it's removed.
         """
         for cast in list(self._casts.values()):
             for listener in list(cast["listeners"]):

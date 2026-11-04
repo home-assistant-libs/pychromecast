@@ -437,7 +437,7 @@ def test_session_forgotten_when_connection_lost() -> None:
 
     assert manager.get_session_endpoint(UUID(SPEAKER_B)) is None
     assert manager.get_multizone_members(UUID(SPEAKER_A)) == []
-    listener.multizone_sessions_changed.assert_called_once_with()
+    listener.multizone_sessions_changed.assert_called_with()
 
     speaker_a.connect()
 
@@ -723,6 +723,33 @@ def test_sessions_changed_reported() -> None:
     assert listener.multizone_sessions_changed.call_count == 2
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"type": "DEVICE_ADDED", "device": {"deviceId": KITCHEN_UUID, "name": "K"}},
+        {"type": "DEVICE_REMOVED", "deviceId": SPEAKER_B},
+    ],
+)
+@pytest.mark.parametrize("is_group", [False, True])
+def test_member_broadcast_reported(is_group: bool, message: dict) -> None:
+    """Test manager listeners are told about a broadcast of changed members."""
+    if is_group:
+        endpoint = _group([SPEAKER_A, SPEAKER_B])
+        manager = _manager([_speaker_b()], [endpoint])
+    else:
+        endpoint = FakeEndpoint(
+            SPEAKER_A, SESSION, [SPEAKER_A, SPEAKER_B], PLAYBACK_SESSION
+        )
+        manager = _manager([endpoint, _speaker_b()])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_B), listener)
+
+    assert endpoint.controller is not None
+    endpoint.controller.receive_message(MagicMock(), message)
+
+    listener.multizone_sessions_changed.assert_called_once_with()
+
+
 def test_removed_device_not_tracked() -> None:
     """Test a removed device no longer requests status."""
     speaker_a = _speaker_a(None)
@@ -755,7 +782,7 @@ def test_remove_group(group_uuid: UUID | str) -> None:
     manager.remove_multizone(group_uuid)
 
     listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
-    listener.multizone_sessions_changed.assert_called_once_with()
+    listener.multizone_sessions_changed.assert_called_with()
     group.sent.clear()
     group.connect()
     assert not group.sent
