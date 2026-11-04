@@ -239,9 +239,10 @@ def get_cast_type(
         cast_info.port,
         cast_type,
         manufacturer,
-        cast_info.mac_address,
-        cast_info.product_name,
-        cast_info.cast_build_revision,
+        device_capabilities=cast_info.device_capabilities,
+        mac_address=cast_info.mac_address,
+        product_name=cast_info.product_name,
+        cast_build_revision=cast_info.cast_build_revision,
     )
 
 

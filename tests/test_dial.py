@@ -9,7 +9,12 @@ from uuid import UUID
 
 import pytest
 
-from pychromecast.const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
+from pychromecast.const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_CHROMECAST,
+    CAST_TYPE_GROUP,
+    CastCapability,
+)
 from pychromecast.dial import (
     _get_eureka_info,
     _get_group_info,
@@ -283,3 +288,23 @@ def test_get_eureka_info_falls_back_to_http() -> None:
         ("/setup/eureka_info?params=device_info,name", True, 15),
         ("/setup/eureka_info?params=device_info,name", False, 15),
     ]
+
+
+def test_get_cast_type_keeps_device_capabilities() -> None:
+    """Test that get_cast_type keeps the device capabilities."""
+    cast_info = CastInfo(
+        {HostServiceInfo("192.0.2.1", 8009)},
+        UUID("12345678-1234-1234-1234-123456789abc"),
+        "Speaker model",
+        "Speaker",
+        "192.0.2.1",
+        8009,
+        None,
+        None,
+        device_capabilities=CastCapability(0),
+    )
+    with patch(
+        "pychromecast.dial._get_status", side_effect=urllib.error.URLError("down")
+    ):
+        result = get_cast_type(cast_info)
+    assert result.device_capabilities == CastCapability(0)
