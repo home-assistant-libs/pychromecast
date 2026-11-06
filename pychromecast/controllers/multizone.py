@@ -175,6 +175,8 @@ class _EndpointMonitor(
         self._mz = controller
         self._uuid = str(cast.uuid)
         self._session_id: str | None = None
+        # The session the multizone status was last received for
+        self._status_session_id: str | None = None
         self._unregister = [
             cast.register_status_listener(self),
             cast.register_connection_listener(self),
@@ -185,6 +187,11 @@ class _EndpointMonitor(
     def session_id(self) -> str | None:
         """Return the id of the session the endpoint runs, from its status."""
         return self._session_id
+
+    @property
+    def status_current(self) -> bool:
+        """Return True if the multizone status was received for the session."""
+        return self._status_session_id == self._session_id
 
     def stop(self) -> None:
         """Unregister the monitor."""
@@ -216,7 +223,7 @@ class _EndpointMonitor(
             CONNECTION_STATUS_DISCONNECTED,
             CONNECTION_STATUS_LOST,
         ):
-            self._session_id = None
+            self._session_id = self._status_session_id = None
             self._mz.reset_members()
             self._manager.on_endpoint_changed()
 
@@ -230,6 +237,7 @@ class _EndpointMonitor(
 
     def multizone_status_received(self) -> None:
         """Report the updated members and playback session."""
+        self._status_session_id = self._session_id
         self._manager.on_endpoint_changed()
 
     def multizone_playback_session_updated(self, update: PlaybackSessionUpdate) -> None:
@@ -604,8 +612,14 @@ class MultizoneManager:
         Returns an empty list if it owns no session.
         """
         controller = group["controller"]
-        # Followers report the session_id but no playback session
-        if group["monitor"].session_id is None or controller.playback_session is None:
+        monitor = group["monitor"]
+        # Followers report the session_id but no playback session, the playback
+        # session may be of the previous session until the status is received
+        if (
+            monitor.session_id is None
+            or not monitor.status_current
+            or controller.playback_session is None
+        ):
             return []
         members = controller.members
         # A dynamic group the session has left can keep reporting both for a

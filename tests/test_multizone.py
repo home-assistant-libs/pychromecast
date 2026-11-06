@@ -914,3 +914,22 @@ def test_session_moved_reported() -> None:
         MagicMock(), {"type": "PLAYBACK_SESSION_UPDATED", "requestId": 0}
     )
     listener_a.multizone_session_moved.assert_called_once()
+
+
+def test_session_owner_waits_for_status() -> None:
+    """Test an endpoint playing another session isn't an owner until its status."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a, _speaker_b()])
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
+    assert speaker_a.controller is not None
+
+    # Joined a group as a follower, its status doesn't arrive
+    speaker_a.cast.status.session_id = "973c31d5"
+    with patch.object(speaker_a.controller, "update_members"):
+        speaker_a.new_cast_status()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
+
+    speaker_a.controller.update_members()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
