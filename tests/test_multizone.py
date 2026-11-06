@@ -681,13 +681,17 @@ def test_remove_device() -> None:
         manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
 
 
-def test_add_multizone_started_cast() -> None:
-    """Test a cast must be added before it's started."""
+def test_add_multizone_connected_cast() -> None:
+    """Test a cast which is already connected when it's added owns its session."""
     speaker_a = _speaker_a()
     speaker_a.cast.socket_client.is_alive.return_value = True
+    speaker_a.cast.socket_client.is_connected = True
+    manager = MultizoneManager()
 
-    with pytest.raises(AssertionError, match="before the cast is started"):
-        MultizoneManager().add_multizone(speaker_a.cast)
+    manager.add_multizone(speaker_a.cast)
+
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS"]
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
 
 
 def test_multizone_manager_members() -> None:

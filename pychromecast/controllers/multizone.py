@@ -195,6 +195,12 @@ class _EndpointMonitor(
         with suppress(PyChromecastError):
             self._mz.update_members()
 
+    def connected(self, status: CastStatus | None) -> None:
+        """Start from a cast which was already connected when it was added."""
+        if status is not None:
+            self._session_id = status.session_id
+        self._request_status()
+
     def new_cast_status(self, status: CastStatus) -> None:
         """Request status if the endpoint plays another session."""
         if status.session_id != self._session_id:
@@ -329,12 +335,7 @@ class MultizoneManager:
 
         The members of a group are told about the group's status. Returns the
         multizone controller of the device or group, for registering listeners.
-        Must be called before the cast is started, the status is requested
-        when it connects.
         """
-        assert not group_cast.socket_client.is_alive(), (
-            "add_multizone must be called before the cast is started"
-        )
         controller = MultizoneController(group_cast.uuid)
         monitor: _EndpointMonitor
         if group_cast.cast_type == CAST_TYPE_GROUP:
@@ -348,6 +349,9 @@ class MultizoneManager:
             "monitor": monitor,
         }
         group_cast.register_handler(controller)
+        # The cast won't report a connection it already has
+        if group_cast.socket_client.is_connected:
+            monitor.connected(group_cast.status)
         return controller
 
     def remove_multizone(self, group_uuid: UUID | str) -> None:
