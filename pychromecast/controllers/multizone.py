@@ -463,9 +463,9 @@ class MultizoneManager:
 
         The endpoint is the device or group owning the session, see
         get_session_endpoint. All devices must have been added with
-        add_multizone. Blocks until the change is done, and the endpoint's
-        members are updated if the session stays on it. Returns None if nothing
-        changes.
+        add_multizone. Blocks until the change is done. Returns None if nothing
+        changes. Changes of the same endpoint must not be made at the same time,
+        each starts from the devices the previous one set.
 
         Raises RequestFailed if the endpoint isn't managed or owns no session, no
         device would be left, a device isn't managed or the change fails, and
@@ -490,14 +490,7 @@ class MultizoneManager:
         if not target:
             raise RequestFailed("set playback devices, no device would be left")
 
-        devices = []
-        for uuid in target:
-            member = self._groups.get(str(uuid))
-            if member is None:
-                raise RequestFailed(
-                    f"set playback devices, no address known for device {uuid}"
-                )
-            devices.append(_connected_cast_info(member["chromecast"]))
+        devices = self._session_devices(target)
 
         _LOGGER.debug(
             "Setting the devices of session %s on %s to %s",
@@ -513,15 +506,19 @@ class MultizoneManager:
         )
         waiter.wait_response()
         assert waiter.response is not None
-        update = _parse_session_update(waiter.response)
-        if update.session_endpoint is None:
-            # The response doesn't list the devices, wait for them so the next
-            # change starts from them
-            status = WaitResponse(timeout, "multizone status")
-            with suppress(PyChromecastError):
-                controller.update_members(callback_function=status.callback)
-                status.wait_response()
-        return update
+        return _parse_session_update(waiter.response)
+
+    def _session_devices(self, devices: AbstractSet[UUID]) -> list[CastInfo]:
+        """Return the addresses of the devices to set a session to."""
+        cast_infos = []
+        for uuid in devices:
+            member = self._groups.get(str(uuid))
+            if member is None:
+                raise RequestFailed(
+                    f"set playback devices, no address known for device {uuid}"
+                )
+            cast_infos.append(_connected_cast_info(member["chromecast"]))
+        return cast_infos
 
     def on_endpoint_changed(self) -> None:
         """Tell the listeners the devices playing a session may have changed.
@@ -652,6 +649,18 @@ class MultizoneController(BaseController):
             for listener in self._status_listeners:
                 listener.multizone_member_added(uuid)
 
+    def _set_members(self, devices: list[CastInfo]) -> None:
+        """Set the members to the devices a session was changed to.
+
+        A status or broadcast received later corrects them.
+        """
+        uuids = {str(device.uuid) for device in devices}
+        for uuid in list(self._members):
+            if uuid not in uuids:
+                self._remove_member(uuid)
+        for device in devices:
+            self._add_member(str(device.uuid), device.friendly_name or str(device.uuid))
+
     def _remove_member(self, uuid: str) -> None:
         name = self._members.pop(uuid, "<Unknown>")
         _LOGGER.debug(
@@ -728,8 +737,11 @@ class MultizoneController(BaseController):
 
         The callback is called with True and the PLAYBACK_SESSION_UPDATED
         response if all devices were changed, else with False and the response,
-        for example INVALID_REQUEST if this isn't the session's endpoint.
+        for example INVALID_REQUEST if this isn't the session's endpoint. If
+        all devices were changed and the session stays on this endpoint, the
+        members are the devices before the callback is called.
         """
+        devices = list(devices)
         device_list = [
             {
                 "deviceId": str(device.uuid),
@@ -750,15 +762,19 @@ class MultizoneController(BaseController):
             message["sessionName"] = session_name
 
         def handle_response(msg_sent: bool, response: dict | None) -> None:
-            if not callback_function:
-                return
-            callback_function(
+            changed = (
                 msg_sent
                 and response is not None
                 and response.get(MESSAGE_TYPE) == TYPE_SESSION_UPDATED
-                and not response.get("failedDevices"),
-                response,
+                and not response.get("failedDevices")
             )
+            if changed:
+                assert response is not None
+                endpoint = _parse_session_update(response).session_endpoint
+                if endpoint is None or endpoint.device_id == self._uuid:
+                    self._set_members(devices)
+            if callback_function:
+                callback_function(changed, response)
 
         self.send_message(message, callback_function=handle_response)
 
