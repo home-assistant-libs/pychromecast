@@ -17,24 +17,42 @@ import ssl
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from struct import pack, unpack
 from typing import Any
+from uuid import UUID
 
+from cryptography import x509
 import zeroconf
 
 from .config import APP_AUDIBLE
-from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
+from .const import (
+    CAST_TYPE_GROUP,
+    MESSAGE_TYPE,
+    PLATFORM_DESTINATION_ID,
+    REQUEST_ID,
+    SESSION_ID,
+)
 from .controllers import BaseController, CallbackType, Listeners
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
+from .device_auth import (
+    DEVICE_AUTH_TIMEOUT,
+    DeviceAuthFailureClass,
+    DeviceAuthResult,
+    DeviceAuthStatus,
+    authenticate,
+    verify_group_leader,
+    verify_not_group_endpoint,
+)
 from .dial import get_host_from_service
 from .error import (
     ChromecastConnectionError,
     ChromecastConnectionClosed,
     ControllerNotRegistered,
+    DeviceAuthenticationError,
     NotConnected,
     PyChromecastStopped,
     UnsupportedNamespace,
@@ -60,10 +78,19 @@ CONNECTION_STATUS_DISCONNECTED = "DISCONNECTED"
 CONNECTION_STATUS_FAILED = "FAILED"
 # Failed to resolve service name
 CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
+# The device failed device authentication and was not talked to, the result is
+# in ConnectionStatus.device_auth. The connection is retried like after a
+# network failure. Consumers should apply a grace period before surfacing a
+# failure of class DeviceAuthFailureClass.WRONG_IDENTITY, it's expected for a
+# while after an IP address change or a group leader change.
+CONNECTION_STATUS_FAILED_AUTH = "FAILED_AUTH"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 
 SELECT_TIMEOUT = 5.0
+# Seconds failures which are expected for a while, like a device with the wrong
+# identity at a stale address or a group leader change, are only logged at debug
+FAILURE_GRACE_PERIOD = 600.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -120,6 +147,9 @@ class ConnectionStatus:
     status: str
     address: NetworkAddress | None
     service: HostServiceInfo | MDNSServiceInfo | None
+    # The device authentication result, set for CONNECTED and FAILED_AUTH, see
+    # CONNECTION_STATUS_FAILED_AUTH
+    device_auth: DeviceAuthResult | None = None
 
 
 class _SocketClientLogger(logging.LoggerAdapter):
@@ -179,6 +209,17 @@ class SocketClient(threading.Thread, CastStatusListener):
     :param zconf: A zeroconf instance, needed if a list of services is passed.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
+    :param device_auth: Authenticate the device on every connect, and don't talk
+                        to a device which is not genuine. Set to False to talk to
+                        any device, the device's identity is then not verified.
+    :param expected_uuid: The UUID of the device or group. If set, a device whose
+                          TLS certificate is for another UUID fails
+                          authentication, unless cast_type is a group and the
+                          device proves it leads the group, see
+                          device_auth.verify_group_leader. If None, the identity
+                          is not checked.
+    :param device_auth_trust_roots: Replaces the bundled Google Cast roots, for
+                                    tests.
     """
 
     # pylint: disable-next=too-many-arguments
@@ -191,6 +232,9 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_wait: float | None,
         services: set[HostServiceInfo | MDNSServiceInfo],
         zconf: zeroconf.Zeroconf | None,
+        device_auth: bool = True,
+        expected_uuid: UUID | None = None,
+        device_auth_trust_roots: Sequence[x509.Certificate] | None = None,
     ) -> None:
         super().__init__()
 
@@ -207,6 +251,15 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.retry_wait = retry_wait or RETRY_TIME
         self.services = services
         self.zconf = zconf
+        self.device_auth = device_auth
+        self.expected_uuid = expected_uuid
+        self.device_auth_trust_roots = device_auth_trust_roots
+        # The device authentication result of the current or last attempt
+        self.device_auth_result: DeviceAuthResult | None = None
+        # When the current streak of failures started, and which kinds of
+        # failures logged after a grace period were logged in the streak
+        self._failure_streak_start: float | None = None
+        self._failure_streak_warned = False
 
         self.host = "unknown"
         self.port = 8009
@@ -251,6 +304,13 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.receiver_controller.register_status_listener(self)
 
+        if not device_auth:
+            self.logger.info(
+                "Cast device authentication is disabled; "
+                "the identity of the device at %s is not verified",
+                services,
+            )
+
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches, too-many-locals
         self,
     ) -> None:
@@ -279,6 +339,22 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.session_id = None
 
         retry_log_fun = self.logger.info
+        auth_log_fun = self.logger.warning
+
+        def log_retry(msg: str, *args: object) -> None:
+            """Log a network-like failure, for groups after a grace period."""
+            nonlocal retry_log_fun
+            if self.cast_type != CAST_TYPE_GROUP:
+                retry_log_fun(msg, *args)
+                retry_log_fun = self.logger.debug
+            # A group leader change closes the group's port on the old leader,
+            # and is expected to heal when mDNS finds the new one
+            elif self._failure_streak_exceeds_grace():
+                self.logger.info(
+                    f"{msg} (failing for %.0fs)", *args, self._streak_age()
+                )
+            else:
+                self.logger.debug(msg, *args)
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -309,6 +385,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
+                    self.device_auth_result = None
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -356,20 +433,36 @@ class SocketClient(threading.Thread, CastStatusListener):
                         (self.host, self.port), self.timeout
                     )
                     try:
-                        self.socket = context.wrap_socket(raw_socket)
+                        tls_socket = context.wrap_socket(raw_socket)
                     except BaseException:
                         raw_socket.close()
                         raise
+                    # Authenticate before anything else is sent. While
+                    # self.connecting is set, other threads fail to send with
+                    # NotConnected. The socket is published, and registered with
+                    # the selector, only once the device is authenticated.
+                    # Known limitation: disconnect() waits for the handshake, up
+                    # to DEVICE_AUTH_TIMEOUT, and twice that if eureka_info is
+                    # fetched, like it waits for connecting.
+                    try:
+                        self.device_auth_result = self._authenticate_device(tls_socket)
+                    except BaseException:
+                        tls_socket.close()
+                        raise
+                    self.socket = tls_socket
                     self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
                     )
                     self.connecting = False
                     self._force_recon = False
+                    self._failure_streak_start = None
+                    self._failure_streak_warned = False
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTED,
                             NetworkAddress(self.host, self.port),
                             None,
+                            device_auth=self.device_auth_result,
                         )
                     )
                     self.receiver_controller.update_status()
@@ -382,6 +475,60 @@ class SocketClient(threading.Thread, CastStatusListener):
                     else:
                         self.logger.info("Connection reestablished!")
                     return
+
+                except DeviceAuthenticationError as err:
+                    self.connecting = True
+                    self.device_auth_result = err.result
+                    self._close_socket()
+                    if self.stop.is_set():
+                        self.logger.debug(
+                            "Failed to connect: %s. aborting due to stop signal.", err
+                        )
+                        raise ChromecastConnectionError("Failed to connect") from err
+
+                    self._report_connection_status(
+                        ConnectionStatus(
+                            CONNECTION_STATUS_FAILED_AUTH,
+                            NetworkAddress(self.host, self.port),
+                            None,
+                            device_auth=err.result,
+                        )
+                    )
+                    result = err.result
+                    failure_class = result.failure_class
+                    self._note_failure()
+                    if failure_class is DeviceAuthFailureClass.WRONG_IDENTITY:
+                        self._log_wrong_identity(result, retry["delay"])
+                    elif failure_class is DeviceAuthFailureClass.TRANSIENT:
+                        log_retry(
+                            "Device authentication with service %s failed: %s (%s), "
+                            "retrying in %.1fs",
+                            service,
+                            result.status,
+                            result.detail,
+                            retry["delay"],
+                        )
+                    elif failure_class is DeviceAuthFailureClass.CLOCK:
+                        auth_log_fun(
+                            "Device authentication failed: %s (%s). Check the "
+                            "system clock; if it's correct, the device may need a "
+                            "firmware update. Not connecting, retrying in %.1fs",
+                            result.status,
+                            result.detail,
+                            retry["delay"],
+                        )
+                        auth_log_fun = self.logger.debug
+                    else:
+                        auth_log_fun(
+                            "Device authentication failed, the device may not be a "
+                            "genuine Cast device: %s (%s). Not connecting, "
+                            "retrying in %.1fs",
+                            result.status,
+                            result.detail,
+                            retry["delay"],
+                        )
+                        auth_log_fun = self.logger.debug
+                    mdns_backoff(service, retry)
 
                 # OSError raised if connecting to the socket fails, NotConnected raised
                 # if another thread tries - and fails - to send a message before the
@@ -402,13 +549,14 @@ class SocketClient(threading.Thread, CastStatusListener):
                             None,
                         )
                     )
-                    retry_log_fun(
+                    if self.cast_type == CAST_TYPE_GROUP:
+                        self._note_failure()
+                    log_retry(
                         "Failed to connect to service %s, retrying in %.1fs",
                         service,
                         retry["delay"],
                     )
                     mdns_backoff(service, retry)
-                    retry_log_fun = self.logger.debug
 
             # Only sleep if we have another retry remaining
             if tries is None or tries > 1:
@@ -423,8 +571,132 @@ class SocketClient(threading.Thread, CastStatusListener):
                 tries -= 1
 
         self.stop.set()
+        # The result is reset for every attempt, set if the last one failed auth
+        last_result = self.device_auth_result
+        if last_result is not None and not last_result.verified:
+            self.logger.error(
+                "Failed to connect, device authentication failed (%s). No retries.",
+                last_result.status,
+            )
+            raise DeviceAuthenticationError(last_result)
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
+
+    def _note_failure(self) -> None:
+        """Note a failure, starting a failure streak if none is ongoing."""
+        if self._failure_streak_start is None:
+            self._failure_streak_start = time.monotonic()
+
+    def _streak_age(self) -> float:
+        """Return how long the failure streak has lasted, in seconds."""
+        if self._failure_streak_start is None:
+            return 0.0
+        return time.monotonic() - self._failure_streak_start
+
+    def _failure_streak_exceeds_grace(self) -> bool:
+        """Return True once per streak, after the grace period."""
+        if self._failure_streak_warned or self._streak_age() <= FAILURE_GRACE_PERIOD:
+            return False
+        self._failure_streak_warned = True
+        return True
+
+    def _log_wrong_identity(self, result: DeviceAuthResult, delay: float) -> None:
+        """Log a genuine device with the wrong identity, warn if it persists."""
+        expected = (
+            f"{self.fn} ({self.expected_uuid})" if self.fn else str(self.expected_uuid)
+        )
+        msg = (
+            "The device at this address is a genuine Cast device but not %s "
+            "(it identifies as %s: %s). This can happen after an IP address change "
+            "or group leader change; still retrying in %.1fs, failing for %.0fs"
+        )
+        log_fun = (
+            self.logger.warning
+            if self._failure_streak_exceeds_grace()
+            else self.logger.debug
+        )
+        log_fun(
+            msg, expected, result.tls_cert_cn, result.detail, delay, self._streak_age()
+        )
+
+    def _authenticate_device(self, tls_socket: ssl.SSLSocket) -> DeviceAuthResult:
+        """Authenticate the device, raise DeviceAuthenticationError on failure."""
+        if not self.device_auth:
+            return DeviceAuthResult(
+                DeviceAuthStatus.DISABLED, "device authentication disabled"
+            )
+        timeout = min(self.timeout, DEVICE_AUTH_TIMEOUT)
+        try:
+            result = authenticate(
+                tls_socket,
+                expected_uuid=self.expected_uuid,
+                timeout=timeout,
+                trust_roots=self.device_auth_trust_roots,
+            )
+            # A group is served by its leader, whose certificate names the
+            # leader. Any other endpoint, even one labelled a group, must present
+            # the expected UUID.
+            if (
+                result.status is DeviceAuthStatus.UUID_MISMATCH
+                and self.cast_type == CAST_TYPE_GROUP
+                and self.expected_uuid is not None
+            ):
+                result = self._verify_group_leader(result, self.expected_uuid, timeout)
+            # A device presents its own certificate on the ports of the groups it
+            # leads too, don't accept such a port as the device itself
+            elif result.uuid_checked and self.port != 8009:
+                result = self._verify_not_group_endpoint(result, timeout)
+        finally:
+            tls_socket.settimeout(self.timeout)
+        if not result.verified:
+            raise DeviceAuthenticationError(result)
+        if result.leader_uuid is not None:
+            identity = f", the group leader {result.leader_uuid}"
+        elif result.uuid_checked:
+            identity = ""
+        else:
+            identity = " (UUID not checked)"
+        self.logger.debug(
+            "Device authenticated: %s via %s%s",
+            result.device_cert_subject,
+            result.trust_root,
+            identity,
+        )
+        return result
+
+    def _verify_group_leader(
+        self, result: DeviceAuthResult, group_uuid: UUID, timeout: float
+    ) -> DeviceAuthResult:
+        """Check the genuine device in result leads the group."""
+        attestation = verify_group_leader(
+            self.host,
+            self.port,
+            group_uuid,
+            result.device_cert_der,
+            timeout=timeout,
+        )
+        if not attestation.verified:
+            return replace(result, status=attestation.status, detail=attestation.detail)
+        return replace(
+            result,
+            status=DeviceAuthStatus.VERIFIED,
+            detail=attestation.detail,
+            uuid_checked=True,
+            leader_uuid=result.tls_cert_uuid,
+        )
+
+    def _verify_not_group_endpoint(
+        self, result: DeviceAuthResult, timeout: float
+    ) -> DeviceAuthResult:
+        """Check the device in result doesn't lead a group on self.port."""
+        check = verify_not_group_endpoint(
+            self.host, self.port, result.device_cert_der, timeout=timeout
+        )
+        if check.verified:
+            return result
+        return replace(
+            result, status=check.status, detail=check.detail, uuid_checked=False
+        )
 
     def _close_socket(self) -> None:
         """Close the socket to the Chromecast, if any."""
