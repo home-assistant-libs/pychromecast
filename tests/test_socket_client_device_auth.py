@@ -1377,3 +1377,180 @@ def test_e2e_group_not_genuine(
     assert len(receiver.connections[0]) == 1
     default_eureka.wait_idle()
     assert default_eureka.handlers == []
+
+
+# Copilot review of PR 1333
+
+
+@pytest.mark.usefixtures("fake_tls", "connect_patches")
+@pytest.mark.parametrize("device_auth", [False, True])
+def test_setup_failure_after_auth_is_not_auth_failure(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    device_auth: bool,
+) -> None:
+    """Test a failure after DISABLED or VERIFIED ends with the generic error."""
+    client = make_client(device_auth=device_auth)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        patch.object(
+            client.selector, "register", side_effect=OSError("register failed")
+        ),
+        caplog.at_level(logging.ERROR, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError) as err,
+    ):
+        client.initialize_connection()
+    assert type(err.value) is ChromecastConnectionError
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1
+    assert "Failed to connect. No retries." in errors[0]
+    assert "device authentication failed" not in errors[0]
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_network_notice_does_not_suppress_identity_warning(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test the group network notice and the identity warning are independent.
+
+    A group refuses connections past the grace period, then another genuine
+    device answers: one network notice, then still one identity warning.
+    """
+    client = make_client(cast_type="group", tries=6)
+    client.retry_wait = 0
+    clock = [1000.0]
+    calls = [0]
+
+    def connect(*_args: Any, **_kwargs: Any) -> Any:
+        clock[0] += 400
+        calls[0] += 1
+        if calls[0] <= 3:
+            raise ConnectionRefusedError("refused")
+        return MagicMock()
+
+    not_led = DeviceAuthResult(
+        DeviceAuthStatus.GROUP_NOT_LED, "not the leader", tls_cert_cn=str(OTHER_UUID)
+    )
+    with (
+        patch("pychromecast.controllers.receiver.ReceiverController.update_status"),
+        patch("pychromecast.controllers.heartbeat.HeartbeatController.ping"),
+        patch("pychromecast.socket_client.time", _fake_time(clock)),
+        patch("socket.create_connection", side_effect=connect),
+        patch("pychromecast.socket_client.authenticate", return_value=_mismatch()),
+        patch("pychromecast.socket_client.verify_group_leader", return_value=not_led),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+    notices = [
+        r.levelno
+        for r in caplog.records
+        if "Failed to connect to service" in r.getMessage()
+    ]
+    warnings = [
+        r.levelno
+        for r in caplog.records
+        if "genuine Cast device but not" in r.getMessage()
+    ]
+    assert notices == [logging.DEBUG, logging.DEBUG, logging.INFO]
+    assert warnings == [logging.WARNING, logging.DEBUG, logging.DEBUG]
+
+
+class Forwarder:
+    """A plain TCP forwarder, like socat, which doesn't terminate TLS."""
+
+    def __init__(self, upstream_port: int) -> None:
+        self.upstream_port = upstream_port
+        self.server = socket.create_server(("127.0.0.1", 0))
+        self.server.settimeout(0.05)
+        self.port = self.server.getsockname()[1]
+        self._stop = threading.Event()
+        self._threads: list[threading.Thread] = []
+        self._sockets: list[socket.socket] = []
+        self._start(self._accept)
+
+    def _start(self, target: Callable[..., None], *args: Any) -> None:
+        thread = threading.Thread(target=target, args=args, daemon=True)
+        self._threads.append(thread)
+        thread.start()
+
+    def _pipe(self, source: socket.socket, target: socket.socket) -> None:
+        try:
+            while data := source.recv(65536):
+                target.sendall(data)
+        except OSError:
+            pass
+        finally:
+            for sock in (source, target):
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+    def _accept(self) -> None:
+        while not self._stop.is_set():
+            try:
+                conn, _ = self.server.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            conn.settimeout(None)
+            upstream = socket.create_connection(("127.0.0.1", self.upstream_port))
+            self._sockets += [conn, upstream]
+            self._start(self._pipe, conn, upstream)
+            self._start(self._pipe, upstream, conn)
+
+    def close(self) -> None:
+        """Stop forwarding."""
+        self._stop.set()
+        self.server.close()
+        for sock in self._sockets:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        for thread in self._threads:
+            thread.join(2)
+        for sock in self._sockets:
+            sock.close()
+
+
+def test_e2e_known_limitation_group_port_remap(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    default_eureka: EurekaServer,
+    pki: TestPKI,
+) -> None:
+    """Test a forwarder can redirect a group to another group of the same leader.
+
+    This documents a known limitation, see the README: neither the TLS
+    certificate nor the signature is specific to a port of the device, and the
+    port checked against eureka_info is the port as seen by the client. A
+    forwarder in front of group A's advertised port, which relays to group B's
+    port on the same genuine leader, is accepted as group A. Traffic stays end
+    to end with that leader. If this is ever fixed, this test is expected to
+    change.
+    """
+    group_b = receiver_factory(tls_cn=str(OTHER_UUID))
+    forwarder = Forwarder(group_b.port)
+    group_b_uuid = "11111111-2222-3333-4444-555555555555"
+    default_eureka.body = eureka_info(
+        [
+            # Group A, the expected one, on the port the client connects to
+            group_entry(forwarder.port),
+            group_entry(group_b.port, uuid=group_b_uuid, name="B"),
+        ]
+    )
+    client = _e2e_client(make_client, pki, forwarder.port, cast_type="group")
+    try:
+        client.initialize_connection()
+        assert client.device_auth_result is not None
+        assert client.device_auth_result.verified
+        assert client.device_auth_result.leader_uuid == OTHER_UUID
+        # The client talks to group B
+        _wait_for(lambda: len(group_b.connections[0]) >= 2)
+        assert group_b.connections[0][1].namespace == NS_CONNECTION
+    finally:
+        forwarder.close()

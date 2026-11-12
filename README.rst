@@ -175,8 +175,10 @@ and reconnect, it sends the device a challenge with a fresh random nonce. The
 device must answer with its device certificate, which must chain up to one of
 Google's Cast root certificates, and a signature made with that certificate's
 key over the nonce and the device's TLS certificate. This proves the device is
-a genuine cast device, and that the TLS connection ends at that device rather
-than at a relay.
+a genuine cast device, and that the TLS connection ends at that device: a
+relay in between can't read or alter the traffic. A relay which just forwards
+the encrypted traffic can still choose which endpoint of that genuine device
+is reached, see the limitations below.
 
 PyChromecast also checks that the common name of the device's TLS certificate
 is the UUID the device was discovered with. Because the signature covers the
@@ -185,7 +187,9 @@ applies to every endpoint, including endpoints discovered as a cast group. A
 device presents its own certificate on the ports of the groups it leads too,
 so when the device's UUID is claimed on a port other than 8009, PyChromecast
 also checks the device's ``eureka_info`` (see below) and refuses the port of
-a group the device leads.
+a group the device leads. This stops port spoofing which points at the
+device's real address, not a forwarder which presents a group port as port
+8009.
 
 A cast group is served by its leader, which presents its own TLS certificate.
 When the certificate of a group endpoint names another UUID, PyChromecast
@@ -193,7 +197,9 @@ checks that the device leads the group: it fetches the device's
 ``eureka_info`` over HTTPS on port 8443, where the device presents its device
 certificate. That certificate must be the one which just passed device
 authentication, so the answer comes from the same genuine device. The device
-must list the group as led by itself, on the port which was connected to.
+must list the group as led by itself, on the port PyChromecast connected to.
+That is the port as seen by PyChromecast; it does not prove which of the
+device's ports a forwarder relayed the connection to.
 Dynamic groups, and reportedly newer firmware, don't report the group's port,
 then only the group and its leadership are checked. If port 8443 of the leader
 can't be reached, the group fails authentication and the connection is
@@ -240,7 +246,10 @@ Limitations: the certificate revocation list sent by the device is not
 checked, and devices are not pinned. A rooted genuine device can still pass
 authentication for any UUID. For groups, the check relies on the leader's
 genuine firmware: an attacker able to make a genuine device lead a group with
-the UUID of the victim's group would pass it.
+the UUID of the victim's group would pass it. An attacker who can spoof mDNS
+or ARP and forward TCP can redirect a connection to another endpoint of the
+same genuine device: its port 8009, or another group it leads. Traffic and
+credentials stay end to end with that genuine device.
 
 Thanks
 ------

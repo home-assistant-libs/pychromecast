@@ -2,8 +2,12 @@
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+import json
+from pathlib import Path
 import socket
+import ssl
 from struct import pack, unpack
+import tempfile
 import threading
 import time
 from typing import Any
@@ -31,6 +35,7 @@ from device_auth_helpers import (
     make_tls_cert,
     resign_sha1,
     rsa_key,
+    write_pem,
 )
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
@@ -50,6 +55,7 @@ from pychromecast.device_auth import (
     build_challenge,
     _common_name,
     _find_path,
+    _host_header,
     default_trust_roots,
     verify_auth_reply,
     verify_group_leader,
@@ -224,7 +230,7 @@ def test_forged_intermediate(pki: TestPKI) -> None:
     assert result.status is DeviceAuthStatus.CHAIN_UNTRUSTED
 
 
-def _ica(pki: TestPKI, **kwargs: Any) -> Any:
+def _ica(pki: TestPKI, **kwargs: Any) -> x509.Certificate:
     """Return a variant of the ICA, with the same name and key."""
     options: dict[str, Any] = {
         "ca": True,
@@ -1373,3 +1379,158 @@ def test_default_attestation_port(pki: TestPKI) -> None:
         verify_group_leader("127.0.0.1", GROUP_PORT, TEST_UUID, der(pki.leaf))
         verify_not_group_endpoint("127.0.0.1", GROUP_PORT, der(pki.leaf))
     assert [call.args[1] for call in fetch.call_args_list] == [port, port]
+
+
+# Copilot review of PR 1333
+
+
+def _expired_ica(pki: TestPKI) -> x509.Certificate:
+    """Return an expired copy of the ICA, same name and key."""
+    return _ica(
+        pki,
+        not_before=NOW - timedelta(days=400),
+        not_after=NOW - timedelta(days=1),
+    )
+
+
+@pytest.mark.parametrize("expired_first", [True, False])
+def test_expired_intermediate_beside_renewal(pki: TestPKI, expired_first: bool) -> None:
+    """Test an expired intermediate sent along with its renewal, in any order."""
+    expired = _expired_ica(pki)
+    intermediates = (expired, pki.ica) if expired_first else (pki.ica, expired)
+    result = _verify(pki, _reply(pki, intermediates=intermediates))
+    assert result.status is DeviceAuthStatus.VERIFIED
+
+
+def test_only_expired_intermediates(pki: TestPKI) -> None:
+    """Test the clock is blamed when every candidate path is expired."""
+    expired = _expired_ica(pki)
+    not_yet_valid = _ica(pki, not_before=NOW + timedelta(days=1))
+    result = _verify(pki, _reply(pki, intermediates=(expired, not_yet_valid)))
+    assert result.status is DeviceAuthStatus.CERT_EXPIRED
+    # The failure of the first path found
+    assert "expired at" in result.detail
+
+
+def test_forged_signature_with_expired_intermediates(pki: TestPKI) -> None:
+    """Test a forged reply with only expired candidates is not blamed on the clock."""
+    expired = _expired_ica(pki)
+    reply = _forged(pki, intermediates=(expired, _expired_ica(pki)))
+    assert _verify(pki, reply).status is DeviceAuthStatus.SIGNATURE_INVALID
+
+
+def test_unusable_intermediate_beside_usable(pki: TestPKI) -> None:
+    """Test an intermediate failing constraints doesn't hide a usable one."""
+    not_ca = _ica(pki, ca=False, path_length=None)
+    result = _verify(pki, _reply(pki, intermediates=(not_ca, pki.ica)))
+    assert result.status is DeviceAuthStatus.VERIFIED
+    # Only the unusable one, its constraint failure is reported
+    result = _verify(pki, _reply(pki, intermediates=(not_ca,)))
+    assert result.status is DeviceAuthStatus.CERT_INVALID
+
+
+def test_group_host_header_is_address(
+    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
+) -> None:
+    """Test the Host header is the device's address, not a host name.
+
+    The devices reject a host name with 403.
+    """
+    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]), mode="ip_host")
+    result = verify_group_leader(
+        "localhost", GROUP_PORT, TEST_UUID, der(pki.leaf), https_port=server.port
+    )
+    assert result.status is DeviceAuthStatus.VERIFIED
+    assert server.headers[-1]["Host"] == f"127.0.0.1:{server.port}"
+    result = verify_not_group_endpoint(
+        "localhost", GROUP_PORT, der(pki.leaf), https_port=server.port
+    )
+    assert result.status is DeviceAuthStatus.GROUP_ENDPOINT
+    assert server.headers[-1]["Host"] == f"127.0.0.1:{server.port}"
+
+
+@pytest.mark.parametrize(
+    ("address", "header"),
+    [
+        ("192.168.0.161", "192.168.0.161:8443"),
+        ("::1", "[::1]:8443"),
+        ("fe80::1%eth0", "[fe80::1]:8443"),
+    ],
+)
+def test_host_header(address: str, header: str) -> None:
+    """Test the Host header for IPv4 and IPv6 addresses."""
+    assert _host_header(address, 8443) == header
+
+
+def test_group_host_header_ipv6(pki: TestPKI) -> None:
+    """Test an IPv6 address is bracketed in the Host header."""
+    received: list[bytes] = []
+
+    def serve(listener: socket.socket, context: ssl.SSLContext) -> None:
+        conn, _ = listener.accept()
+        with context.wrap_socket(conn, server_side=True) as tls:
+            data = b""
+            while b"\r\n\r\n" not in data:
+                data += tls.recv(65536)
+            received.append(data)
+            body = json.dumps(eureka_info([group_entry(GROUP_PORT)])).encode()
+            tls.sendall(
+                b"HTTP/1.1 200 OK\r\nContent-Length: "
+                + str(len(body)).encode()
+                + b"\r\n\r\n"
+                + body
+            )
+            tls.recv(1)
+
+    try:
+        listener = socket.create_server(("::1", 0), family=socket.AF_INET6)
+    except OSError as err:
+        pytest.skip(f"IPv6 is not available: {err}")
+    with tempfile.TemporaryDirectory() as tmp:
+        cert_path, key_path = write_pem(Path(tmp), "eureka", pki.leaf, pki.leaf_key)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert_path, key_path)
+    port = listener.getsockname()[1]
+    thread = threading.Thread(target=serve, args=(listener, context))
+    thread.start()
+    try:
+        result = verify_group_leader(
+            "::1", GROUP_PORT, TEST_UUID, der(pki.leaf), timeout=2, https_port=port
+        )
+    finally:
+        thread.join(5)
+        listener.close()
+    assert result.status is DeviceAuthStatus.VERIFIED
+    assert f"\r\nHost: [::1]:{port}\r\n".encode() in received[0]
+
+
+@pytest.mark.parametrize("mode", ["trickle_head", "trickle_body"])
+def test_group_attestation_trickled(
+    pki: TestPKI, eureka_factory: Callable[..., EurekaServer], mode: str
+) -> None:
+    """Test a trickled response is bounded by the timeout as a whole."""
+    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]), mode=mode)
+    start = time.monotonic()
+    result = _verify_group(pki, server, timeout=0.5)
+    elapsed = time.monotonic() - start
+    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
+    assert "timed out" in result.detail
+    assert elapsed < 1.0
+
+
+def test_group_attestation_trickled_handshake(pki: TestPKI) -> None:
+    """Test a TLS handshake which never completes is bounded by the timeout."""
+    with socket.create_server(("127.0.0.1", 0)) as listener:
+        start = time.monotonic()
+        result = verify_group_leader(
+            "127.0.0.1",
+            GROUP_PORT,
+            TEST_UUID,
+            der(pki.leaf),
+            timeout=0.5,
+            https_port=listener.getsockname()[1],
+        )
+        elapsed = time.monotonic() - start
+    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
+    assert "timed out" in result.detail
+    assert elapsed < 1.0

@@ -259,7 +259,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         # When the current streak of failures started, and which kinds of
         # failures logged after a grace period were logged in the streak
         self._failure_streak_start: float | None = None
-        self._failure_streak_warned = False
+        self._network_notice_logged = False
+        self._identity_warned = False
 
         self.host = "unknown"
         self.port = 8009
@@ -349,7 +350,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                 retry_log_fun = self.logger.debug
             # A group leader change closes the group's port on the old leader,
             # and is expected to heal when mDNS finds the new one
-            elif self._failure_streak_exceeds_grace():
+            elif not self._network_notice_logged and self._streak_past_grace():
+                self._network_notice_logged = True
                 self.logger.info(
                     f"{msg} (failing for %.0fs)", *args, self._streak_age()
                 )
@@ -442,8 +444,9 @@ class SocketClient(threading.Thread, CastStatusListener):
                     # NotConnected. The socket is published, and registered with
                     # the selector, only once the device is authenticated.
                     # Known limitation: disconnect() waits for the handshake, up
-                    # to DEVICE_AUTH_TIMEOUT, and twice that if eureka_info is
-                    # fetched, like it waits for connecting.
+                    # to DEVICE_AUTH_TIMEOUT for the challenge plus, if
+                    # eureka_info is fetched, DEVICE_AUTH_TIMEOUT for that, like
+                    # it waits for connecting.
                     try:
                         self.device_auth_result = self._authenticate_device(tls_socket)
                     except BaseException:
@@ -456,7 +459,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                     self.connecting = False
                     self._force_recon = False
                     self._failure_streak_start = None
-                    self._failure_streak_warned = False
+                    self._network_notice_logged = False
+                    self._identity_warned = False
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTED,
@@ -573,7 +577,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.stop.set()
         # The result is reset for every attempt, set if the last one failed auth
         last_result = self.device_auth_result
-        if last_result is not None and not last_result.verified:
+        # Not for VERIFIED or DISABLED followed by a failure to set up the socket
+        if last_result is not None and last_result.failure_class is not None:
             self.logger.error(
                 "Failed to connect, device authentication failed (%s). No retries.",
                 last_result.status,
@@ -593,12 +598,9 @@ class SocketClient(threading.Thread, CastStatusListener):
             return 0.0
         return time.monotonic() - self._failure_streak_start
 
-    def _failure_streak_exceeds_grace(self) -> bool:
-        """Return True once per streak, after the grace period."""
-        if self._failure_streak_warned or self._streak_age() <= FAILURE_GRACE_PERIOD:
-            return False
-        self._failure_streak_warned = True
-        return True
+    def _streak_past_grace(self) -> bool:
+        """Return True if the failure streak has lasted past the grace period."""
+        return self._streak_age() > FAILURE_GRACE_PERIOD
 
     def _log_wrong_identity(self, result: DeviceAuthResult, delay: float) -> None:
         """Log a genuine device with the wrong identity, warn if it persists."""
@@ -610,11 +612,11 @@ class SocketClient(threading.Thread, CastStatusListener):
             "(it identifies as %s: %s). This can happen after an IP address change "
             "or group leader change; still retrying in %.1fs, failing for %.0fs"
         )
-        log_fun = (
-            self.logger.warning
-            if self._failure_streak_exceeds_grace()
-            else self.logger.debug
-        )
+        log_fun = self.logger.debug
+        # Warn once per streak, independently of the network notice
+        if not self._identity_warned and self._streak_past_grace():
+            self._identity_warned = True
+            log_fun = self.logger.warning
         log_fun(
             msg, expected, result.tls_cert_cn, result.detail, delay, self._streak_age()
         )

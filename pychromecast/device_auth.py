@@ -44,6 +44,11 @@ by itself, on the port which was connected to. Conversely, as a device presents
 its own TLS certificate on the ports of the groups it leads,
 verify_not_group_endpoint checks that a port is not one of them.
 
+Neither binds the connection to a port of the device: the TLS certificate and
+the signature are the same on every port of a device. A forwarder which
+doesn't terminate TLS can relay a connection to another endpoint of the same
+genuine device, its port 8009 or another group it leads.
+
 Things deliberately not done:
 
 - the certificate revocation list the device sends is not checked;
@@ -60,9 +65,11 @@ import http.client
 import json
 import logging
 import secrets
+import socket
 import ssl
+import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -453,14 +460,15 @@ def _signed_by(child: x509.Certificate, issuer: x509.Certificate) -> bool:
     return True
 
 
-def _find_path(
+def _candidate_paths(
     leaf: x509.Certificate,
     intermediates: Sequence[x509.Certificate],
     roots: Sequence[x509.Certificate],
-) -> list[x509.Certificate] | None:
-    """Return a path [leaf, intermediates..., root], or None if there is none.
+) -> Iterator[list[x509.Certificate]]:
+    """Yield the paths [leaf, intermediates..., root] whose signatures check out.
 
-    The intermediates may be in any order. Each is used at most once.
+    The intermediates may be in any order. Each is used at most once in a path.
+    All paths share a budget of MAX_SIGNATURE_CHECKS signature checks.
     """
     checks_left = MAX_SIGNATURE_CHECKS
 
@@ -473,20 +481,27 @@ def _find_path(
 
     def extend(
         cert: x509.Certificate, used: frozenset[int]
-    ) -> list[x509.Certificate] | None:
+    ) -> Iterator[list[x509.Certificate]]:
         for root in roots:
             if signed_by(cert, root):
-                return [root]
+                yield [root]
         for index, intermediate in enumerate(intermediates):
             if index in used or not signed_by(cert, intermediate):
                 continue
-            rest = extend(intermediate, used | {index})
-            if rest is not None:
-                return [intermediate, *rest]
-        return None
+            for rest in extend(intermediate, used | {index}):
+                yield [intermediate, *rest]
 
-    rest = extend(leaf, frozenset())
-    return None if rest is None else [leaf, *rest]
+    for rest in extend(leaf, frozenset()):
+        yield [leaf, *rest]
+
+
+def _find_path(
+    leaf: x509.Certificate,
+    intermediates: Sequence[x509.Certificate],
+    roots: Sequence[x509.Certificate],
+) -> list[x509.Certificate] | None:
+    """Return the first path [leaf, intermediates..., root], or None."""
+    return next(_candidate_paths(leaf, intermediates, roots), None)
 
 
 def _check_rsa_key(cert: x509.Certificate, what: str) -> None:
@@ -590,10 +605,13 @@ def _check_path_validity(path: Sequence[x509.Certificate], now: datetime) -> Non
 def _verify_chain(
     response: AuthResponse,
     roots: Sequence[x509.Certificate],
-) -> list[x509.Certificate]:
-    """Find a path from the device certificate to a root, check its constraints.
+) -> tuple[list[list[x509.Certificate]], dict[int, _AuthFailure]]:
+    """Find the paths from the device certificate to a root which pass constraints.
 
-    Returns the path [leaf, intermediates..., root]. Validity is not checked.
+    Returns the paths [leaf, intermediates..., root] whose keys and constraints
+    are acceptable, and the failure of each path which isn't, by index of the
+    path among all found. Validity is not checked. Raises the failure of the
+    first path found if no path is acceptable.
     """
     if len(response.intermediate_certificate) > MAX_INTERMEDIATES:
         raise _AuthFailure(
@@ -607,14 +625,25 @@ def _verify_chain(
         _parse_cert(der, status, "intermediate certificate")
         for der in response.intermediate_certificate
     ]
-    path = _find_path(leaf, intermediates, roots)
-    if path is None:
+    # An expired or unusable intermediate may come before a usable one
+    paths = list(_candidate_paths(leaf, intermediates, roots))
+    if not paths:
         raise _AuthFailure(
             DeviceAuthStatus.CHAIN_UNTRUSTED,
             f"device certificate {_subject(leaf)} does not chain up to a trusted root",
         )
-    _check_path(path)
-    return path
+    usable: list[list[x509.Certificate]] = []
+    failures: dict[int, _AuthFailure] = {}
+    for index, path in enumerate(paths):
+        try:
+            _check_path(path)
+        except _AuthFailure as failure:
+            failures[index] = failure
+            continue
+        usable.append(path)
+    if not usable:
+        raise failures[0]
+    return usable, failures
 
 
 def _verify_signature(
@@ -639,6 +668,29 @@ def _verify_signature(
         ) from err
 
 
+def _first_valid_path(
+    paths: list[list[x509.Certificate]],
+    failures: dict[int, _AuthFailure],
+    now: datetime,
+) -> list[x509.Certificate]:
+    """Return the first path valid now.
+
+    If none is, raise the failure of the first path found, which may be a
+    constraint failure from _verify_chain.
+    """
+    first_failure: _AuthFailure | None = failures.get(0)
+    for path in paths:
+        try:
+            _check_path_validity(path, now)
+        except _AuthFailure as failure:
+            if first_failure is None:
+                first_failure = failure
+            continue
+        return path
+    assert first_failure is not None
+    raise first_failure
+
+
 def _verify(
     reply: CastMessage,
     nonce: bytes,
@@ -656,11 +708,12 @@ def _verify(
     hash_algorithm = _response_hash(response)
     tls_cert = _parse_tls_cert(peer_cert_der)
     assert peer_cert_der is not None  # Checked by _parse_tls_cert
-    path = _verify_chain(response, roots)
-    leaf = path[0]
+    paths, failures = _verify_chain(response, roots)
+    # All paths start with the device certificate, which signed the reply
+    leaf = paths[0][0]
     _verify_signature(response, leaf, peer_cert_der, hash_algorithm)
     _check_tls_cert_validity(tls_cert, now)
-    _check_path_validity(path, now)
+    path = _first_valid_path(paths, failures, now)
 
     result = DeviceAuthResult(
         DeviceAuthStatus.VERIFIED,
@@ -823,80 +876,163 @@ def authenticate(
     )
 
 
-def _fetch_eureka_info(
-    host: str, https_port: int, device_cert_der: bytes, timeout: float
-) -> object:
-    """Fetch eureka_info from a device presenting the device certificate.
+def _host_header(address: str, port: int) -> str:
+    """Return the Host header for an IP address, without its IPv6 scope."""
+    address = address.partition("%")[0]
+    return f"[{address}]:{port}" if ":" in address else f"{address}:{port}"
 
-    Each step gets the time left of timeout, which bounds the whole fetch to
-    about timeout, as long as the response isn't trickled in.
+
+class _FetchDeadline:
+    """An overall deadline for fetching eureka_info.
+
+    When it expires, a timer shuts the watched socket down, which ends any call
+    blocked on it, whichever step it is in.
     """
-    deadline = time.monotonic() + timeout
 
-    def time_left() -> float:
-        left = deadline - time.monotonic()
-        if left <= 0:
+    def __init__(self, timeout: float) -> None:
+        self._deadline = time.monotonic() + timeout
+        self._lock = threading.Lock()
+        self._sockets: list[socket.socket] = []
+        self._aborted = False
+        self._done = False
+        self._timer = threading.Timer(timeout, self._abort)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _abort(self) -> None:
+        with self._lock:
+            if self._done:
+                return
+            self._aborted = True
+            for sock in self._sockets:
+                try:
+                    # The fd, not the TLS layer, which another thread is using
+                    socket.socket.shutdown(sock, socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+    def watch(self, sock: socket.socket) -> None:
+        """Shut sock down when the deadline expires."""
+        with self._lock:
+            self._sockets.append(sock)
+            aborted = self._aborted
+        if aborted:
+            self.left()
+
+    def left(self) -> float:
+        """Return the time left, raise if the deadline expired."""
+        left = self._deadline - time.monotonic()
+        if self._aborted or left <= 0:
             raise _AuthFailure(
                 DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
                 "timed out fetching eureka_info",
             )
         return left
 
+    def stop(self) -> None:
+        """Stop the timer, the watched sockets are about to be closed."""
+        with self._lock:
+            self._done = True
+        self._timer.cancel()
+
+
+def _connect_pinned(
+    host: str, https_port: int, device_cert_der: bytes, deadline: _FetchDeadline
+) -> ssl.SSLSocket:
+    """Connect over TLS to a device which must present device_cert_der."""
+    unavailable = DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
+    try:
+        raw = socket.create_connection((host, https_port), deadline.left())
+    except OSError as err:
+        deadline.left()
+        raise _AuthFailure(
+            unavailable, f"can't connect to port {https_port}: {err!r}"
+        ) from err
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-    conn = http.client.HTTPSConnection(
-        host, https_port, context=context, timeout=timeout
-    )
     try:
+        tls = context.wrap_socket(raw, do_handshake_on_connect=False)
+    except BaseException:
+        raw.close()
+        raise
+    try:
+        deadline.watch(tls)
         try:
-            conn.connect()
+            tls.settimeout(deadline.left())
+            tls.do_handshake()
         except OSError as err:
+            deadline.left()
             raise _AuthFailure(
-                DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-                f"can't connect to port {https_port}: {err!r}",
+                unavailable, f"TLS handshake on port {https_port} failed: {err!r}"
             ) from err
-        sock = conn.sock
-        assert isinstance(sock, ssl.SSLSocket)
         # The TLS handshake proved the device holds the certificate's key
-        if sock.getpeercert(binary_form=True) != device_cert_der:
+        if tls.getpeercert(binary_form=True) != device_cert_der:
             raise _AuthFailure(
                 DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH,
                 f"the certificate on port {https_port} is not the device "
                 "certificate which passed device authentication",
             )
+    except BaseException:
+        tls.close()
+        raise
+    return tls
+
+
+def _fetch_eureka_info(
+    host: str, https_port: int, device_cert_der: bytes, timeout: float
+) -> object:
+    """Fetch eureka_info from a device presenting the device certificate.
+
+    The whole fetch, from connecting to reading the body, is bounded by timeout.
+    """
+    unavailable = DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
+    deadline = _FetchDeadline(timeout)
+    try:
+        tls = _connect_pinned(host, https_port, device_cert_der, deadline)
+        # Plain HTTP over the TLS socket which was already set up
+        conn = http.client.HTTPConnection(host, https_port, timeout=timeout)
+        conn.sock = tls
         try:
-            sock.settimeout(time_left())
-            conn.request("GET", GROUP_ATTESTATION_PATH, headers={"Connection": "close"})
-            sock.settimeout(time_left())
+            tls.settimeout(deadline.left())
+            conn.request(
+                "GET",
+                GROUP_ATTESTATION_PATH,
+                headers={
+                    # Devices reject a host name in the Host header
+                    "Host": _host_header(tls.getpeername()[0], https_port),
+                    "Connection": "close",
+                },
+            )
+            tls.settimeout(deadline.left())
             response = conn.getresponse()
             if response.status != 200:
                 raise _AuthFailure(
-                    DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
+                    unavailable,
                     f"eureka_info request failed with HTTP status {response.status}",
                 )
             # Devices keep the connection open, don't read until EOF
-            sock.settimeout(time_left())
+            tls.settimeout(deadline.left())
             body = response.read(MAX_EUREKA_INFO_SIZE + 1)
+            deadline.left()
         except (OSError, http.client.HTTPException) as err:
+            deadline.left()
             raise _AuthFailure(
-                DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-                f"eureka_info request failed: {err!r}",
+                unavailable, f"eureka_info request failed: {err!r}"
             ) from err
-        if len(body) > MAX_EUREKA_INFO_SIZE:
-            raise _AuthFailure(
-                DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-                "eureka_info response is too large",
-            )
-        try:
-            return json.loads(body)
-        except ValueError as err:
-            raise _AuthFailure(
-                DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-                f"eureka_info response is not JSON: {err}",
-            ) from err
+        finally:
+            deadline.stop()
+            conn.close()
     finally:
-        conn.close()
+        deadline.stop()
+    if len(body) > MAX_EUREKA_INFO_SIZE:
+        raise _AuthFailure(unavailable, "eureka_info response is too large")
+    try:
+        return json.loads(body)
+    except ValueError as err:
+        raise _AuthFailure(
+            unavailable, f"eureka_info response is not JSON: {err}"
+        ) from err
 
 
 def _multizone_groups(eureka_info: object) -> list[dict] | None:

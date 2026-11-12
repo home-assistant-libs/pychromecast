@@ -4,6 +4,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import ipaddress
 import json
 from pathlib import Path
 import socket
@@ -369,7 +370,7 @@ def make_reply(
     )
 
 
-def _write_pem(
+def write_pem(
     tmp_path: Path, name: str, cert: x509.Certificate, key: rsa.RSAPrivateKey
 ) -> tuple[Path, Path]:
     cert_path = tmp_path / f"{name}.crt"
@@ -387,7 +388,7 @@ class TLSServer:
     def __init__(
         self, tmp_path: Path, name: str, cert: x509.Certificate, key: rsa.RSAPrivateKey
     ) -> None:
-        cert_path, key_path = _write_pem(tmp_path, name, cert, key)
+        cert_path, key_path = write_pem(tmp_path, name, cert, key)
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.load_cert_chain(cert_path, key_path)
         self.stop = threading.Event()
@@ -463,6 +464,11 @@ class EurekaServer(TLSServer):
     """A fake HTTPS eureka_info endpoint of a cast device.
 
     Like the devices, it keeps the connection open after responding.
+
+    Modes: respond; close, after the request; silent, never responding; slow,
+    the head and the body each after 0.4 s; trickle_head and trickle_body, one
+    byte every 0.1 s from the head or from the body on; ip_host, respond with
+    403 unless the Host header is an IP address, like the devices.
     """
 
     def __init__(
@@ -478,8 +484,9 @@ class EurekaServer(TLSServer):
         self.body = eureka_info() if body is None else body
         self.status = status
         self.mode = mode
-        # The request lines received
+        # The request lines and the headers received
         self.requests: list[bytes] = []
+        self.headers: list[dict[str, str]] = []
         super().__init__(tmp_path, "eureka", cert, key)
 
     def _recv(self, tls: ssl.SSLSocket) -> bytes | None:
@@ -491,6 +498,39 @@ class EurekaServer(TLSServer):
                 continue
         return None
 
+    def _respond(self, tls: ssl.SSLSocket, headers: dict[str, str]) -> None:
+        """Send the response."""
+        status = self.status
+        if self.mode == "ip_host" and not _is_ip_address(headers.get("Host", "")):
+            status = 403
+        if isinstance(self.body, bytes):
+            body = self.body
+        else:
+            body = json.dumps(self.body).encode()
+        head = (
+            f"HTTP/1.1 {status} Status\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n".encode()
+        )
+        if self.mode == "slow":
+            # Each part arrives in time on its own, not both together
+            time.sleep(0.4)
+            tls.sendall(head)
+            time.sleep(0.4)
+            tls.sendall(body)
+        elif self.mode.startswith("trickle_"):
+            if self.mode == "trickle_body":
+                tls.sendall(head)
+                data = body
+            else:
+                data = head + body
+            for index in range(len(data)):
+                if self.stop.wait(0.1):
+                    return
+                tls.sendall(data[index : index + 1])
+        else:
+            tls.sendall(head + body)
+
     def handle(self, tls: ssl.SSLSocket) -> None:
         data = b""
         while b"\r\n\r\n" not in data:
@@ -498,30 +538,27 @@ class EurekaServer(TLSServer):
             if not chunk:
                 return
             data += chunk
-        self.requests.append(data.split(b"\r\n", 1)[0])
+        lines = data.split(b"\r\n\r\n", 1)[0].decode().split("\r\n")
+        self.requests.append(lines[0].encode())
+        headers = dict(line.split(": ", 1) for line in lines[1:])
+        self.headers.append(headers)
         if self.mode == "close":
             return
-        if self.mode in ("respond", "slow"):
-            if isinstance(self.body, bytes):
-                body = self.body
-            else:
-                body = json.dumps(self.body).encode()
-            head = (
-                f"HTTP/1.1 {self.status} Status\r\n"
-                "Content-Type: application/json\r\n"
-                f"Content-Length: {len(body)}\r\n\r\n".encode()
-            )
-            if self.mode == "slow":
-                # Each part arrives in time on its own, not both together
-                time.sleep(0.4)
-                tls.sendall(head)
-                time.sleep(0.4)
-                tls.sendall(body)
-            else:
-                tls.sendall(head + body)
+        if self.mode != "silent":
+            self._respond(tls, headers)
         # Keep the connection open until the client closes it
         while self._recv(tls):
             pass
+
+
+def _is_ip_address(host: str) -> bool:
+    """Return True if a Host header value, without the port, is an IP address."""
+    host = host.rsplit(":", 1)[0].strip("[]")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def frame(message: CastMessage) -> bytes:
