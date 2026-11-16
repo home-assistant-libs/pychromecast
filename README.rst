@@ -22,8 +22,8 @@ your Chromecast or Cast-enabled device like Google Home.*
 Dependencies
 ------------
 
-PyChromecast depends on the Python packages requests, protobuf and
-zeroconf. Make sure you have these dependencies installed using
+PyChromecast depends on the Python packages protobuf, zeroconf, casttube
+and cryptography. Make sure you have these dependencies installed using
 ``pip install -r requirements.txt``
 
 How to use
@@ -166,6 +166,90 @@ Pychromecast relies on mDNS to discover cast devices. The mDNS protocol relies o
 -  The device running pychromecast must be on the same subnet as the cast devices because mDNS packets are not routed across subnets.
 
 If not all of these conditions are met, discovery will not work. In cases where these conditions are impossible to meet, it's possible to pass a list of known IP-addresses or host names to the discovery functions.
+
+Device authentication
+---------------------
+PyChromecast authenticates every cast device it connects to, the same way
+Google's own Cast senders do. Right after the TLS handshake, on every connect
+and reconnect, it sends the device a challenge with a fresh random nonce. The
+device must answer with its device certificate, which must chain up to one of
+Google's Cast root certificates, and a signature made with that certificate's
+key over the nonce and the device's TLS certificate. This proves the device is
+a genuine cast device, and that the TLS connection ends at that device: a
+relay in between can't read or alter the traffic. A relay which just forwards
+the encrypted traffic can still choose which endpoint of that genuine device
+is reached, see the limitations below.
+
+PyChromecast also checks that the common name of the device's TLS certificate
+is the UUID the device was discovered with. Because the signature covers the
+TLS certificate, a genuine device can't claim another device's UUID. This
+applies to every endpoint, including endpoints discovered as a cast group. A
+device presents its own certificate on the ports of the groups it leads too,
+so when the device's UUID is claimed on a port other than 8009, PyChromecast
+also checks the device's ``eureka_info`` (see below) and refuses the port of
+a group the device leads. This stops port spoofing which points at the
+device's real address, not a forwarder which presents a group port as port
+8009.
+
+A cast group is served by its leader, which presents its own TLS certificate.
+When the certificate of a group endpoint names another UUID, PyChromecast
+checks that the device leads the group: it fetches the device's
+``eureka_info`` over HTTPS on port 8443, where the device presents its device
+certificate. That certificate must be the one which just passed device
+authentication, so the answer comes from the same genuine device. The device
+must list the group as led by itself, on the port PyChromecast connected to.
+That is the port as seen by PyChromecast; it does not prove which of the
+device's ports a forwarder relayed the connection to.
+Dynamic groups, and reportedly newer firmware, don't report the group's port,
+then only the group and its leadership are checked. If port 8443 of the leader
+can't be reached, the group fails authentication and the connection is
+retried. The check runs on every connect and reconnect, so a group follows
+leader changes.
+
+Nothing but the challenge, and where needed the ``eureka_info`` request, is
+sent on a connection to a device which fails authentication. Unauthenticated
+metadata requests made outside the cast connection, like the ``eureka_info``
+request which looks up a device's cast type when it isn't known, for example
+for ``get_chromecast_from_host``, or discovery of ``known_hosts``, may still
+reach an endpoint before it is authenticated. They carry no credentials.
+
+When a device fails authentication, the connection status ``FAILED_AUTH``
+(``pychromecast.socket_client.CONNECTION_STATUS_FAILED_AUTH``) is reported
+rather than ``FAILED``, so listeners treating only ``FAILED`` as a failure
+need updating. The reason is in ``ConnectionStatus.device_auth``, a
+``pychromecast.DeviceAuthResult``, and the connection is retried with the
+same backoff as network failures. If no retries are left,
+``pychromecast.DeviceAuthenticationError``, a ``ChromecastConnectionError``
+carrying the result, is raised. The result of the last connection attempt is
+available as ``Chromecast.device_auth_result``.
+
+A failure describes whoever answered at the device's address, which can
+change: for example after an IP address change another genuine device may
+answer for a while, and a group leader change takes a moment to be picked up
+from mDNS. Such failures, of class
+``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, are only logged as a
+warning when they persist for more than 10 minutes, and consumers should
+apply a similar grace period before surfacing them. A failure of class
+``CLOCK`` comes from a genuine device whose certificates are not valid at the
+current time: the system clock is wrong, or the device needs a firmware
+update.
+
+Unofficial receivers, such as receivers emulating a cast device, fail
+authentication by design. To talk to them, pass ``device_auth=False`` to
+``get_chromecasts``, ``get_listed_chromecasts``,
+``get_chromecast_from_cast_info``, ``get_chromecast_from_host`` or
+``Chromecast``. The identity of the device is then not verified, so don't use
+controllers which send credentials, such as ``HomeAssistantController`` or
+``PlexController``, with devices which are not authenticated.
+
+Limitations: the certificate revocation list sent by the device is not
+checked, and devices are not pinned. A rooted genuine device can still pass
+authentication for any UUID. For groups, the check relies on the leader's
+genuine firmware: an attacker able to make a genuine device lead a group with
+the UUID of the victim's group would pass it. An attacker who can spoof mDNS
+or ARP and forward TCP can redirect a connection to another endpoint of the
+same genuine device: its port 8009, or another group it leads. Traffic and
+credentials stay end to end with that genuine device.
 
 Thanks
 ------

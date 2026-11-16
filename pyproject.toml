@@ -16,6 +16,7 @@ dependencies = [
     "protobuf>=4.25.1",
     "zeroconf>=0.128.1",
     "casttube>=0.2.0",
+    "cryptography>=42.0.0",
 ]
 classifiers=[
     "Intended Audience :: Developers",
