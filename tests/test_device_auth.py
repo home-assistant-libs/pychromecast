@@ -1,13 +1,9 @@
 """Tests for pychromecast.device_auth."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
-import json
-from pathlib import Path
 import socket
-import ssl
 from struct import pack, unpack
-import tempfile
 import threading
 import time
 from typing import Any
@@ -35,7 +31,6 @@ from device_auth_helpers import (
     make_tls_cert,
     resign_sha1,
     rsa_key,
-    write_pem,
 )
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
@@ -54,7 +49,7 @@ from pychromecast.device_auth import (
     authenticate,
     build_challenge,
     _common_name,
-    _find_path,
+    _candidate_paths,
     _host_header,
     default_trust_roots,
     verify_auth_reply,
@@ -72,6 +67,17 @@ from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name
 )
 
 NONCE = bytes(range(16))
+
+
+def _first_path(
+    leaf: x509.Certificate,
+    intermediates: list[x509.Certificate],
+    roots: Sequence[x509.Certificate],
+) -> list[x509.Certificate] | None:
+    """Return the first candidate path, or None."""
+    return next(_candidate_paths(leaf, intermediates, roots), None)
+
+
 _UNSET: Any = object()
 
 
@@ -920,13 +926,23 @@ def test_group_no_device_cert(eureka_factory: Callable[..., EurekaServer]) -> No
     assert server.handlers == []
 
 
+def test_group_no_multizone_not_led(
+    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
+) -> None:
+    """Test a genuine device without group information doesn't lead the group."""
+    server = eureka_factory(body={"name": "no multizone"})
+    result = _verify_group(pki, server)
+    assert result.status is DeviceAuthStatus.GROUP_NOT_LED
+    assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
+    assert result.detail == "the device reports no group information"
+
+
 @pytest.mark.parametrize(
     ("kwargs", "timeout"),
     [
         ({"mode": "close"}, 2),
         ({"mode": "silent"}, 0.3),
         ({"body": b"<html>not json</html>"}, 2),
-        ({"body": {"name": "no multizone"}}, 2),
         ({"status": 403}, 2),
     ],
 )
@@ -1093,14 +1109,14 @@ def test_real_chain_accepted_by_bundled_roots() -> None:
     """Test a real SHA-1 signed device chain chains up to the bundled roots."""
     leaf = x509.load_pem_x509_certificate(SHANOCAST_DEVICE_CERT_PEM.encode())
     ica = x509.load_pem_x509_certificate(SHANOCAST_ICA_PEM.encode())
-    path = _find_path(leaf, [ica], default_trust_roots())
+    path = _first_path(leaf, [ica], default_trust_roots())
     assert path is not None
     assert [_common_name(cert.subject) for cert in path] == [
         "WDFT3 FA8FCA895D59",
         "Eureka Gen1 ICA",
         "Eureka Root CA",
     ]
-    assert _find_path(leaf, [ica], ()) is None
+    assert _first_path(leaf, [ica], ()) is None
 
 
 def test_real_chain_is_not_enough(pki: TestPKI) -> None:
@@ -1170,7 +1186,7 @@ def test_signature_check_budget(pki: TestPKI) -> None:
         "pychromecast.device_auth._signed_by",
         wraps=device_auth._signed_by,  # pylint: disable=protected-access
     ) as signed_by:
-        path = _find_path(leaf, intermediates, [pki.root])
+        path = _first_path(leaf, intermediates, [pki.root])
     assert path is None
     assert MAX_SIGNATURE_CHECKS == 64
     assert signed_by.call_count == 64
@@ -1183,7 +1199,7 @@ def test_intermediate_used_once(pki: TestPKI) -> None:
         "pychromecast.device_auth._signed_by",
         wraps=device_auth._signed_by,  # pylint: disable=protected-access
     ) as signed_by:
-        path = _find_path(leaf, intermediates, [pki.root])
+        path = _first_path(leaf, intermediates, [pki.root])
     assert path is None
     # The leaf by the intermediate, nothing more
     assert signed_by.call_count == 1
@@ -1462,46 +1478,21 @@ def test_host_header(address: str, header: str) -> None:
     assert _host_header(address, 8443) == header
 
 
-def test_group_host_header_ipv6(pki: TestPKI) -> None:
+def test_group_host_header_ipv6(
+    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
+) -> None:
     """Test an IPv6 address is bracketed in the Host header."""
-    received: list[bytes] = []
-
-    def serve(listener: socket.socket, context: ssl.SSLContext) -> None:
-        conn, _ = listener.accept()
-        with context.wrap_socket(conn, server_side=True) as tls:
-            data = b""
-            while b"\r\n\r\n" not in data:
-                data += tls.recv(65536)
-            received.append(data)
-            body = json.dumps(eureka_info([group_entry(GROUP_PORT)])).encode()
-            tls.sendall(
-                b"HTTP/1.1 200 OK\r\nContent-Length: "
-                + str(len(body)).encode()
-                + b"\r\n\r\n"
-                + body
-            )
-            tls.recv(1)
-
     try:
-        listener = socket.create_server(("::1", 0), family=socket.AF_INET6)
+        server = eureka_factory(
+            host="::1", body=eureka_info([group_entry(GROUP_PORT)]), mode="ip_host"
+        )
     except OSError as err:
         pytest.skip(f"IPv6 is not available: {err}")
-    with tempfile.TemporaryDirectory() as tmp:
-        cert_path, key_path = write_pem(Path(tmp), "eureka", pki.leaf, pki.leaf_key)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(cert_path, key_path)
-    port = listener.getsockname()[1]
-    thread = threading.Thread(target=serve, args=(listener, context))
-    thread.start()
-    try:
-        result = verify_group_leader(
-            "::1", GROUP_PORT, TEST_UUID, der(pki.leaf), timeout=2, https_port=port
-        )
-    finally:
-        thread.join(5)
-        listener.close()
+    result = verify_group_leader(
+        "::1", GROUP_PORT, TEST_UUID, der(pki.leaf), timeout=2, https_port=server.port
+    )
     assert result.status is DeviceAuthStatus.VERIFIED
-    assert f"\r\nHost: [::1]:{port}\r\n".encode() in received[0]
+    assert server.headers[-1]["Host"] == f"[::1]:{server.port}"
 
 
 @pytest.mark.parametrize("mode", ["trickle_head", "trickle_body"])
@@ -1534,3 +1525,28 @@ def test_group_attestation_trickled_handshake(pki: TestPKI) -> None:
     assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
     assert "timed out" in result.detail
     assert elapsed < 1.0
+
+
+def test_group_attestation_closes_tls_socket(
+    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
+) -> None:
+    """Test the pinned TLS socket is closed if the HTTP connection can't be made."""
+    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
+    sockets: list[Any] = []
+
+    def connect_pinned(*args: Any) -> Any:
+        sock = connect(*args)
+        sockets.append(sock)
+        return sock
+
+    connect = device_auth._connect_pinned  # pylint: disable=protected-access
+    with (
+        patch("pychromecast.device_auth._connect_pinned", side_effect=connect_pinned),
+        patch(
+            "pychromecast.device_auth.http.client.HTTPConnection",
+            side_effect=ValueError("bad host"),
+        ),
+    ):
+        result = _verify_group(pki, server)
+    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
+    assert sockets[0].fileno() == -1

@@ -48,6 +48,7 @@ from pychromecast.error import (
     ChromecastConnectionError,
     DeviceAuthenticationError,
     NotConnected,
+    PyChromecastStopped,
 )
 from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     AuthError,
@@ -58,6 +59,7 @@ from pychromecast.models import HostServiceInfo
 from pychromecast.socket_client import (
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_CONNECTING,
+    CONNECTION_STATUS_DISCONNECTED,
     CONNECTION_STATUS_FAILED,
     CONNECTION_STATUS_FAILED_AUTH,
     NS_CONNECTION,
@@ -1554,3 +1556,133 @@ def test_e2e_known_limitation_group_port_remap(
         assert group_b.connections[0][1].namespace == NS_CONNECTION
     finally:
         forwarder.close()
+
+
+# disconnect() while connecting
+
+
+class SlowHandshakeReceiver(FakeReceiver):
+    """A fake receiver which waits before the TLS handshake."""
+
+    def _serve(self, conn: socket.socket) -> None:
+        time.sleep(0.4)
+        super()._serve(conn)
+
+
+def _disconnect_while_connecting(
+    client: SocketClient, connecting: Callable[[], bool]
+) -> StatusRecorder:
+    """Start the client, disconnect once connecting() is True, wait for it."""
+    errors: list[BaseException | None] = []
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with patch.object(
+        threading, "excepthook", lambda args: errors.append(args.exc_value)
+    ):
+        client.start()
+        _wait_for(connecting)
+        client.disconnect()
+        client.join(5)
+    assert not client.is_alive()
+    assert errors == []
+    assert client.socket is None
+    assert not client.is_connected
+    assert CONNECTION_STATUS_CONNECTED not in recorder.names
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+    return recorder
+
+
+def test_e2e_disconnect_during_challenge(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test disconnect() while the device replies to the challenge."""
+    receiver = receiver_factory("slow")
+    client = _e2e_client(make_client, pki, receiver.port)
+    _disconnect_while_connecting(
+        client, lambda: bool(receiver.connections and receiver.connections[0])
+    )
+    receiver.wait_idle()
+    assert len(receiver.connections[0]) == 1
+    assert _is_challenge(receiver.connections[0][0])
+
+
+def test_e2e_disconnect_during_group_attestation(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    default_eureka: EurekaServer,
+    pki: TestPKI,
+) -> None:
+    """Test disconnect() while the group leader's eureka_info is fetched."""
+    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
+    default_eureka.body = eureka_info([group_entry(receiver.port)])
+    default_eureka.mode = "slow"
+    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
+    _disconnect_while_connecting(client, lambda: bool(default_eureka.requests))
+    receiver.wait_idle()
+    assert len(receiver.connections[0]) == 1
+    assert _is_challenge(receiver.connections[0][0])
+
+
+def test_e2e_disconnect_during_handshake_opted_out(
+    make_client: Callable[..., SocketClient],
+    pki: TestPKI,
+    tmp_path: Path,
+) -> None:
+    """Test disconnect() during the TLS handshake, without device auth."""
+    receiver = SlowHandshakeReceiver(pki, tmp_path)
+    try:
+        client = _e2e_client(make_client, pki, receiver.port, device_auth=False)
+        _disconnect_while_connecting(client, lambda: bool(receiver.handlers))
+        receiver.wait_idle()
+        assert all(messages == [] for messages in receiver.connections)
+    finally:
+        receiver.close()
+
+
+def test_e2e_group_without_multizone_is_wrong_identity(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    default_eureka: EurekaServer,
+    pki: TestPKI,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test a genuine device without group information gets the grace period."""
+    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
+    default_eureka.body = {"name": "no multizone"}
+    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
+    with (
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(DeviceAuthenticationError),
+    ):
+        client.initialize_connection()
+    result = client.device_auth_result
+    assert result is not None
+    assert result.status is DeviceAuthStatus.GROUP_NOT_LED
+    assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
+    # Logged at debug within the grace period, not warned about
+    assert _retry_levels(caplog, "genuine Cast device but not") == [logging.DEBUG]
+    receiver.wait_idle()
+    assert len(receiver.connections[0]) == 1
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_run_stopped_right_after_connecting(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test run() cleans up if disconnect() comes right after the stop check."""
+    client = make_client()
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        patch.object(
+            client.receiver_controller,
+            "update_status",
+            side_effect=PyChromecastStopped("stopped"),
+        ),
+    ):
+        client.run()
+    assert client.socket is None
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED

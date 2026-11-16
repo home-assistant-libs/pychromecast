@@ -386,13 +386,19 @@ class TLSServer:
     """A TLS server on localhost, handling each connection in a thread."""
 
     def __init__(
-        self, tmp_path: Path, name: str, cert: x509.Certificate, key: rsa.RSAPrivateKey
+        self,
+        tmp_path: Path,
+        name: str,
+        cert: x509.Certificate,
+        key: rsa.RSAPrivateKey,
+        host: str = "127.0.0.1",
     ) -> None:
         cert_path, key_path = write_pem(tmp_path, name, cert, key)
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.load_cert_chain(cert_path, key_path)
         self.stop = threading.Event()
-        self.server = socket.create_server(("127.0.0.1", 0))
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        self.server = socket.create_server((host, 0), family=family)
         self.server.settimeout(0.05)
         self.port = self.server.getsockname()[1]
         self.handlers: list[threading.Thread] = []
@@ -480,6 +486,7 @@ class EurekaServer(TLSServer):
         body: Any = None,
         status: int = 200,
         mode: str = "respond",
+        host: str = "127.0.0.1",
     ) -> None:
         self.body = eureka_info() if body is None else body
         self.status = status
@@ -487,7 +494,7 @@ class EurekaServer(TLSServer):
         # The request lines and the headers received
         self.requests: list[bytes] = []
         self.headers: list[dict[str, str]] = []
-        super().__init__(tmp_path, "eureka", cert, key)
+        super().__init__(tmp_path, "eureka", cert, key, host)
 
     def _recv(self, tls: ssl.SSLSocket) -> bytes | None:
         """Receive data, None when the connection is closed or stopping."""

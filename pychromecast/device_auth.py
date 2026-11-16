@@ -495,15 +495,6 @@ def _candidate_paths(
         yield [leaf, *rest]
 
 
-def _find_path(
-    leaf: x509.Certificate,
-    intermediates: Sequence[x509.Certificate],
-    roots: Sequence[x509.Certificate],
-) -> list[x509.Certificate] | None:
-    """Return the first path [leaf, intermediates..., root], or None."""
-    return next(_candidate_paths(leaf, intermediates, roots), None)
-
-
 def _check_rsa_key(cert: x509.Certificate, what: str) -> None:
     """Check the certificate has an RSA key of at least MIN_RSA_KEY_SIZE bits."""
     try:
@@ -678,6 +669,10 @@ def _first_valid_path(
     If none is, raise the failure of the first path found, which may be a
     constraint failure from _verify_chain.
     """
+    # The classification depends on the order of the paths: if the first path
+    # failed its constraints and the usable paths are expired, the constraint
+    # failure (not genuine) is reported rather than the expiry (clock). Either
+    # way the device fails authentication.
     first_failure: _AuthFailure | None = failures.get(0)
     for path in paths:
         try:
@@ -991,9 +986,10 @@ def _fetch_eureka_info(
     try:
         tls = _connect_pinned(host, https_port, device_cert_der, deadline)
         # Plain HTTP over the TLS socket which was already set up
-        conn = http.client.HTTPConnection(host, https_port, timeout=timeout)
-        conn.sock = tls
+        conn: http.client.HTTPConnection | None = None
         try:
+            conn = http.client.HTTPConnection(host, https_port, timeout=timeout)
+            conn.sock = tls
             tls.settimeout(deadline.left())
             conn.request(
                 "GET",
@@ -1022,7 +1018,9 @@ def _fetch_eureka_info(
             ) from err
         finally:
             deadline.stop()
-            conn.close()
+            if conn is not None:
+                conn.close()
+            tls.close()
     finally:
         deadline.stop()
     if len(body) > MAX_EUREKA_INFO_SIZE:
@@ -1061,9 +1059,10 @@ def _group_entries(eureka_info: object, group_uuid: UUID) -> list[dict]:
     """Return the entries of eureka_info for a group."""
     groups = _multizone_groups(eureka_info)
     if groups is None:
+        # The genuine device answered, but it knows of no group
         raise _AuthFailure(
-            DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-            "eureka_info has no multizone information",
+            DeviceAuthStatus.GROUP_NOT_LED,
+            "the device reports no group information",
         )
     entries = []
     for entry in groups:

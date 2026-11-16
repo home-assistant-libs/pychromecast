@@ -449,6 +449,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                     # it waits for connecting.
                     try:
                         self.device_auth_result = self._authenticate_device(tls_socket)
+                        if self.stop.is_set():
+                            # disconnect() was called while connecting, don't
+                            # publish the socket
+                            raise ChromecastConnectionError(
+                                "Failed to connect, stopped while connecting"
+                            )
                     except BaseException:
                         tls_socket.close()
                         raise
@@ -806,6 +812,10 @@ class SocketClient(threading.Thread, CastStatusListener):
                     None,
                 )
             )
+            return
+        except PyChromecastStopped:
+            # disconnect() was called right after connecting
+            self._cleanup()
             return
 
         self.heartbeat_controller.reset()
