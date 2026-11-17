@@ -1,16 +1,26 @@
 """Tests for the multizone controller."""
 
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
 
+from pychromecast.controllers import Listeners
 from pychromecast.controllers.multizone import (
     MultizoneController,
     MultiZoneControllerListener,
+    MultizoneManager,
+    MultiZoneManagerListener,
     PlaybackSession,
     PlaybackSessionUpdate,
     SessionEndpoint,
+)
+from pychromecast.const import CAST_TYPE_GROUP
+from pychromecast.error import RequestFailed
+from pychromecast.socket_client import (
+    CONNECTION_STATUS_CONNECTED,
+    CONNECTION_STATUS_LOST,
 )
 from pychromecast.models import CastInfo
 
@@ -115,6 +125,43 @@ def test_playback_session_updated() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("endpoint", "playback_session"),
+    [
+        # The session moved away
+        (KITCHEN_UUID, None),
+        # The session moved here
+        (GROUP_UUID, PlaybackSession(True, None, None)),
+    ],
+)
+def test_playback_session_moved(
+    endpoint: str, playback_session: PlaybackSession | None
+) -> None:
+    """Test the playback session is cleared when the session moves away."""
+    controller, _ = _controller()
+    controller.receive_message(
+        MagicMock(), _status(playbackSession={"appAllowsGrouping": True})
+    )
+
+    controller.receive_message(
+        MagicMock(),
+        {
+            "type": "PLAYBACK_SESSION_UPDATED",
+            "requestId": 0,
+            "changedDevices": [],
+            "failedDevices": [],
+            "sessionEndpoint": {
+                "deviceId": endpoint,
+                "ipAddress": "192.168.0.13",
+                "port": 32046,
+                "sessionId": "9e63447a-e514-4a79-a22c-2afa00eea9c1",
+            },
+        },
+    )
+
+    assert controller.playback_session == playback_session
+
+
 def test_playback_session_updated_without_endpoint() -> None:
     """Test session update where the endpoint did not move."""
     controller, listener = _controller()
@@ -194,6 +241,58 @@ def test_set_playback_devices_message() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("response", "applied"),
+    [
+        ({"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []}, True),
+        (
+            {
+                "type": "PLAYBACK_SESSION_UPDATED",
+                "sessionEndpoint": {
+                    "deviceId": GROUP_UUID,
+                    "ipAddress": "192.0.2.1",
+                    "port": 32000,
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "type": "PLAYBACK_SESSION_UPDATED",
+                "sessionEndpoint": {
+                    "deviceId": KITCHEN_UUID,
+                    "ipAddress": "192.0.2.2",
+                    "port": 32000,
+                },
+            },
+            False,
+        ),
+        ({"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": [KITCHEN_UUID]}, False),
+        ({"type": "INVALID_REQUEST"}, False),
+    ],
+)
+def test_set_playback_devices_sets_members(response: dict, applied: bool) -> None:
+    """Test the members are the devices of a change, if the session stays."""
+    controller, send = _registered_controller()
+    controller.receive_message(
+        MagicMock(),
+        {"type": "DEVICE_ADDED", "device": {"deviceId": BACK_ROOM_UUID, "name": "B"}},
+    )
+    callback = MagicMock(
+        side_effect=lambda *_: members.append(list(controller.members))
+    )
+    members: list[list[str]] = []
+
+    controller.set_playback_devices(
+        SESSION_ID,
+        [_cast_info(KITCHEN_UUID, "192.0.2.13")],
+        callback_function=callback,
+    )
+    send.call_args.kwargs["callback_function"](True, response)
+
+    assert members == [[KITCHEN_UUID] if applied else [BACK_ROOM_UUID]]
+
+
 def test_set_playback_devices_requires_a_device() -> None:
     """Test a session can't be set to play on no devices."""
     controller, send = _registered_controller()
@@ -236,3 +335,629 @@ def test_set_playback_devices_response(
     send.call_args.kwargs["callback_function"](msg_sent, response)
 
     callback.assert_called_once_with(success, response)
+
+
+SPEAKER_A = "6a1c3e2f-5b7d-4e8a-9c0b-1d2e3f4a5b6c"
+SPEAKER_B = "7b2d4f3a-6c8e-4f9b-8d1c-2e3f4a5b6c7d"
+SESSION = "1546815f-47eb-4c7d-8216-181f1197f05b"
+PLAYBACK_SESSION = {
+    "appAllowsGrouping": True,
+    "isVideoContent": False,
+    "streamTransferSupported": True,
+}
+
+
+class FakeEndpoint:
+    """A connected cast device or group which answers multizone requests."""
+
+    def __init__(
+        self,
+        uuid: str,
+        session_id: str | None,
+        members: list[str],
+        playback_session: dict | None,
+        host: str = "192.0.2.1",
+    ) -> None:
+        self.cast = MagicMock(uuid=UUID(uuid), cast_info=_cast_info(uuid, host))
+        self.cast.socket_client.is_alive.return_value = False
+        self.cast.socket_client.is_connected = False
+        self.cast.socket_client.host = host
+        self.cast.socket_client.port = 8009
+        self.cast.status.session_id = session_id
+        self.cast.register_handler.side_effect = self._register
+        self._status_listeners: Listeners[Any] = Listeners()
+        self._connection_listeners: Listeners[Any] = Listeners()
+        self.cast.register_status_listener.side_effect = self._status_listeners.add
+        self.cast.register_connection_listener.side_effect = (
+            self._connection_listeners.add
+        )
+        self.members = members
+        self.playback_session = playback_session
+        self.response: dict = {"type": "INVALID_REQUEST"}
+        self.sent: list[dict] = []
+        self.controller: MultizoneController | None = None
+
+    def _register(self, controller: MultizoneController) -> None:
+        self.controller = controller
+        socket_client = MagicMock()
+        socket_client.send_platform_message.side_effect = self._receive
+        controller.registered(socket_client)
+
+    def connect(self) -> None:
+        """Report the connection and the receiver status, like a Chromecast."""
+        self.cast.socket_client.is_connected = True
+        for listener in self._connection_listeners:
+            listener.new_connection_status(
+                MagicMock(status=CONNECTION_STATUS_CONNECTED)
+            )
+        self.new_cast_status()
+
+    def lose_connection(self) -> None:
+        """Report a lost connection, like a Chromecast."""
+        self.cast.socket_client.is_connected = False
+        for listener in self._connection_listeners:
+            listener.new_connection_status(MagicMock(status=CONNECTION_STATUS_LOST))
+
+    def new_cast_status(self) -> None:
+        """Report the receiver status."""
+        for listener in self._status_listeners:
+            listener.new_cast_status(self.cast.status)
+
+    def _receive(self, _namespace: str, data: dict, **kwargs: Any) -> None:
+        assert self.controller is not None
+        self.sent.append(data)
+        if data["type"] == "GET_STATUS":
+            status: dict = {
+                "devices": [{"deviceId": m, "name": m} for m in self.members]
+            }
+            if self.playback_session is not None:
+                status["playbackSession"] = self.playback_session
+            response = {"type": "MULTIZONE_STATUS", "requestId": 1, "status": status}
+            self.controller.receive_message(MagicMock(), response)
+        else:
+            response = self.response
+        if callback_function := kwargs.get("callback_function"):
+            callback_function(True, response)
+
+    def device_list(self) -> set[tuple[str, str]]:
+        """Return the devices and addresses of the last SET_PLAYBACK_DEVICES."""
+        message = [m for m in self.sent if m["type"] == "SET_PLAYBACK_DEVICES"][-1]
+        return {
+            (device["deviceId"], device["ipAddress"])
+            for device in message["deviceList"]
+        }
+
+
+def _speaker_a(
+    session_id: str | None = SESSION,
+    playback_session: dict | None = None,
+    owner: bool = True,
+) -> FakeEndpoint:
+    if owner and playback_session is None:
+        playback_session = PLAYBACK_SESSION
+    return FakeEndpoint(
+        SPEAKER_A, session_id, [SPEAKER_A], playback_session, "192.0.2.10"
+    )
+
+
+def _speaker_b(session_id: str | None = None) -> FakeEndpoint:
+    return FakeEndpoint(SPEAKER_B, session_id, [SPEAKER_B], None, "192.0.2.11")
+
+
+def _group(members: list[str]) -> FakeEndpoint:
+    # Hosted by speaker A
+    return FakeEndpoint(GROUP_UUID, SESSION, members, PLAYBACK_SESSION, "192.0.2.10")
+
+
+def _manager(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint] | None = None
+) -> MultizoneManager:
+    manager = MultizoneManager()
+    for device in devices:
+        manager.add_multizone(device.cast)
+        device.connect()
+    for group in groups or []:
+        group.cast.cast_type = CAST_TYPE_GROUP
+        manager.add_multizone(group.cast)
+        group.connect()
+    return manager
+
+
+def _session_devices(manager: MultizoneManager, device: str) -> list[str]:
+    """Return the devices playing the session a device plays."""
+    if (endpoint := manager.get_session_endpoint(UUID(device))) is None:
+        return []
+    return manager.get_multizone_members(endpoint)
+
+
+def _session_endpoint(manager: MultizoneManager, device: str) -> UUID:
+    """Return the endpoint owning the session a device plays."""
+    endpoint = manager.get_session_endpoint(UUID(device))
+    assert endpoint is not None
+    return endpoint
+
+
+SESSION_UPDATED = {"type": "PLAYBACK_SESSION_UPDATED", "failedDevices": []}
+
+
+def test_session_forgotten_when_connection_lost() -> None:
+    """Test a device which loses its connection owns no session until it's back."""
+    speaker_a = FakeEndpoint(
+        SPEAKER_A, SESSION, [SPEAKER_A, SPEAKER_B], PLAYBACK_SESSION, "192.0.2.10"
+    )
+    manager = _manager([speaker_a, _speaker_b()])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_B), listener)
+    assert _session_endpoint(manager, SPEAKER_B) == UUID(SPEAKER_A)
+
+    speaker_a.lose_connection()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_B)) is None
+    assert manager.get_multizone_members(UUID(SPEAKER_A)) == []
+    listener.multizone_sessions_changed.assert_called_with()
+
+    speaker_a.connect()
+
+    assert _session_endpoint(manager, SPEAKER_B) == UUID(SPEAKER_A)
+
+
+def test_update_session_devices_add() -> None:
+    """Test adding a device to a session playing on one speaker."""
+    speaker_a = _speaker_a()
+    speaker_a.response = {
+        **SESSION_UPDATED,
+        "changedDevices": [SPEAKER_B.replace("-", "")],
+        "sessionEndpoint": {
+            "deviceId": GROUP_UUID,
+            "ipAddress": "192.0.2.10",
+            "port": 32203,
+            "sessionId": SESSION,
+        },
+    }
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+
+    update = manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+    assert update is not None
+    assert update.session_endpoint == SessionEndpoint(
+        GROUP_UUID, "192.0.2.10", 32203, SESSION
+    )
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, "192.0.2.11"),
+    }
+
+
+@pytest.mark.parametrize("device", [SPEAKER_A, SPEAKER_B])
+def test_update_session_devices_remove_from_group(device: str) -> None:
+    """Test removing a device, the group owns the session.
+
+    The member not hosting the group runs a session of its own.
+    """
+    group = _group([SPEAKER_B, SPEAKER_A])
+    group.response = SESSION_UPDATED
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+
+    endpoint = _session_endpoint(manager, device)
+    manager.update_session_devices(endpoint, remove={UUID(SPEAKER_A)})
+
+    assert group.device_list() == {(SPEAKER_B, "192.0.2.11")}
+
+
+def test_update_session_devices_back_to_back() -> None:
+    """Test a change starts from the devices the previous change set."""
+    group = _group([SPEAKER_A, SPEAKER_B])
+    group.response = SESSION_UPDATED
+    speaker_c = FakeEndpoint(KITCHEN_UUID, None, [KITCHEN_UUID], None, "192.0.2.12")
+    manager = _manager(
+        [_speaker_a(owner=False), _speaker_b("973c31d5"), speaker_c], [group]
+    )
+
+    manager.update_session_devices(UUID(GROUP_UUID), add={UUID(KITCHEN_UUID)})
+    manager.update_session_devices(UUID(GROUP_UUID), remove={UUID(SPEAKER_A)})
+
+    assert group.device_list() == {
+        (SPEAKER_B, "192.0.2.11"),
+        (KITCHEN_UUID, "192.0.2.12"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("connected", "address"), [(True, "192.0.2.21"), (False, "192.0.2.11")]
+)
+def test_update_session_devices_connected_address(
+    connected: bool, address: str
+) -> None:
+    """Test a device is sent with the address it's connected to, if connected."""
+    speaker_a = _speaker_a()
+    speaker_a.response = SESSION_UPDATED
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+    # Reconnected on another address
+    speaker_b.cast.socket_client.host = "192.0.2.21"
+    speaker_b.cast.socket_client.is_connected = connected
+
+    manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, address),
+    }
+
+
+def test_update_session_devices_ignores_left_group() -> None:
+    """Test a dynamic group the session has left is ignored."""
+    speaker_a = _speaker_a()
+    speaker_a.response = SESSION_UPDATED
+    # Still reports the session, its only member is the new owner
+    group = _group([SPEAKER_A])
+    manager = _manager([speaker_a, _speaker_b()], [group])
+
+    endpoint = _session_endpoint(manager, SPEAKER_A)
+    assert endpoint == UUID(SPEAKER_A)
+    manager.update_session_devices(endpoint, add={UUID(SPEAKER_B)})
+
+    assert speaker_a.device_list() == {
+        (SPEAKER_A, "192.0.2.10"),
+        (SPEAKER_B, "192.0.2.11"),
+    }
+    assert {data["type"] for data in group.sent} == {"GET_STATUS"}
+
+
+@pytest.mark.parametrize(
+    ("devices", "groups"),
+    [
+        # Followers report no playback session
+        ([_speaker_a(owner=False)], []),
+        # A dynamic group the session has left
+        ([_speaker_a(owner=False)], [_group([SPEAKER_A])]),
+    ],
+)
+def test_no_session_endpoint(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint]
+) -> None:
+    """Test no endpoint is found when no endpoint owns the session."""
+    manager = _manager([*devices, _speaker_b()], groups)
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
+
+
+@pytest.mark.parametrize(
+    ("devices", "groups", "endpoint"),
+    [
+        ([_speaker_a(None)], [], SPEAKER_A),
+        # Followers run a session of their own, but report no playback session
+        ([_speaker_a(owner=False)], [], SPEAKER_A),
+        # A dynamic group the session has left
+        ([_speaker_a()], [_group([SPEAKER_A])], GROUP_UUID),
+    ],
+)
+def test_update_session_devices_no_session(
+    devices: list[FakeEndpoint], groups: list[FakeEndpoint], endpoint: str
+) -> None:
+    """Test an error is raised when the endpoint owns no session."""
+    manager = _manager([*devices, _speaker_b()], groups)
+
+    with pytest.raises(RequestFailed, match="owns no session"):
+        manager.update_session_devices(UUID(endpoint), add={UUID(SPEAKER_B)})
+    for device in [*devices, *groups]:
+        assert {data["type"] for data in device.sent} == {"GET_STATUS"}
+
+
+def test_update_session_devices_unmanaged_endpoint() -> None:
+    """Test an error is raised when the endpoint isn't managed."""
+    manager = _manager([_speaker_a(), _speaker_b()])
+
+    with pytest.raises(RequestFailed, match="isn't managed"):
+        manager.update_session_devices(UUID(GROUP_UUID), add={UUID(SPEAKER_B)})
+
+
+def test_update_session_devices_unknown_member() -> None:
+    """Test an error is raised when a member isn't a managed device."""
+    unknown = "c0ffee00-0000-0000-0000-000000000000"
+    group = _group([SPEAKER_B, unknown])
+    manager = _manager([_speaker_a(None, owner=False), _speaker_b()], [group])
+
+    with pytest.raises(RequestFailed, match="no address known"):
+        manager.update_session_devices(UUID(GROUP_UUID), add={UUID(SPEAKER_A)})
+    assert group.sent[-1]["type"] == "GET_STATUS"
+
+
+def test_update_session_devices_rejected() -> None:
+    """Test an error is raised when the change is rejected."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a, _speaker_b()])
+
+    with pytest.raises(RequestFailed):
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+    assert speaker_a.sent[-1]["type"] == "SET_PLAYBACK_DEVICES"
+
+
+def test_update_session_devices_nothing_to_change() -> None:
+    """Test nothing is sent when the set of devices doesn't change."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a])
+
+    # Already a member
+    assert (
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_A)}) is None
+    )
+    assert {data["type"] for data in speaker_a.sent} == {"GET_STATUS"}
+
+
+def test_update_session_devices_none_left() -> None:
+    """Test an error is raised when no device would be left."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a])
+
+    with pytest.raises(RequestFailed, match="no device would be left"):
+        manager.update_session_devices(UUID(SPEAKER_A), remove={UUID(SPEAKER_A)})
+    assert {data["type"] for data in speaker_a.sent} == {"GET_STATUS"}
+
+
+def test_remove_device() -> None:
+    """Test a removed device is no longer managed."""
+    speaker_a = _speaker_a()
+    speaker_b = _speaker_b()
+    manager = _manager([speaker_a, speaker_b])
+
+    manager.remove_multizone(UUID(SPEAKER_B))
+
+    speaker_b.cast.unregister_handler.assert_called_once_with(speaker_b.controller)
+    with pytest.raises(RequestFailed, match="no address known"):
+        manager.update_session_devices(UUID(SPEAKER_A), add={UUID(SPEAKER_B)})
+
+
+def test_add_multizone_connected_cast() -> None:
+    """Test a cast which is already connected when it's added owns its session."""
+    speaker_a = _speaker_a()
+    speaker_a.cast.socket_client.is_alive.return_value = True
+    speaker_a.cast.socket_client.is_connected = True
+    manager = MultizoneManager()
+
+    manager.add_multizone(speaker_a.cast)
+
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS"]
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
+
+
+def test_multizone_manager_members() -> None:
+    """Test the members of managed groups are exposed."""
+    group = FakeEndpoint(GROUP_UUID, None, [], None)
+    group.cast.cast_type = CAST_TYPE_GROUP
+    manager = MultizoneManager()
+    manager.add_multizone(group.cast)
+    group.connect()
+    assert manager.get_multizone_members(UUID(GROUP_UUID)) == []
+
+    group.members = [KITCHEN_UUID]
+    group.connect()
+
+    assert manager.get_multizone_members(UUID(GROUP_UUID)) == [KITCHEN_UUID]
+    # The listeners are passed group uuids as strings
+    assert manager.get_multizone_members(GROUP_UUID) == [KITCHEN_UUID]
+
+
+def test_group_told_to_members() -> None:
+    """Test the members of a group are told about it and its status."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    group.cast.cast_type = CAST_TYPE_GROUP
+    manager = MultizoneManager()
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+    manager.add_multizone(group.cast)
+    group.connect()
+
+    listener.added_to_multizone.assert_called_once_with(GROUP_UUID)
+    assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == [GROUP_UUID]
+    listener.multizone_new_cast_status.assert_called_with(GROUP_UUID, group.cast.status)
+    media_listener = group.cast.media_controller.register_status_listener.call_args
+    media_status = MagicMock()
+    media_listener.args[0].new_media_status(media_status)
+    listener.multizone_new_media_status.assert_called_once_with(
+        GROUP_UUID, media_status
+    )
+
+    manager.remove_multizone(UUID(GROUP_UUID))
+    listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
+    assert manager.get_multizone_memberships(UUID(SPEAKER_A)) == []
+
+
+@pytest.mark.parametrize("device", [SPEAKER_A, SPEAKER_B])
+def test_session_endpoint_group(device: str) -> None:
+    """Test a group's session, its members with the leader first."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    # The leader runs the group's session, the other member one of its own
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+
+    assert manager.get_session_endpoint(UUID(device)) == UUID(GROUP_UUID)
+    assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_A, SPEAKER_B]
+    # The group is its own endpoint
+    assert manager.get_session_endpoint(UUID(GROUP_UUID)) == UUID(GROUP_UUID)
+
+
+def test_session_endpoint_one_device() -> None:
+    """Test a device playing a session on its own, or no session."""
+    manager = _manager([_speaker_a(), _speaker_b()])
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
+    assert manager.get_multizone_members(SPEAKER_A) == [SPEAKER_A]
+    assert manager.get_session_endpoint(UUID(SPEAKER_B)) is None
+
+
+def test_session_status_requested_on_changes() -> None:
+    """Test status is requested when the playback session may have changed."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    assert _session_devices(manager, SPEAKER_A) == []
+    speaker_a.sent.clear()
+
+    # A session is started
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS"]
+    assert _session_devices(manager, SPEAKER_A) == [SPEAKER_A]
+
+    # Other cast status changes don't request status
+    speaker_a.new_cast_status()
+    assert len(speaker_a.sent) == 1
+
+    # The devices playing the session are changed by another sender
+    assert speaker_a.controller is not None
+    speaker_a.controller.receive_message(
+        MagicMock(), {**SESSION_UPDATED, "requestId": 0, "changedDevices": []}
+    )
+    assert [data["type"] for data in speaker_a.sent] == ["GET_STATUS", "GET_STATUS"]
+
+
+def test_sessions_changed_reported() -> None:
+    """Test manager listeners are told when sessions may have changed."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+
+    # Once for the new session and once for the status
+    assert listener.multizone_sessions_changed.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"type": "DEVICE_ADDED", "device": {"deviceId": KITCHEN_UUID, "name": "K"}},
+        {"type": "DEVICE_REMOVED", "deviceId": SPEAKER_B},
+    ],
+)
+@pytest.mark.parametrize("is_group", [False, True])
+def test_member_broadcast_reported(is_group: bool, message: dict) -> None:
+    """Test manager listeners are told about a broadcast of changed members."""
+    if is_group:
+        endpoint = _group([SPEAKER_A, SPEAKER_B])
+        manager = _manager([_speaker_b()], [endpoint])
+    else:
+        endpoint = FakeEndpoint(
+            SPEAKER_A, SESSION, [SPEAKER_A, SPEAKER_B], PLAYBACK_SESSION
+        )
+        manager = _manager([endpoint, _speaker_b()])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_B), listener)
+
+    assert endpoint.controller is not None
+    endpoint.controller.receive_message(MagicMock(), message)
+
+    listener.multizone_sessions_changed.assert_called_once_with()
+
+
+def test_removed_device_not_tracked() -> None:
+    """Test a removed device no longer requests status."""
+    speaker_a = _speaker_a(None)
+    manager = _manager([speaker_a])
+    manager.remove_multizone(UUID(SPEAKER_A))
+    speaker_a.sent.clear()
+
+    speaker_a.cast.status.session_id = SESSION
+    speaker_a.new_cast_status()
+
+    assert not speaker_a.sent
+
+
+def test_member_changes_dont_request_status() -> None:
+    """Test the members reported by a status don't request it again."""
+    group = FakeEndpoint(GROUP_UUID, None, [SPEAKER_B, SPEAKER_A], None)
+    _manager([], [group])
+
+    assert [data["type"] for data in group.sent] == ["GET_STATUS"]
+
+
+@pytest.mark.parametrize("group_uuid", [UUID(GROUP_UUID), GROUP_UUID])
+def test_remove_group(group_uuid: UUID | str) -> None:
+    """Test members are told a removed group is gone, and it's no longer tracked."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    manager = _manager([], [group])
+    listener = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener)
+
+    manager.remove_multizone(group_uuid)
+
+    listener.removed_from_multizone.assert_called_once_with(GROUP_UUID)
+    listener.multizone_sessions_changed.assert_called_with()
+    group.sent.clear()
+    group.connect()
+    assert not group.sent
+    listener.multizone_new_cast_status.assert_not_called()
+
+
+def test_idle_group_members_keep_their_order() -> None:
+    """Test an idle member isn't taken for the leader of an idle group."""
+    group = FakeEndpoint(GROUP_UUID, None, [], None)
+    # Speaker B plays a session of its own, speaker A is idle
+    manager = _manager([_speaker_a(None), _speaker_b("973c31d5")], [group])
+    # Added one at a time to get a known order, a status is applied as a set
+    assert group.controller is not None
+    for member in (SPEAKER_B, SPEAKER_A):
+        group.controller.receive_message(
+            MagicMock(),
+            {"type": "DEVICE_ADDED", "device": {"deviceId": member, "name": member}},
+        )
+
+    assert manager.get_multizone_members(GROUP_UUID) == [SPEAKER_B, SPEAKER_A]
+
+
+def test_session_moved_reported() -> None:
+    """Test the device or group and its members are told where its session went."""
+    group = _group([SPEAKER_B, SPEAKER_A])
+    manager = _manager([_speaker_a(owner=False), _speaker_b("973c31d5")], [group])
+    listener_a = MagicMock(spec=MultiZoneManagerListener)
+    listener_group = MagicMock(spec=MultiZoneManagerListener)
+    manager.register_listener(UUID(SPEAKER_A), listener_a)
+    manager.register_listener(UUID(GROUP_UUID), listener_group)
+    assert group.controller is not None
+    message = {
+        "type": "PLAYBACK_SESSION_UPDATED",
+        "requestId": 0,
+        "name": "Speaker A + 2",
+        "changedDevices": [],
+        "sessionEndpoint": {
+            "deviceId": KITCHEN_UUID,
+            "ipAddress": "192.0.2.10",
+            "port": 32077,
+            "sessionId": SESSION,
+        },
+    }
+
+    group.controller.receive_message(MagicMock(), message)
+
+    endpoint = SessionEndpoint(KITCHEN_UUID, "192.0.2.10", 32077, SESSION)
+    for listener in (listener_a, listener_group):
+        listener.multizone_session_moved.assert_called_once_with(
+            GROUP_UUID, endpoint, "Speaker A + 2"
+        )
+
+    # An update without an endpoint isn't a move
+    group.controller.receive_message(
+        MagicMock(), {"type": "PLAYBACK_SESSION_UPDATED", "requestId": 0}
+    )
+    listener_a.multizone_session_moved.assert_called_once()
+
+
+def test_session_owner_waits_for_status() -> None:
+    """Test an endpoint playing another session isn't an owner until its status."""
+    speaker_a = _speaker_a()
+    manager = _manager([speaker_a, _speaker_b()])
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
+    assert speaker_a.controller is not None
+
+    # Joined a group as a follower, its status doesn't arrive
+    speaker_a.cast.status.session_id = "973c31d5"
+    with patch.object(speaker_a.controller, "update_members"):
+        speaker_a.new_cast_status()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) is None
+
+    speaker_a.controller.update_members()
+
+    assert manager.get_session_endpoint(UUID(SPEAKER_A)) == UUID(SPEAKER_A)
