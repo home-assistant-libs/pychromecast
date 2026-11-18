@@ -25,6 +25,9 @@ XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 FORMAT_BASE_URL_HTTP = "http://{}:8008"
 FORMAT_BASE_URL_HTTPS = "https://{}:8443"
 
+# Reported by Android TV based devices, which don't expose their MAC address
+PLACEHOLDER_MAC_ADDRESS = "00:00:00:00:00:00"
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -283,6 +286,8 @@ def get_device_info(  # pylint: disable=too-many-locals
             manufacturer = device_info.get("manufacturer", manufacturer)
             udn = device_info.get("ssdp_udn", None)
             mac_address = device_info.get("mac_address", None)
+            if mac_address == PLACEHOLDER_MAC_ADDRESS:
+                mac_address = None
             product_name = device_info.get("product_name", None)
         else:
             udn = status.get("ssdp_udn", None)
