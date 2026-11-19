@@ -624,8 +624,10 @@ class CastBrowser:
     When a Chromecast is updated, cast_listener.update_cast is called
     When a Chromecast is lost, the cast_listener.remove_cast is called
 
-    A shared zeroconf instance can be passed as zeroconf_instance. If no
-    instance is passed, a new instance will be created.
+    A shared zeroconf instance can be passed as zeroconf_instance. Closing it
+    is the responsibility of the caller. Pass owns_zeroconf=True to have
+    stop_discovery() close it. If no instance is passed, only the known hosts
+    are polled.
     """
 
     def __init__(
@@ -633,10 +635,13 @@ class CastBrowser:
         cast_listener: AbstractCastListener,
         zeroconf_instance: zeroconf.Zeroconf | None = None,
         known_hosts: list[str] | None = None,
+        *,
+        owns_zeroconf: bool = False,
     ) -> None:
         self._cast_listener = cast_listener
         self.zc = zeroconf_instance  # pylint: disable=invalid-name
         self._zc_browser: zeroconf.ServiceBrowser | None = None
+        self._owns_zeroconf = owns_zeroconf
         self.devices: dict[UUID, CastInfo] = {}
         self.services = self.devices  # For backwards compatibility
         self._services_lock = threading.Lock()
@@ -666,9 +671,6 @@ class CastBrowser:
         a chromecast is discovered, callback will be called with the
         discovered chromecast's zeroconf name. This is the dictionary key to find
         the chromecast metadata in CastBrowser.devices.
-
-        A shared zeroconf instance can be passed as zeroconf_instance. If no
-        instance is passed, a new instance will be created.
         """
 
         if self.zc:
@@ -687,7 +689,11 @@ class CastBrowser:
             except RuntimeError:
                 # Throws if called from service callback when joining the zc browser thread
                 pass
-            self._zc_browser.zc.close()
+            self._zc_browser = None
+        # The zeroconf instance is only closed if the browser owns it.
+        if self._owns_zeroconf and self.zc:
+            self._owns_zeroconf = False
+            self.zc.close()
         self.host_browser.stop.set()
         self.host_browser.join()
 
@@ -773,7 +779,12 @@ def discover_chromecasts(
 
     discover_complete = threading.Event()
     zconf = zeroconf_instance or create_zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(
+        SimpleCastListener(add_callback),
+        zconf,
+        known_hosts,
+        owns_zeroconf=zeroconf_instance is None,
+    )
     browser.start_discovery()
 
     # Wait for the timeout or the maximum number of devices
@@ -824,7 +835,12 @@ def discover_listed_chromecasts(
     discover_complete = threading.Event()
 
     zconf = zeroconf_instance or create_zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(
+        SimpleCastListener(add_callback),
+        zconf,
+        known_hosts,
+        owns_zeroconf=zeroconf_instance is None,
+    )
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices

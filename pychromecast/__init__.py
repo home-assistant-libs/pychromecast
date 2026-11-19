@@ -163,7 +163,12 @@ def get_listed_chromecasts(
     discover_complete = Event()
 
     zconf = zeroconf_instance or create_zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(
+        SimpleCastListener(add_callback),
+        zconf,
+        known_hosts,
+        owns_zeroconf=zeroconf_instance is None,
+    )
     browser.start_discovery()
 
     # Wait for the timeout or found all wanted devices
@@ -284,7 +289,12 @@ def get_chromecasts(  # pylint: disable=too-many-locals
             pass
 
     zconf = zeroconf_instance or create_zeroconf()
-    browser = CastBrowser(SimpleCastListener(add_callback), zconf, known_hosts)
+    browser = CastBrowser(
+        SimpleCastListener(add_callback),
+        zconf,
+        known_hosts,
+        owns_zeroconf=zeroconf_instance is None,
+    )
     browser.start_discovery()
     return browser
 
