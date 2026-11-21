@@ -236,3 +236,64 @@ def test_set_playback_devices_response(
     send.call_args.kwargs["callback_function"](msg_sent, response)
 
     callback.assert_called_once_with(success, response)
+
+
+STEREO_PAIR_UUID = "77f2e02b-3ed6-4f5a-866a-4e9fe03c42e4"
+# Stereo pairs report their device id undashed and in upper case
+STEREO_PAIR_DEVICE_ID = "77F2E02B3ED64F5A866A4E9FE03C42E4"
+
+
+def test_status_device_id_normalized() -> None:
+    """Test member device ids in multizone status are normalized."""
+    controller, listener = _controller()
+
+    controller.receive_message(
+        MagicMock(),
+        {
+            "type": "MULTIZONE_STATUS",
+            "requestId": 1,
+            "status": {
+                "devices": [
+                    {"deviceId": KITCHEN_UUID, "name": "Kitchen"},
+                    {"deviceId": STEREO_PAIR_DEVICE_ID, "name": "Stereo pair"},
+                ],
+                "isMultichannel": False,
+            },
+        },
+    )
+    assert sorted(controller.members) == sorted([KITCHEN_UUID, STEREO_PAIR_UUID])
+    listener.multizone_member_added.assert_any_call(STEREO_PAIR_UUID)
+
+
+@pytest.mark.parametrize("message_type", ["DEVICE_ADDED", "DEVICE_UPDATED"])
+def test_added_device_id_normalized(message_type: str) -> None:
+    """Test the device id of an added or updated member is normalized."""
+    controller, listener = _controller()
+
+    controller.receive_message(
+        MagicMock(),
+        {
+            "type": message_type,
+            "device": {"deviceId": STEREO_PAIR_DEVICE_ID, "name": "Stereo pair"},
+        },
+    )
+    assert controller.members == [STEREO_PAIR_UUID]
+    listener.multizone_member_added.assert_called_once_with(STEREO_PAIR_UUID)
+
+
+def test_removed_device_id_normalized() -> None:
+    """Test the device id of a removed member is normalized."""
+    controller, listener = _controller()
+    controller.receive_message(
+        MagicMock(),
+        {
+            "type": "DEVICE_ADDED",
+            "device": {"deviceId": STEREO_PAIR_UUID, "name": "Stereo pair"},
+        },
+    )
+
+    controller.receive_message(
+        MagicMock(), {"type": "DEVICE_REMOVED", "deviceId": STEREO_PAIR_DEVICE_ID}
+    )
+    assert controller.members == []
+    listener.multizone_member_removed.assert_called_once_with(STEREO_PAIR_UUID)
