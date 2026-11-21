@@ -436,25 +436,28 @@ class MultizoneController(BaseController):
     ) -> bool:
         """Called when a multizone message is received."""
         if data[MESSAGE_TYPE] == TYPE_DEVICE_ADDED:
-            uuid = data["device"]["deviceId"]
+            uuid = _normalize_device_id(data["device"]["deviceId"])
             name = data["device"]["name"]
             self._add_member(uuid, name)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_REMOVED:
-            uuid = data["deviceId"]
+            uuid = _normalize_device_id(data["deviceId"])
             self._remove_member(uuid)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_DEVICE_UPDATED:
-            uuid = data["device"]["deviceId"]
+            uuid = _normalize_device_id(data["device"]["deviceId"])
             name = data["device"]["name"]
             self._add_member(uuid, name)
             return True
 
         if data[MESSAGE_TYPE] == TYPE_MULTIZONE_STATUS:
             members = data["status"]["devices"]
-            members = {member["deviceId"]: member["name"] for member in members}
+            members = {
+                _normalize_device_id(member["deviceId"]): member["name"]
+                for member in members
+            }
             removed_members = list(set(self._members.keys()) - set(members.keys()))
             added_members = list(set(members.keys()) - set(self._members.keys()))
             _LOGGER.debug(
