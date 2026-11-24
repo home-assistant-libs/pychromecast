@@ -95,6 +95,17 @@ TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
 
+def _peer_host(sockaddr: tuple) -> str:
+    """Return the numeric host of a socket address, with any IPv6 scope.
+
+    A link-local IPv6 address can only be connected to with its scope, which
+    is not part of the address string, but the fourth element of the tuple.
+    """
+    if len(sockaddr) >= 4 and sockaddr[3]:
+        return f"{sockaddr[0]}%{sockaddr[3]}"
+    return str(sockaddr[0])
+
+
 def _dict_from_message_payload(message: CastMessage) -> dict:
     """Parses a PB2 message as a JSON dict."""
     try:
@@ -654,13 +665,16 @@ class SocketClient(threading.Thread, CastStatusListener):
                 and self.expected_uuid is not None
             ):
                 result = self._verify_group_leader(
-                    result, tls_socket.getpeername()[0], self.expected_uuid, timeout
+                    result,
+                    _peer_host(tls_socket.getpeername()),
+                    self.expected_uuid,
+                    timeout,
                 )
             # A device presents its own certificate on the ports of the groups it
             # leads too, don't accept such a port as the device itself
             elif result.uuid_checked and self.port != 8009:
                 result = self._verify_not_group_endpoint(
-                    result, tls_socket.getpeername()[0], timeout
+                    result, _peer_host(tls_socket.getpeername()), timeout
                 )
         finally:
             tls_socket.settimeout(self.timeout)

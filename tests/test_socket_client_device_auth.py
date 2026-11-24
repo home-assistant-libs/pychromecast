@@ -67,6 +67,7 @@ from pychromecast.socket_client import (
     ConnectionStatus,
     ConnectionStatusListener,
     SocketClient,
+    _peer_host,
 )
 
 VERIFIED = DeviceAuthResult(
@@ -1786,3 +1787,54 @@ def test_warning_per_failure_class(
         assert text_levels.count(logging.WARNING) == 1
         assert text_levels[0] == logging.WARNING
     assert sorted(len(text_levels) for text_levels in levels.values()) == [1, 3]
+
+
+# The scope of a link-local IPv6 address is kept
+
+
+@pytest.mark.parametrize(
+    ("sockaddr", "host"),
+    [
+        (("192.168.0.161", 32149), "192.168.0.161"),
+        (("2001:db8::1", 32149, 0, 0), "2001:db8::1"),
+        (("fe80::1", 32149, 0, 3), "fe80::1%3"),
+    ],
+)
+def test_peer_host(sockaddr: tuple, host: str) -> None:
+    """Test the host to connect to, with the scope of a link-local address."""
+    assert _peer_host(sockaddr) == host
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_group_attested_link_local(make_client: Callable[..., SocketClient]) -> None:
+    """Test the group check keeps the scope of a link-local IPv6 peer."""
+    client = make_client(cast_type="group")
+    attested = DeviceAuthResult(DeviceAuthStatus.VERIFIED, "leads the group")
+    with (
+        patch.object(PeerSocket, "getpeername", return_value=("fe80::1", 8009, 0, 3)),
+        patch("pychromecast.socket_client.authenticate", return_value=_mismatch()),
+        patch(
+            "pychromecast.socket_client.verify_group_leader", return_value=attested
+        ) as verify_group,
+    ):
+        client.initialize_connection()
+    assert verify_group.call_args.args[0] == "fe80::1%3"
+    assert client.is_connected
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_device_endpoint_check_link_local(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test the endpoint check keeps the scope of a link-local IPv6 peer."""
+    client = make_client(services={HostServiceInfo("fe80::1%3", 8010)})
+    ok = DeviceAuthResult(DeviceAuthStatus.VERIFIED, "not a group port")
+    with (
+        patch.object(PeerSocket, "getpeername", return_value=("fe80::1", 8010, 0, 3)),
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        patch(
+            "pychromecast.socket_client.verify_not_group_endpoint", return_value=ok
+        ) as check,
+    ):
+        client.initialize_connection()
+    assert check.call_args.args[0] == "fe80::1%3"
