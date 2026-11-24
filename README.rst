@@ -227,9 +227,9 @@ A failure describes whoever answered at the device's address, which can
 change: for example after an IP address change another genuine device may
 answer for a while, and a group leader change takes a moment to be picked up
 from mDNS. Such failures, of class
-``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, are only logged as a
-warning when they persist for more than 10 minutes, and consumers should
-apply a similar grace period before surfacing them. A failure of class
+``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, are only logged at
+debug level, and consumers should apply a grace period before surfacing them.
+A failure of class
 ``CLOCK`` comes from a genuine device whose certificates are not valid at the
 current time: the system clock is wrong, or the device needs a firmware
 update.

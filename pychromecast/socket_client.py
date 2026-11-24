@@ -82,15 +82,13 @@ CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # in ConnectionStatus.device_auth. The connection is retried like after a
 # network failure. Consumers should apply a grace period before surfacing a
 # failure of class DeviceAuthFailureClass.WRONG_IDENTITY, it's expected for a
-# while after an IP address change or a group leader change.
+# while when another device answers at a stale address, or after a group leader
+# change.
 CONNECTION_STATUS_FAILED_AUTH = "FAILED_AUTH"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 
 SELECT_TIMEOUT = 5.0
-# Seconds failures which are expected for a while, like a device with the wrong
-# identity at a stale address or a group leader change, are only logged at debug
-FAILURE_GRACE_PERIOD = 600.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
 
@@ -267,11 +265,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.device_auth_trust_roots = device_auth_trust_roots
         # The device authentication result of the current or last attempt
         self.device_auth_result: DeviceAuthResult | None = None
-        # When the current streak of failures started, and which kinds of
-        # failures logged after a grace period were logged in the streak
-        self._failure_streak_start: float | None = None
-        self._network_notice_logged = False
-        self._identity_warned = False
 
         self.host = "unknown"
         self.port = 8009
@@ -353,22 +346,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_log_fun = self.logger.info
         # The classes of auth failures warned about in this call
         warned: set[DeviceAuthFailureClass] = set()
-
-        def log_retry(msg: str, *args: object) -> None:
-            """Log a network-like failure, for groups after a grace period."""
-            nonlocal retry_log_fun
-            if self.cast_type != CAST_TYPE_GROUP:
-                retry_log_fun(msg, *args)
-                retry_log_fun = self.logger.debug
-            # A group leader change closes the group's port on the old leader,
-            # and is expected to heal when mDNS finds the new one
-            elif not self._network_notice_logged and self._streak_past_grace():
-                self._network_notice_logged = True
-                self.logger.info(
-                    f"{msg} (failing for %.0fs)", *args, self._streak_age()
-                )
-            else:
-                self.logger.debug(msg, *args)
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -476,9 +453,6 @@ class SocketClient(threading.Thread, CastStatusListener):
                     )
                     self.connecting = False
                     self._force_recon = False
-                    self._failure_streak_start = None
-                    self._network_notice_logged = False
-                    self._identity_warned = False
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTED,
@@ -518,11 +492,13 @@ class SocketClient(threading.Thread, CastStatusListener):
                     )
                     result = err.result
                     failure_class = result.failure_class
-                    self._note_failure()
                     if failure_class is DeviceAuthFailureClass.WRONG_IDENTITY:
+                        # Expected for a while when another device answers at a
+                        # stale address or after a group leader change, left to
+                        # consumers to surface
                         self._log_wrong_identity(result, retry["delay"])
                     elif failure_class is DeviceAuthFailureClass.TRANSIENT:
-                        log_retry(
+                        retry_log_fun(
                             "Device authentication with service %s failed: %s (%s), "
                             "retrying in %.1fs",
                             service,
@@ -530,6 +506,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             result.detail,
                             retry["delay"],
                         )
+                        retry_log_fun = self.logger.debug
                     else:
                         # Warn once per class, so one doesn't hide the other
                         auth_log_fun = (
@@ -574,14 +551,13 @@ class SocketClient(threading.Thread, CastStatusListener):
                             None,
                         )
                     )
-                    if self.cast_type == CAST_TYPE_GROUP:
-                        self._note_failure()
-                    log_retry(
+                    retry_log_fun(
                         "Failed to connect to service %s, retrying in %.1fs",
                         service,
                         retry["delay"],
                     )
                     mdns_backoff(service, retry)
+                    retry_log_fun = self.logger.debug
 
             # Only sleep if we have another retry remaining
             if tries is None or tries > 1:
@@ -608,38 +584,21 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
 
-    def _note_failure(self) -> None:
-        """Note a failure, starting a failure streak if none is ongoing."""
-        if self._failure_streak_start is None:
-            self._failure_streak_start = time.monotonic()
-
-    def _streak_age(self) -> float:
-        """Return how long the failure streak has lasted, in seconds."""
-        if self._failure_streak_start is None:
-            return 0.0
-        return time.monotonic() - self._failure_streak_start
-
-    def _streak_past_grace(self) -> bool:
-        """Return True if the failure streak has lasted past the grace period."""
-        return self._streak_age() > FAILURE_GRACE_PERIOD
-
     def _log_wrong_identity(self, result: DeviceAuthResult, delay: float) -> None:
-        """Log a genuine device with the wrong identity, warn if it persists."""
+        """Log a genuine device which isn't the expected device or group leader."""
         expected = (
             f"{self.fn} ({self.expected_uuid})" if self.fn else str(self.expected_uuid)
         )
-        msg = (
-            "The device at this address is a genuine Cast device but not %s "
-            "(it identifies as %s: %s). This can happen after an IP address change "
-            "or group leader change; still retrying in %.1fs, failing for %.0fs"
-        )
-        log_fun = self.logger.debug
-        # Warn once per streak, independently of the network notice
-        if not self._identity_warned and self._streak_past_grace():
-            self._identity_warned = True
-            log_fun = self.logger.warning
-        log_fun(
-            msg, expected, result.tls_cert_cn, result.detail, delay, self._streak_age()
+        self.logger.debug(
+            "The Cast device at %s:%s is genuine, but its certificate identifies it "
+            "as %s, not %s: %s. Another device may be using its old address, or a "
+            "group leader may have changed; retrying in %.1fs",
+            self.host,
+            self.port,
+            result.tls_cert_cn,
+            expected,
+            result.detail,
+            delay,
         )
 
     def _authenticate_device(self, tls_socket: ssl.SSLSocket) -> DeviceAuthResult:

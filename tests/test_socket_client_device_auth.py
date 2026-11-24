@@ -278,13 +278,6 @@ def _retry_levels(caplog: pytest.LogCaptureFixture, text: str) -> list[int]:
     return levels
 
 
-def _fake_time(clock: list[float]) -> Mock:
-    """Return a time module whose monotonic clock is clock[0]."""
-    fake_time = Mock(wraps=time)
-    fake_time.monotonic.side_effect = lambda: clock[0]
-    return fake_time
-
-
 @pytest.fixture(name="connect_patches")
 def connect_patches_fixture() -> Generator[None]:
     """Don't talk to the device after connecting."""
@@ -384,112 +377,57 @@ def _mismatch(cn: UUID = LEADER_UUID) -> DeviceAuthResult:
     )
 
 
+WRONG_IDENTITY_TEXT = "is genuine, but its certificate identifies it as"
+
+
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
-def test_wrong_identity_grace_period(
+def test_wrong_identity_logging(
     make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test a wrong identity is warned about once, after the grace period."""
+    """Test a wrong identity is only logged at debug level, it's left to consumers."""
     client = make_client(tries=3)
     client.retry_wait = 0
     client.fn = "Kitchen"
-    clock = [1000.0]
-    results: list[DeviceAuthResult] = []
-
-    def auth(*_args: Any, **_kwargs: Any) -> DeviceAuthResult:
-        clock[0] += 400
-        return results.pop(0)
-
-    text = "is a genuine Cast device but not"
     with (
-        patch("pychromecast.socket_client.time", _fake_time(clock)),
-        patch("pychromecast.socket_client.authenticate", side_effect=auth),
+        patch("pychromecast.socket_client.authenticate", side_effect=[_mismatch()] * 3),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(DeviceAuthenticationError),
     ):
-        # Failing at 0 s, 400 s and 800 s into the streak
-        results[:] = [_mismatch()] * 3
-        with pytest.raises(ChromecastConnectionError):
-            client.initialize_connection()
-        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-        assert _retry_levels(caplog, text) == [
-            logging.DEBUG,
-            logging.DEBUG,
-            logging.WARNING,
-        ]
-        assert f"Kitchen ({TEST_UUID})" in warnings[0].getMessage()
-        assert f"it identifies as {LEADER_UUID}" in warnings[0].getMessage()
-        assert "IP address change or group leader change" in warnings[0].getMessage()
-
-        # Only one warning per streak
-        client.stop.clear()
-        results[:] = [_mismatch()] * 3
-        with pytest.raises(ChromecastConnectionError):
-            client.initialize_connection()
-        assert _retry_levels(caplog, text) == [logging.DEBUG] * 3
-
-        # Connecting ends the streak, a new streak warns again after the grace
-        client.stop.clear()
-        client.tries = 1
-        results[:] = [VERIFIED]
         client.initialize_connection()
-        client.tries = 3
-        results[:] = [_mismatch()] * 3
-        with pytest.raises(ChromecastConnectionError):
-            client.initialize_connection()
-        assert _retry_levels(caplog, text) == [
-            logging.DEBUG,
-            logging.DEBUG,
-            logging.WARNING,
-        ]
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+    message = next(
+        r.getMessage() for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
+    )
+    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.DEBUG] * 3
+    assert f"identifies it as {LEADER_UUID}, not Kitchen ({TEST_UUID})" in message
+    assert "Another device may be using its old address" in message
+    # The message is about the identity in the certificate, not about the address
+    assert "IP address change" not in message
 
 
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
-def test_group_network_failure_grace_period(
-    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize("device_auth", [True, False])
+def test_group_network_failure_logging(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    device_auth: bool,
 ) -> None:
-    """Test network failures of a group are only logged after the grace period."""
-    client = make_client(cast_type="group", tries=3)
+    """Test network failures of a group are logged like those of any device."""
+    client = make_client(cast_type="group", tries=3, device_auth=device_auth)
     client.retry_wait = 0
-    clock = [1000.0]
-
-    def connect(*_args: Any, **_kwargs: Any) -> None:
-        clock[0] += 400
-        raise ConnectionRefusedError("refused")
-
-    text = "Failed to connect to service"
     with (
-        patch("pychromecast.socket_client.time", _fake_time(clock)),
-        patch("socket.create_connection", side_effect=connect),
+        patch(
+            "socket.create_connection", side_effect=ConnectionRefusedError("refused")
+        ),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-    ):
-        with pytest.raises(ChromecastConnectionError):
-            client.initialize_connection()
-        assert _retry_levels(caplog, text) == [
-            logging.DEBUG,
-            logging.DEBUG,
-            logging.INFO,
-        ]
-
-    # Connecting ends the streak, a new streak is logged after the grace again
-    client.stop.clear()
-    client.tries = 1
-    with (
-        patch("pychromecast.socket_client.time", _fake_time(clock)),
-        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        pytest.raises(ChromecastConnectionError),
     ):
         client.initialize_connection()
-    client.tries = 3
-    with (
-        patch("pychromecast.socket_client.time", _fake_time(clock)),
-        patch("socket.create_connection", side_effect=connect),
-        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-    ):
-        with pytest.raises(ChromecastConnectionError):
-            client.initialize_connection()
-        assert _retry_levels(caplog, text) == [
-            logging.DEBUG,
-            logging.DEBUG,
-            logging.INFO,
-        ]
+    assert _retry_levels(caplog, "Failed to connect to service") == [
+        logging.INFO,
+        logging.DEBUG,
+        logging.DEBUG,
+    ]
 
 
 @pytest.mark.usefixtures("fake_tls")
@@ -1421,22 +1359,20 @@ def test_setup_failure_after_auth_is_not_auth_failure(
 
 
 @pytest.mark.usefixtures("fake_tls")
-def test_network_notice_does_not_suppress_identity_warning(
+def test_group_network_failure_then_wrong_identity_logging(
     make_client: Callable[..., SocketClient],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test the group network notice and the identity warning are independent.
+    """Test a group which refuses connections, then a genuine non-leader answers.
 
-    A group refuses connections past the grace period, then another genuine
-    device answers: one network notice, then still one identity warning.
+    The network failure is logged once at info level, the wrong identity only at
+    debug level, nothing is warned about.
     """
     client = make_client(cast_type="group", tries=6)
     client.retry_wait = 0
-    clock = [1000.0]
     calls = [0]
 
     def connect(*_args: Any, **_kwargs: Any) -> Any:
-        clock[0] += 400
         calls[0] += 1
         if calls[0] <= 3:
             raise ConnectionRefusedError("refused")
@@ -1448,7 +1384,6 @@ def test_network_notice_does_not_suppress_identity_warning(
     with (
         patch("pychromecast.controllers.receiver.ReceiverController.update_status"),
         patch("pychromecast.controllers.heartbeat.HeartbeatController.ping"),
-        patch("pychromecast.socket_client.time", _fake_time(clock)),
         patch("socket.create_connection", side_effect=connect),
         patch("pychromecast.socket_client.authenticate", return_value=_mismatch()),
         patch("pychromecast.socket_client.verify_group_leader", return_value=not_led),
@@ -1456,18 +1391,16 @@ def test_network_notice_does_not_suppress_identity_warning(
         pytest.raises(ChromecastConnectionError),
     ):
         client.initialize_connection()
-    notices = [
-        r.levelno
-        for r in caplog.records
-        if "Failed to connect to service" in r.getMessage()
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+    identity_levels = [
+        r.levelno for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
     ]
-    warnings = [
-        r.levelno
-        for r in caplog.records
-        if "genuine Cast device but not" in r.getMessage()
+    assert identity_levels == [logging.DEBUG] * 3
+    assert _retry_levels(caplog, "Failed to connect to service") == [
+        logging.INFO,
+        logging.DEBUG,
+        logging.DEBUG,
     ]
-    assert notices == [logging.DEBUG, logging.DEBUG, logging.INFO]
-    assert warnings == [logging.WARNING, logging.DEBUG, logging.DEBUG]
 
 
 class Forwarder:
@@ -1659,7 +1592,7 @@ def test_e2e_group_without_multizone_is_wrong_identity(
     pki: TestPKI,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test a genuine device without group information gets the grace period."""
+    """Test a genuine device without group information is a wrong identity."""
     receiver = receiver_factory(tls_cn=str(OTHER_UUID))
     default_eureka.body = {"name": "no multizone"}
     client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
@@ -1672,8 +1605,8 @@ def test_e2e_group_without_multizone_is_wrong_identity(
     assert result is not None
     assert result.status is DeviceAuthStatus.GROUP_NOT_LED
     assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    # Logged at debug within the grace period, not warned about
-    assert _retry_levels(caplog, "genuine Cast device but not") == [logging.DEBUG]
+    # Only logged at debug level, not warned about
+    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.DEBUG]
     receiver.wait_idle()
     assert len(receiver.connections[0]) == 1
 
