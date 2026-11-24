@@ -38,6 +38,7 @@ from device_auth_helpers import (
 
 from pychromecast.controllers.heartbeat import NS_HEARTBEAT
 from pychromecast.controllers.receiver import NS_RECEIVER, CastStatus
+from pychromecast import device_auth
 from pychromecast.device_auth import (
     NS_DEVICE_AUTH,
     DeviceAuthFailureClass,
@@ -135,6 +136,14 @@ def make_client_fixture() -> Generator[Callable[..., SocketClient]]:
         _close_client(client)
 
 
+class PeerSocket(socket.socket):
+    """One end of a socket pair, connected to the device at 192.0.2.1."""
+
+    def getpeername(self) -> tuple[str, int]:
+        """Return the address of the device."""
+        return ("192.0.2.1", 8009)
+
+
 class FakeTLS:
     """Fake the TLS connection: each connect gets a new socket pair."""
 
@@ -145,7 +154,8 @@ class FakeTLS:
         self.context.wrap_socket.side_effect = self._wrap
 
     def _wrap(self, _raw: object) -> socket.socket:
-        tls_socket, peer = socket.socketpair()
+        pair_socket, peer = socket.socketpair()
+        tls_socket = PeerSocket(fileno=pair_socket.detach())
         self.tls_sockets.append(tls_socket)
         self._peers.append(peer)
         return tls_socket
@@ -1686,3 +1696,93 @@ def test_run_stopped_right_after_connecting(
         client.run()
     assert client.socket is None
     assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+
+
+# The device's eureka_info is fetched from its address as connected
+
+
+def test_e2e_group_attested_at_connected_address(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    default_eureka: EurekaServer,
+    pki: TestPKI,
+) -> None:
+    """Test a group service with a host name is attested at the address used."""
+    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
+    default_eureka.body = eureka_info([group_entry(receiver.port)])
+    client = _e2e_client(
+        make_client,
+        pki,
+        receiver.port,
+        cast_type="group",
+        services={HostServiceInfo("localhost", receiver.port)},
+    )
+    with patch(
+        "pychromecast.socket_client.verify_group_leader",
+        wraps=device_auth.verify_group_leader,
+    ) as verify_group:
+        client.initialize_connection()
+    assert client.device_auth_result is not None
+    assert client.device_auth_result.verified
+    assert verify_group.call_args.args[:2] == ("127.0.0.1", receiver.port)
+
+
+def test_e2e_device_endpoint_checked_at_connected_address(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a device on another port with a host name is checked at its address."""
+    receiver = receiver_factory()
+    client = _e2e_client(
+        make_client,
+        pki,
+        receiver.port,
+        services={HostServiceInfo("localhost", receiver.port)},
+    )
+    with patch(
+        "pychromecast.socket_client.verify_not_group_endpoint",
+        wraps=device_auth.verify_not_group_endpoint,
+    ) as check:
+        client.initialize_connection()
+    assert client.is_connected
+    assert check.call_args.args[:2] == ("127.0.0.1", receiver.port)
+
+
+# One warning per class of failure
+
+
+@pytest.mark.usefixtures("fake_tls", "connect_patches")
+@pytest.mark.parametrize(
+    "statuses",
+    [
+        [DeviceAuthStatus.CERT_EXPIRED] + [DeviceAuthStatus.CHAIN_UNTRUSTED] * 3,
+        [DeviceAuthStatus.CHAIN_UNTRUSTED] + [DeviceAuthStatus.CERT_EXPIRED] * 3,
+    ],
+    ids=["clock_first", "not_genuine_first"],
+)
+def test_warning_per_failure_class(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    statuses: list[DeviceAuthStatus],
+) -> None:
+    """Test a warning of one class doesn't hide the first of another class."""
+    client = make_client(tries=len(statuses))
+    client.retry_wait = 0
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            side_effect=[_failure(status) for status in statuses],
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(DeviceAuthenticationError),
+    ):
+        client.initialize_connection()
+    levels = {
+        text: [r.levelno for r in caplog.records if text in r.getMessage()]
+        for text in ("system clock", "may not be a genuine")
+    }
+    for text_levels in levels.values():
+        assert text_levels.count(logging.WARNING) == 1
+        assert text_levels[0] == logging.WARNING
+    assert sorted(len(text_levels) for text_levels in levels.values()) == [1, 3]

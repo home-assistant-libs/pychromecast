@@ -1129,7 +1129,9 @@ def verify_group_leader(
 ) -> DeviceAuthResult:
     """Verify an authenticated device leads a group on host:port.
 
-    :param host: The address of the device.
+    :param host: The numeric address of the device, as connected for device
+                 authentication. A host name would be resolved again, and the
+                 fetch is only bounded by timeout once connected.
     :param port: The port of the group endpoint.
     :param group_uuid: The UUID of the group.
     :param device_cert_der: The device certificate which passed device
@@ -1177,7 +1179,9 @@ def verify_not_group_endpoint(
     leads, so its UUID matches there too. Fetches eureka_info like
     verify_group_leader, and fails with GROUP_ENDPOINT if the device leads a
     group on port. A device without multizone information leads no group.
-    Fails closed if eureka_info can't be fetched. Never raises.
+    Fails closed if eureka_info can't be fetched. Never raises. host should be
+    the numeric address of the device as connected, like for
+    verify_group_leader.
     """
     if device_cert_der is None:
         # A programming error, only genuine devices have a device certificate

@@ -340,7 +340,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.session_id = None
 
         retry_log_fun = self.logger.info
-        auth_log_fun = self.logger.warning
+        # The classes of auth failures warned about in this call
+        warned: set[DeviceAuthFailureClass] = set()
 
         def log_retry(msg: str, *args: object) -> None:
             """Log a network-like failure, for groups after a grace period."""
@@ -518,26 +519,29 @@ class SocketClient(threading.Thread, CastStatusListener):
                             result.detail,
                             retry["delay"],
                         )
-                    elif failure_class is DeviceAuthFailureClass.CLOCK:
-                        auth_log_fun(
-                            "Device authentication failed: %s (%s). Check the "
-                            "system clock; if it's correct, the device may need a "
-                            "firmware update. Not connecting, retrying in %.1fs",
-                            result.status,
-                            result.detail,
-                            retry["delay"],
-                        )
-                        auth_log_fun = self.logger.debug
                     else:
-                        auth_log_fun(
-                            "Device authentication failed, the device may not be a "
-                            "genuine Cast device: %s (%s). Not connecting, "
-                            "retrying in %.1fs",
-                            result.status,
-                            result.detail,
-                            retry["delay"],
+                        # Warn once per class, so one doesn't hide the other
+                        auth_log_fun = (
+                            self.logger.debug
+                            if failure_class in warned
+                            else self.logger.warning
                         )
-                        auth_log_fun = self.logger.debug
+                        if failure_class is not None:
+                            warned.add(failure_class)
+                        if failure_class is DeviceAuthFailureClass.CLOCK:
+                            msg = (
+                                "Device authentication failed: %s (%s). Check the "
+                                "system clock; if it's correct, the device may "
+                                "need a firmware update. Not connecting, retrying "
+                                "in %.1fs"
+                            )
+                        else:
+                            msg = (
+                                "Device authentication failed, the device may not "
+                                "be a genuine Cast device: %s (%s). Not "
+                                "connecting, retrying in %.1fs"
+                            )
+                        auth_log_fun(msg, result.status, result.detail, retry["delay"])
                     mdns_backoff(service, retry)
 
                 # OSError raised if connecting to the socket fails, NotConnected raised
@@ -649,11 +653,15 @@ class SocketClient(threading.Thread, CastStatusListener):
                 and self.cast_type == CAST_TYPE_GROUP
                 and self.expected_uuid is not None
             ):
-                result = self._verify_group_leader(result, self.expected_uuid, timeout)
+                result = self._verify_group_leader(
+                    result, tls_socket.getpeername()[0], self.expected_uuid, timeout
+                )
             # A device presents its own certificate on the ports of the groups it
             # leads too, don't accept such a port as the device itself
             elif result.uuid_checked and self.port != 8009:
-                result = self._verify_not_group_endpoint(result, timeout)
+                result = self._verify_not_group_endpoint(
+                    result, tls_socket.getpeername()[0], timeout
+                )
         finally:
             tls_socket.settimeout(self.timeout)
         if not result.verified:
@@ -673,11 +681,20 @@ class SocketClient(threading.Thread, CastStatusListener):
         return result
 
     def _verify_group_leader(
-        self, result: DeviceAuthResult, group_uuid: UUID, timeout: float
+        self,
+        result: DeviceAuthResult,
+        address: str,
+        group_uuid: UUID,
+        timeout: float,
     ) -> DeviceAuthResult:
-        """Check the genuine device in result leads the group."""
+        """Check the genuine device in result leads the group.
+
+        address is the numeric address of the device, as connected, so the
+        device's eureka_info is fetched from the device which was authenticated,
+        without resolving a host name again.
+        """
         attestation = verify_group_leader(
-            self.host,
+            address,
             self.port,
             group_uuid,
             result.device_cert_der,
@@ -694,11 +711,14 @@ class SocketClient(threading.Thread, CastStatusListener):
         )
 
     def _verify_not_group_endpoint(
-        self, result: DeviceAuthResult, timeout: float
+        self, result: DeviceAuthResult, address: str, timeout: float
     ) -> DeviceAuthResult:
-        """Check the device in result doesn't lead a group on self.port."""
+        """Check the device in result doesn't lead a group on self.port.
+
+        address is the numeric address of the device, as connected.
+        """
         check = verify_not_group_endpoint(
-            self.host, self.port, result.device_cert_der, timeout=timeout
+            address, self.port, result.device_cert_der, timeout=timeout
         )
         if check.verified:
             return result

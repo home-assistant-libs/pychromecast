@@ -1212,7 +1212,9 @@ class DripSocket:
         self._sock, self._peer = socket.socketpair()
         self.peer_cert_der = peer_cert_der
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._drip, args=(interval,))
+        self._thread = threading.Thread(
+            target=self._drip, args=(interval,), daemon=True
+        )
         self._thread.start()
 
     def _drip(self, interval: float) -> None:
