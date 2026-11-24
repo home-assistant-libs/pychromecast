@@ -184,12 +184,7 @@ PyChromecast also checks that the common name of the device's TLS certificate
 is the UUID the device was discovered with. Because the signature covers the
 TLS certificate, a genuine device can't claim another device's UUID. This
 applies to every endpoint, including endpoints discovered as a cast group. A
-device presents its own certificate on the ports of the groups it leads too,
-so when the device's UUID is claimed on a port other than 8009, PyChromecast
-also checks the device's ``eureka_info`` (see below) and refuses the port of
-a group the device leads. This stops port spoofing which points at the
-device's real address, not a forwarder which presents a group port as port
-8009.
+device presenting the expected UUID is accepted on any port.
 
 A cast group is served by its leader, which presents its own TLS certificate.
 When the certificate of a group endpoint names another UUID, PyChromecast
@@ -204,7 +199,7 @@ Dynamic groups, and reportedly newer firmware, don't report the group's port,
 then only the group and its leadership are checked. If port 8443 of the leader
 can't be reached, the group fails authentication and the connection is
 retried. The check runs on every connect and reconnect, so a group follows
-leader changes.
+leader changes. The challenge and the group check share one timeout.
 
 Nothing but the challenge, and where needed the ``eureka_info`` request, is
 sent on a connection to a device which fails authentication. Unauthenticated
@@ -221,7 +216,11 @@ need updating. The reason is in ``ConnectionStatus.device_auth``, a
 same backoff as network failures. If no retries are left,
 ``pychromecast.DeviceAuthenticationError``, a ``ChromecastConnectionError``
 carrying the result, is raised. The result of the last connection attempt is
-available as ``Chromecast.device_auth_result``.
+available as ``Chromecast.device_auth_result``. ``DeviceAuthResult.verified``
+and ``DeviceAuthResult.failure_class``, a
+``pychromecast.DeviceAuthFailureClass``, are the stable interface. The
+``DeviceAuthStatus`` values and the ``detail`` texts are diagnostics, which may
+change between releases.
 
 A failure describes whoever answered at the device's address, which can
 change: for example after an IP address change another genuine device may
@@ -232,7 +231,10 @@ debug level, and consumers should apply a grace period before surfacing them.
 A failure of class
 ``CLOCK`` comes from a genuine device whose certificates are not valid at the
 current time: the system clock is wrong, or the device needs a firmware
-update.
+update. Failures of class ``NOT_GENUINE`` and ``CLOCK`` are logged as a warning
+the first time. A failure of class ``TRANSIENT``, no usable answer to the
+challenge or a group check which couldn't be made, is logged like a network
+failure.
 
 Unofficial receivers, such as receivers emulating a cast device, fail
 authentication by design. To talk to them, pass ``device_auth=False`` to
@@ -247,9 +249,10 @@ checked, and devices are not pinned. A rooted genuine device can still pass
 authentication for any UUID. For groups, the check relies on the leader's
 genuine firmware: an attacker able to make a genuine device lead a group with
 the UUID of the victim's group would pass it. An attacker who can spoof mDNS
-or ARP and forward TCP can redirect a connection to another endpoint of the
-same genuine device: its port 8009, or another group it leads. Traffic and
-credentials stay end to end with that genuine device.
+can point a device at the port of a group the device leads, and an attacker
+who can spoof mDNS or ARP and forward TCP can redirect a connection to another
+endpoint of the same genuine device: its port 8009, or another group it leads.
+Traffic and credentials stay end to end with that genuine device.
 
 Thanks
 ------

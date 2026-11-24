@@ -472,9 +472,8 @@ class EurekaServer(TLSServer):
     Like the devices, it keeps the connection open after responding.
 
     Modes: respond; close, after the request; silent, never responding; slow,
-    the head and the body each after 0.4 s; trickle_head and trickle_body, one
-    byte every 0.1 s from the head or from the body on; ip_host, respond with
-    403 unless the Host header is an IP address, like the devices.
+    the head and the body each after 0.4 s; ip_host, respond with 403 unless
+    the Host header is an IP address, like the devices.
     """
 
     def __init__(
@@ -525,16 +524,6 @@ class EurekaServer(TLSServer):
             tls.sendall(head)
             time.sleep(0.4)
             tls.sendall(body)
-        elif self.mode.startswith("trickle_"):
-            if self.mode == "trickle_body":
-                tls.sendall(head)
-                data = body
-            else:
-                data = head + body
-            for index in range(len(data)):
-                if self.stop.wait(0.1):
-                    return
-                tls.sendall(data[index : index + 1])
         else:
             tls.sendall(head + body)
 

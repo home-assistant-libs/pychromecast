@@ -18,7 +18,7 @@ import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from struct import pack, unpack
 from typing import Any
 from uuid import UUID
@@ -43,9 +43,7 @@ from .device_auth import (
     DeviceAuthFailureClass,
     DeviceAuthResult,
     DeviceAuthStatus,
-    authenticate,
-    verify_group_leader,
-    verify_not_group_endpoint,
+    authenticate_endpoint,
 )
 from .dial import get_host_from_service
 from .error import (
@@ -91,17 +89,6 @@ CONNECTION_STATUS_LOST = "LOST"
 SELECT_TIMEOUT = 5.0
 TIMEOUT_TIME = 30.0
 RETRY_TIME = 5.0
-
-
-def _peer_host(sockaddr: tuple) -> str:
-    """Return the numeric host of a socket address, with any IPv6 scope.
-
-    A link-local IPv6 address can only be connected to with its scope, which
-    is not part of the address string, but the fourth element of the tuple.
-    """
-    if len(sockaddr) >= 4 and sockaddr[3]:
-        return f"{sockaddr[0]}%{sockaddr[3]}"
-    return str(sockaddr[0])
 
 
 def _dict_from_message_payload(message: CastMessage) -> dict:
@@ -432,10 +419,8 @@ class SocketClient(threading.Thread, CastStatusListener):
                     # self.connecting is set, other threads fail to send with
                     # NotConnected. The socket is published, and registered with
                     # the selector, only once the device is authenticated.
-                    # Known limitation: disconnect() waits for the handshake, up
-                    # to DEVICE_AUTH_TIMEOUT for the challenge plus, if
-                    # eureka_info is fetched, DEVICE_AUTH_TIMEOUT for that, like
-                    # it waits for connecting.
+                    # Known limitation: disconnect() waits for authentication,
+                    # up to DEVICE_AUTH_TIMEOUT, like it waits for connecting.
                     try:
                         self.device_auth_result = self._authenticate_device(tls_socket)
                         if self.stop.is_set():
@@ -607,34 +592,14 @@ class SocketClient(threading.Thread, CastStatusListener):
             return DeviceAuthResult(
                 DeviceAuthStatus.DISABLED, "device authentication disabled"
             )
-        timeout = min(self.timeout, DEVICE_AUTH_TIMEOUT)
         try:
-            result = authenticate(
+            result = authenticate_endpoint(
                 tls_socket,
                 expected_uuid=self.expected_uuid,
-                timeout=timeout,
+                is_group=self.cast_type == CAST_TYPE_GROUP,
+                timeout=min(self.timeout, DEVICE_AUTH_TIMEOUT),
                 trust_roots=self.device_auth_trust_roots,
             )
-            # A group is served by its leader, whose certificate names the
-            # leader. Any other endpoint, even one labelled a group, must present
-            # the expected UUID.
-            if (
-                result.status is DeviceAuthStatus.UUID_MISMATCH
-                and self.cast_type == CAST_TYPE_GROUP
-                and self.expected_uuid is not None
-            ):
-                result = self._verify_group_leader(
-                    result,
-                    _peer_host(tls_socket.getpeername()),
-                    self.expected_uuid,
-                    timeout,
-                )
-            # A device presents its own certificate on the ports of the groups it
-            # leads too, don't accept such a port as the device itself
-            elif result.uuid_checked and self.port != 8009:
-                result = self._verify_not_group_endpoint(
-                    result, _peer_host(tls_socket.getpeername()), timeout
-                )
         finally:
             tls_socket.settimeout(self.timeout)
         if not result.verified:
@@ -652,52 +617,6 @@ class SocketClient(threading.Thread, CastStatusListener):
             identity,
         )
         return result
-
-    def _verify_group_leader(
-        self,
-        result: DeviceAuthResult,
-        address: str,
-        group_uuid: UUID,
-        timeout: float,
-    ) -> DeviceAuthResult:
-        """Check the genuine device in result leads the group.
-
-        address is the numeric address of the device, as connected, so the
-        device's eureka_info is fetched from the device which was authenticated,
-        without resolving a host name again.
-        """
-        attestation = verify_group_leader(
-            address,
-            self.port,
-            group_uuid,
-            result.device_cert_der,
-            timeout=timeout,
-        )
-        if not attestation.verified:
-            return replace(result, status=attestation.status, detail=attestation.detail)
-        return replace(
-            result,
-            status=DeviceAuthStatus.VERIFIED,
-            detail=attestation.detail,
-            uuid_checked=True,
-            leader_uuid=result.tls_cert_uuid,
-        )
-
-    def _verify_not_group_endpoint(
-        self, result: DeviceAuthResult, address: str, timeout: float
-    ) -> DeviceAuthResult:
-        """Check the device in result doesn't lead a group on self.port.
-
-        address is the numeric address of the device, as connected.
-        """
-        check = verify_not_group_endpoint(
-            address, self.port, result.device_cert_der, timeout=timeout
-        )
-        if check.verified:
-            return result
-        return replace(
-            result, status=check.status, detail=check.detail, uuid_checked=False
-        )
 
     def _close_socket(self) -> None:
         """Close the socket to the Chromecast, if any."""
