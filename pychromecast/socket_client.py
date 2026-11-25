@@ -75,10 +75,7 @@ CONNECTION_STATUS_FAILED = "FAILED"
 # Failed to resolve service name
 CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # The device failed device authentication and was not talked to, the result is
-# in ConnectionStatus.device_auth. The connection is retried like after a
-# network failure. Consumers should apply a grace period before surfacing a
-# failure of class DeviceAuthFailureClass.WRONG_IDENTITY, it's expected for a
-# while when another device answers at a stale address.
+# in ConnectionStatus.device_auth.
 CONNECTION_STATUS_FAILED_AUTH = "FAILED_AUTH"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
@@ -233,7 +230,6 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.services = services
         self.zconf = zconf
         self.device_auth = device_auth or DeviceAuthSettings()
-        self.device_auth_result: DeviceAuthResult | None = None
 
         self.host = "unknown"
         self.port = 8009
@@ -314,6 +310,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         retry_log_fun = self.logger.info
         auth_log_fun = self.logger.warning
+        failed_auth: DeviceAuthResult | None = None
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -344,7 +341,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
-                    self.device_auth_result = None
+                    failed_auth = None
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -399,7 +396,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                     # Authenticate before anything else is sent, the socket is
                     # only published once the device is authenticated
                     try:
-                        self.device_auth_result = self._authenticate_device(tls_socket)
+                        auth_result = self._authenticate_device(tls_socket)
                         if self.stop.is_set():
                             # disconnect() was called while connecting, don't
                             # publish the socket
@@ -420,7 +417,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             CONNECTION_STATUS_CONNECTED,
                             NetworkAddress(self.host, self.port),
                             None,
-                            device_auth=self.device_auth_result,
+                            device_auth=auth_result,
                         )
                     )
                     self.receiver_controller.update_status()
@@ -436,7 +433,7 @@ class SocketClient(threading.Thread, CastStatusListener):
 
                 except DeviceAuthenticationError as err:
                     self.connecting = True
-                    self.device_auth_result = err.result
+                    failed_auth = err.result
                     self._close_socket()
                     if self.stop.is_set():
                         self.logger.debug(
@@ -501,15 +498,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                 tries -= 1
 
         self.stop.set()
-        # The result is reset for every attempt, set if the last one failed auth
-        last_result = self.device_auth_result
-        # Not for VERIFIED or DISABLED followed by a failure to set up the socket
-        if last_result is not None and last_result.failure_class is not None:
+        if failed_auth is not None:
             self.logger.error(
                 "Failed to connect, device authentication failed (%s). No retries.",
-                last_result.status,
+                failed_auth.status,
             )
-            raise DeviceAuthenticationError(last_result)
+            raise DeviceAuthenticationError(failed_auth)
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
 

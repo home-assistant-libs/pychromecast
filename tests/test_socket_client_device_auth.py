@@ -99,6 +99,17 @@ class StatusRecorder(ConnectionStatusListener):
         return [status.status for status in self.statuses]
 
 
+def _connect(client: SocketClient) -> DeviceAuthResult:
+    """Connect, return the device auth result of the connected status."""
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    client.initialize_connection()
+    assert recorder.statuses[-1].status == CONNECTION_STATUS_CONNECTED
+    result = recorder.statuses[-1].device_auth
+    assert result is not None
+    return result
+
+
 def _close_client(client: SocketClient) -> None:
     if client.socket is not None:
         client.socket.close()
@@ -222,7 +233,6 @@ def test_auth_failure_does_not_connect(
         CONNECTION_STATUS_FAILED_AUTH,
     ]
     assert recorder.statuses[1].device_auth is result
-    assert client.device_auth_result is result
     assert not client.is_connected
 
 
@@ -256,10 +266,9 @@ def test_auth_runs_before_register_and_connect(
     auth.assert_called_once_with(
         fake_tls.tls_sockets[0], expected_uuid=TEST_UUID, timeout=5
     )
-    assert client.device_auth_result is VERIFIED
-    assert client.device_auth_result.verified
     assert client.socket is fake_tls.tls_sockets[0]
     assert recorder.statuses[-1].status == CONNECTION_STATUS_CONNECTED
+    assert recorder.statuses[-1].device_auth is VERIFIED
     assert recorder.statuses[-1].device_auth is VERIFIED
 
 
@@ -474,12 +483,11 @@ def test_opt_out_skips_handshake(
         patch.object(client.receiver_controller, "update_status") as update_status,
         patch.object(client.heartbeat_controller, "ping"),
     ):
-        client.initialize_connection()
+        result = _connect(client)
     auth.assert_not_called()
     update_status.assert_called_once()
     assert client.is_connected
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.status is DeviceAuthStatus.DISABLED
+    assert result.status is DeviceAuthStatus.DISABLED
 
 
 def test_default_is_enabled() -> None:
@@ -496,7 +504,6 @@ def test_default_is_enabled() -> None:
         assert client.device_auth == DeviceAuthSettings()
         assert client.device_auth.enabled
         assert client.device_auth.expected_uuid is None
-        assert client.device_auth_result is None
     finally:
         _close_client(client)
 
@@ -738,12 +745,11 @@ def test_e2e_genuine_connects(
     """Test connecting to a genuine device."""
     receiver = receiver_factory()
     client = _e2e_client(make_client, pki, receiver.port)
-    client.initialize_connection()
+    result = _connect(client)
 
     assert client.is_connected
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.verified
-    assert client.device_auth_result.uuid_checked
+    assert result.verified
+    assert result.uuid_checked
     _wait_for(
         lambda: len(receiver.connections) == 1 and len(receiver.connections[0]) >= 2
     )
@@ -814,7 +820,7 @@ def test_e2e_rejected(
     client = _e2e_client(make_client, pki, receiver.port)
     with (
         patch("pychromecast.socket_client.DEVICE_AUTH_TIMEOUT", 0.5),
-        pytest.raises(ChromecastConnectionError),
+        pytest.raises(DeviceAuthenticationError) as err,
     ):
         client.initialize_connection()
 
@@ -823,8 +829,7 @@ def test_e2e_rejected(
     messages = receiver.connections[0]
     assert len(messages) == 1
     assert _is_challenge(messages[0])
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.status is status
+    assert err.value.result.status is status
 
 
 def test_e2e_relay_rejected(
@@ -838,10 +843,9 @@ def test_e2e_relay_rejected(
     relay = TLSRelay(tmp_path, receiver.port)
     try:
         client = _e2e_client(make_client, pki, relay.port)
-        with pytest.raises(ChromecastConnectionError):
+        with pytest.raises(DeviceAuthenticationError) as err:
             client.initialize_connection()
-        assert client.device_auth_result is not None
-        assert client.device_auth_result.status is DeviceAuthStatus.SIGNATURE_INVALID
+        assert err.value.result.status is DeviceAuthStatus.SIGNATURE_INVALID
         relay.wait_idle()
         receiver.wait_idle()
         assert len(receiver.connections) == 1
@@ -859,11 +863,10 @@ def test_e2e_opt_out_talks_to_fake(
     """Test opting out connects to a device which would fail authentication."""
     receiver = receiver_factory("wrong_sig")
     client = _e2e_client(make_client, pki, receiver.port, auth_enabled=False)
-    client.initialize_connection()
+    result = _connect(client)
 
     assert client.is_connected
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.status is DeviceAuthStatus.DISABLED
+    assert result.status is DeviceAuthStatus.DISABLED
     _wait_for(
         lambda: len(receiver.connections) == 1 and len(receiver.connections[0]) >= 1
     )
@@ -946,13 +949,12 @@ def test_e2e_group_served_by_genuine_leader(
     """Test a group served by a genuine device with another UUID is accepted."""
     receiver = receiver_factory(tls_cn=str(OTHER_UUID))
     client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    client.initialize_connection()
+    result = _connect(client)
 
     assert client.is_connected
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.verified
-    assert not client.device_auth_result.uuid_checked
-    assert client.device_auth_result.tls_cert_cn == str(OTHER_UUID)
+    assert result.verified
+    assert not result.uuid_checked
+    assert result.tls_cert_cn == str(OTHER_UUID)
 
 
 @pytest.mark.usefixtures("fake_tls")
@@ -990,7 +992,6 @@ def test_auth_result_reset_per_attempt(
     ):
         client.initialize_connection()
     assert not isinstance(err.value, DeviceAuthenticationError)
-    assert client.device_auth_result is None
 
 
 def test_e2e_group_not_genuine(
@@ -1001,11 +1002,10 @@ def test_e2e_group_not_genuine(
     """Test a group endpoint which is not genuine is refused."""
     receiver = receiver_factory("wrong_sig", tls_cn=str(OTHER_UUID))
     client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    with pytest.raises(DeviceAuthenticationError):
+    with pytest.raises(DeviceAuthenticationError) as err:
         client.initialize_connection()
 
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.status is DeviceAuthStatus.SIGNATURE_INVALID
+    assert err.value.result.status is DeviceAuthStatus.SIGNATURE_INVALID
     receiver.wait_idle()
     assert len(receiver.connections[0]) == 1
 
@@ -1256,7 +1256,6 @@ def test_e2e_device_on_its_group_port_accepted(
     """
     receiver = receiver_factory()
     client = _e2e_client(make_client, pki, receiver.port)
-    client.initialize_connection()
+    result = _connect(client)
     assert client.is_connected
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.uuid_checked
+    assert result.uuid_checked
