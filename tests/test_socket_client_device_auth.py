@@ -1,0 +1,1261 @@
+"""Tests for device authentication in pychromecast.socket_client."""
+
+from collections.abc import Callable, Generator
+from datetime import timedelta
+import json
+import logging
+from pathlib import Path
+import select
+import socket
+import ssl
+from struct import unpack
+import threading
+import time
+from typing import Any
+from contextlib import ExitStack
+from unittest.mock import MagicMock, Mock, patch
+from uuid import UUID
+
+from cryptography import x509
+import pytest
+from device_auth_helpers import (
+    NOW,
+    OTHER_UUID,
+    TEST_UUID,
+    TestPKI,
+    TLSServer,
+    frame,
+    der,
+    key_usage,
+    make_cert,
+    make_reply,
+    make_tls_cert,
+    rsa_key,
+)
+
+from pychromecast.controllers.heartbeat import NS_HEARTBEAT
+from pychromecast.controllers.receiver import NS_RECEIVER, CastStatus
+from pychromecast.device_auth import (
+    NS_DEVICE_AUTH,
+    DeviceAuthResult,
+    DeviceAuthSettings,
+    DeviceAuthStatus,
+)
+from pychromecast.error import (
+    ChromecastConnectionError,
+    DeviceAuthenticationError,
+    NotConnected,
+    PyChromecastStopped,
+)
+from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
+    AuthError,
+    CastMessage,
+    DeviceAuthMessage,
+)
+from pychromecast.models import HostServiceInfo
+from pychromecast.socket_client import (
+    CONNECTION_STATUS_CONNECTED,
+    CONNECTION_STATUS_CONNECTING,
+    CONNECTION_STATUS_DISCONNECTED,
+    CONNECTION_STATUS_FAILED,
+    CONNECTION_STATUS_FAILED_AUTH,
+    NS_CONNECTION,
+    ConnectionStatus,
+    ConnectionStatusListener,
+    SocketClient,
+)
+
+VERIFIED = DeviceAuthResult(
+    DeviceAuthStatus.VERIFIED,
+    "device is genuine",
+    device_cert_subject="CN=TEST",
+    trust_root="Test Root CA",
+    tls_cert_cn=str(TEST_UUID),
+    uuid_checked=True,
+    hash_algorithm="sha256",
+)
+
+
+def _failure(status: DeviceAuthStatus) -> DeviceAuthResult:
+    return DeviceAuthResult(status, f"test {status}")
+
+
+class StatusRecorder(ConnectionStatusListener):
+    """Record connection statuses."""
+
+    def __init__(self) -> None:
+        self.statuses: list[ConnectionStatus] = []
+        self.connected = threading.Event()
+
+    def new_connection_status(self, status: ConnectionStatus) -> None:
+        """Record a status."""
+        self.statuses.append(status)
+        if status.status == CONNECTION_STATUS_CONNECTED:
+            self.connected.set()
+
+    @property
+    def names(self) -> list[str]:
+        """Return the recorded status names."""
+        return [status.status for status in self.statuses]
+
+
+def _connect(client: SocketClient) -> DeviceAuthResult:
+    """Connect, return the device auth result of the connected status."""
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    client.initialize_connection()
+    assert recorder.statuses[-1].status == CONNECTION_STATUS_CONNECTED
+    result = recorder.statuses[-1].device_auth
+    assert result is not None
+    return result
+
+
+def _close_client(client: SocketClient) -> None:
+    if client.socket is not None:
+        client.socket.close()
+    for sock in client.socketpair:
+        sock.close()
+    client.selector.close()
+
+
+@pytest.fixture(name="make_client")
+def make_client_fixture() -> Generator[Callable[..., SocketClient]]:
+    """Return a factory of socket clients, closed after the test.
+
+    trust_roots replaces the bundled Google Cast roots until the end of the test.
+    """
+    clients: list[SocketClient] = []
+    patches = ExitStack()
+
+    def make(
+        *,
+        auth_enabled: bool = True,
+        expected_uuid: UUID | None = TEST_UUID,
+        trust_roots: list[x509.Certificate] | None = None,
+        **kwargs: Any,
+    ) -> SocketClient:
+        options: dict[str, Any] = {
+            "cast_type": "cast",
+            "tries": 1,
+            "timeout": 10,
+            "retry_wait": 0.01,
+            "services": {HostServiceInfo("192.0.2.1", 8009)},
+            "zconf": None,
+            "device_auth": DeviceAuthSettings(
+                enabled=auth_enabled, expected_uuid=expected_uuid
+            ),
+        }
+        options.update(kwargs)
+        if trust_roots is not None:
+            patches.enter_context(
+                patch(
+                    "pychromecast.device_auth.default_trust_roots",
+                    return_value=tuple(trust_roots),
+                )
+            )
+        client = SocketClient(**options)
+        clients.append(client)
+        return client
+
+    with patches:
+        yield make
+        for client in clients:
+            _close_client(client)
+
+
+class PeerSocket(socket.socket):
+    """One end of a socket pair, connected to the device at 192.0.2.1."""
+
+    def getpeername(self) -> tuple[str, int]:
+        """Return the address of the device."""
+        return ("192.0.2.1", 8009)
+
+
+class FakeTLS:
+    """Fake the TLS connection: each connect gets a new socket pair."""
+
+    def __init__(self) -> None:
+        self.tls_sockets: list[socket.socket] = []
+        self._peers: list[socket.socket] = []
+        self.context = MagicMock()
+        self.context.wrap_socket.side_effect = self._wrap
+
+    def _wrap(self, _raw: object) -> socket.socket:
+        pair_socket, peer = socket.socketpair()
+        tls_socket = PeerSocket(fileno=pair_socket.detach())
+        self.tls_sockets.append(tls_socket)
+        self._peers.append(peer)
+        return tls_socket
+
+    def close(self) -> None:
+        """Close the sockets."""
+        for sock in self.tls_sockets + self._peers:
+            sock.close()
+
+
+@pytest.fixture(name="fake_tls")
+def fake_tls_fixture() -> Generator[FakeTLS]:
+    """Patch connecting, return the fake TLS connections."""
+    fake = FakeTLS()
+    with (
+        patch("socket.create_connection"),
+        patch("ssl.SSLContext", return_value=fake.context),
+    ):
+        yield fake
+    fake.close()
+
+
+def test_auth_failure_does_not_connect(
+    make_client: Callable[..., SocketClient], fake_tls: FakeTLS
+) -> None:
+    """Test nothing is sent to a device failing authentication."""
+    client = make_client()
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    wakeup = client.wakeup_selector_key
+    result = _failure(DeviceAuthStatus.CHAIN_UNTRUSTED)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=result),
+        patch.object(client.receiver_controller, "update_status") as update_status,
+        patch.object(client.heartbeat_controller, "ping") as ping,
+        pytest.raises(ChromecastConnectionError, match="chain_untrusted"),
+    ):
+        client.initialize_connection()
+
+    assert fake_tls.tls_sockets[0].fileno() == -1
+    assert client.socket is None
+    assert client.remote_selector_key is None
+    assert list(client.selector.get_map().values()) == [wakeup]
+    update_status.assert_not_called()
+    ping.assert_not_called()
+    assert recorder.names == [
+        CONNECTION_STATUS_CONNECTING,
+        CONNECTION_STATUS_FAILED_AUTH,
+    ]
+    assert recorder.statuses[1].device_auth is result
+    assert not client.is_connected
+
+
+def test_auth_runs_before_register_and_connect(
+    make_client: Callable[..., SocketClient], fake_tls: FakeTLS
+) -> None:
+    """Test the device is authenticated before anything else."""
+    client = make_client(timeout=5)
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    manager = Mock()
+    auth = Mock(return_value=VERIFIED)
+    manager.attach_mock(auth, "authenticate")
+    with (
+        patch("pychromecast.socket_client.authenticate", auth),
+        patch.object(
+            client.selector, "register", wraps=client.selector.register
+        ) as register,
+        patch.object(client.receiver_controller, "update_status") as update_status,
+        patch.object(client.heartbeat_controller, "ping"),
+    ):
+        manager.attach_mock(register, "register")
+        manager.attach_mock(update_status, "update_status")
+        client.initialize_connection()
+
+    assert [call[0] for call in manager.mock_calls] == [
+        "authenticate",
+        "register",
+        "update_status",
+    ]
+    auth.assert_called_once_with(
+        fake_tls.tls_sockets[0], expected_uuid=TEST_UUID, timeout=5
+    )
+    assert client.socket is fake_tls.tls_sockets[0]
+    assert recorder.statuses[-1].status == CONNECTION_STATUS_CONNECTED
+    assert recorder.statuses[-1].device_auth is VERIFIED
+    assert recorder.statuses[-1].device_auth is VERIFIED
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_auth_timeout_capped(make_client: Callable[..., SocketClient]) -> None:
+    """Test the handshake timeout is at most DEVICE_AUTH_TIMEOUT."""
+    client = make_client(timeout=30)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED) as auth,
+        patch.object(client.receiver_controller, "update_status"),
+        patch.object(client.heartbeat_controller, "ping"),
+    ):
+        client.initialize_connection()
+    assert auth.call_args.kwargs["timeout"] == 10
+
+
+def _retry_levels(caplog: pytest.LogCaptureFixture, text: str) -> list[int]:
+    """Return the levels of the records containing text, and clear them."""
+    levels = [
+        record.levelno for record in caplog.records if text in record.getMessage()
+    ]
+    caplog.clear()
+    return levels
+
+
+@pytest.fixture(name="connect_patches")
+def connect_patches_fixture() -> Generator[None]:
+    """Don't talk to the device after connecting."""
+    with (
+        patch.object(SocketClient, "_ensure_channel_connected"),
+        patch("pychromecast.controllers.receiver.ReceiverController.update_status"),
+        patch("pychromecast.controllers.heartbeat.HeartbeatController.ping"),
+    ):
+        yield
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_not_genuine_logging(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test a device which is not genuine is warned about once per connect."""
+    client = make_client(tries=3)
+    # Passing 0 to the constructor means the default
+    client.retry_wait = 0
+    untrusted = _failure(DeviceAuthStatus.CHAIN_UNTRUSTED)
+    no_nonce = _failure(DeviceAuthStatus.NONCE_MISSING)
+    text = "may not be a genuine Cast device"
+    with (
+        patch("pychromecast.socket_client.authenticate") as auth,
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+    ):
+        auth.side_effect = [untrusted, untrusted, no_nonce]
+        with pytest.raises(ChromecastConnectionError):
+            client.initialize_connection()
+        assert _retry_levels(caplog, text) == [
+            logging.WARNING,
+            logging.DEBUG,
+            logging.DEBUG,
+        ]
+
+        # A new connection attempt warns again
+        client.stop.clear()
+        client.tries = 1
+        auth.side_effect = [no_nonce]
+        with pytest.raises(ChromecastConnectionError):
+            client.initialize_connection()
+        assert _retry_levels(caplog, text) == [logging.WARNING]
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_clock_logging(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test certificate validity failures point at the clock and the firmware."""
+    client = make_client(tries=2)
+    client.retry_wait = 0
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            return_value=_failure(DeviceAuthStatus.CERT_EXPIRED),
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+    messages = [
+        r.getMessage() for r in caplog.records if "system clock" in r.getMessage()
+    ]
+    assert "firmware update" in messages[0]
+    assert _retry_levels(caplog, "system clock") == [logging.WARNING, logging.DEBUG]
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_transient_logging(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test a device which doesn't reply is logged like a network failure."""
+    client = make_client(tries=2)
+    client.retry_wait = 0
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            return_value=_failure(DeviceAuthStatus.NO_REPLY),
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+    assert _retry_levels(caplog, "failed, no_reply") == [logging.WARNING, logging.DEBUG]
+
+
+def _mismatch(cn: UUID = OTHER_UUID) -> DeviceAuthResult:
+    return DeviceAuthResult(
+        DeviceAuthStatus.UUID_MISMATCH,
+        f"TLS certificate CN {str(cn)!r} does not match the expected UUID {TEST_UUID}",
+        device_cert_subject="CN=LEADER",
+        trust_root="Test Root CA",
+        tls_cert_cn=str(cn),
+        hash_algorithm="sha256",
+    )
+
+
+WRONG_IDENTITY_TEXT = "the device is genuine, but TLS certificate CN"
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+def test_wrong_identity_logging(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test the first wrong identity is warned about, the next at debug level."""
+    client = make_client(tries=3)
+    client.retry_wait = 0
+    client.fn = "Kitchen"
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            side_effect=[_mismatch()] * 3,
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(DeviceAuthenticationError),
+    ):
+        client.initialize_connection()
+    message = next(
+        r.getMessage() for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
+    )
+    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [
+        logging.WARNING,
+        logging.DEBUG,
+        logging.DEBUG,
+    ]
+    assert message.startswith("[Kitchen(192.0.2.1):8009] Device authentication failed")
+    assert f"CN '{OTHER_UUID}' does not match the expected UUID {TEST_UUID}" in message
+    assert "Another device may be using its old address" in message
+    # The message is about the identity in the certificate, not about the address
+    assert "IP address change" not in message
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_auth_failure_uses_backoff(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test failures back off like network failures, without spinning."""
+    client = make_client(tries=4, retry_wait=1)
+    clock = [1000.0]
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    fake_time = Mock()
+    fake_time.time.side_effect = lambda: clock[0]
+    fake_time.monotonic.side_effect = lambda: clock[0]
+    fake_time.sleep.side_effect = sleep
+    with (
+        patch("pychromecast.socket_client.time", fake_time),
+        patch(
+            "pychromecast.socket_client.authenticate",
+            return_value=_failure(DeviceAuthStatus.SIGNATURE_INVALID),
+        ) as auth,
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+
+    delays = [
+        record.args[-1]  # type: ignore[index]
+        for record in caplog.records
+        if "may not be a genuine Cast device" in record.getMessage()
+    ]
+    assert delays == [1.0, 2.0, 4.0]
+    assert auth.call_count == 3
+    assert sleeps == [1, 1, 1]
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_opt_out_skips_handshake(
+    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test opting out skips device authentication."""
+    with caplog.at_level(logging.INFO, logger="pychromecast.socket_client"):
+        client = make_client(auth_enabled=False)
+    # Opting out is intentional, it's logged but not warned about
+    disabled = [
+        record
+        for record in caplog.records
+        if "Cast device authentication is disabled" in record.getMessage()
+    ]
+    assert [record.levelno for record in disabled] == [logging.INFO]
+    with (
+        patch("pychromecast.socket_client.authenticate") as auth,
+        patch.object(client.receiver_controller, "update_status") as update_status,
+        patch.object(client.heartbeat_controller, "ping"),
+    ):
+        result = _connect(client)
+    auth.assert_not_called()
+    update_status.assert_called_once()
+    assert client.is_connected
+    assert result.status is DeviceAuthStatus.DISABLED
+
+
+def test_default_is_enabled() -> None:
+    """Test device authentication is enabled by default."""
+    client = SocketClient(
+        cast_type="cast",
+        tries=1,
+        timeout=10,
+        retry_wait=0.01,
+        services=set(),
+        zconf=None,
+    )
+    try:
+        assert client.device_auth == DeviceAuthSettings()
+        assert client.device_auth.enabled
+        assert client.device_auth.expected_uuid is None
+    finally:
+        _close_client(client)
+
+
+def test_auth_network_error_reports_failed(
+    make_client: Callable[..., SocketClient], fake_tls: FakeTLS
+) -> None:
+    """Test a network error during the handshake is a network failure."""
+    client = make_client()
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            side_effect=ConnectionResetError("reset"),
+        ),
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+    assert recorder.names == [CONNECTION_STATUS_CONNECTING, CONNECTION_STATUS_FAILED]
+    assert fake_tls.tls_sockets[0].fileno() == -1
+    assert client.socket is None
+
+
+# Integration tests with a fake TLS receiver
+
+
+def _json_message(namespace: str, data: dict) -> CastMessage:
+    return CastMessage(
+        protocol_version=CastMessage.CASTV2_1_0,
+        source_id="receiver-0",
+        destination_id="sender-0",
+        namespace=namespace,
+        payload_type=CastMessage.STRING,
+        payload_utf8=json.dumps(data),
+    )
+
+
+def _receiver_status(request_id: int = 0) -> CastMessage:
+    return _json_message(
+        NS_RECEIVER,
+        {
+            "type": "RECEIVER_STATUS",
+            "requestId": request_id,
+            "status": {
+                "volume": {"level": 0.5, "muted": False},
+                "isActiveInput": True,
+            },
+        },
+    )
+
+
+class FakeReceiver(TLSServer):
+    """A fake cast device, genuine or misbehaving depending on mode."""
+
+    def __init__(
+        self,
+        pki: TestPKI,
+        tmp_path: Path,
+        mode: str = "genuine",
+        tls_cn: str = str(TEST_UUID),
+    ) -> None:
+        self.pki = pki
+        self.mode = mode
+        self.tls_cert = make_tls_cert(tls_cn, pki.tls_key)
+        # The messages received, per connection
+        self.connections: list[list[CastMessage]] = []
+        super().__init__(tmp_path, "receiver", self.tls_cert, pki.tls_key)
+
+    def _auth_reply(self, nonce: bytes) -> list[CastMessage]:
+        pki = self.pki
+        kwargs: dict[str, Any] = {
+            "nonce": nonce,
+            "peer_cert_der": der(self.tls_cert),
+            "leaf": pki.leaf,
+            "leaf_key": pki.leaf_key,
+            "intermediates": (pki.ica,),
+        }
+        if self.mode == "no_echo":
+            kwargs["echo"] = False
+        elif self.mode == "wrong_sig":
+            kwargs["sign_over"] = b"something else"
+        elif self.mode == "auth_error":
+            kwargs["error"] = AuthError.INTERNAL_ERROR
+        elif self.mode == "expired_ica":
+            kwargs["intermediates"] = (
+                make_cert(
+                    "Test ICA",
+                    pki.root,
+                    pki.root_key,
+                    pki.ica_key.public_key(),
+                    ca=True,
+                    path_length=0,
+                    ku=key_usage(key_cert_sign=True),
+                    not_before=NOW - timedelta(days=400),
+                    not_after=NOW - timedelta(days=1),
+                ),
+            )
+        reply = make_reply(**kwargs)
+        if self.mode == "status_first":
+            return [_receiver_status(), reply]
+        return [reply]
+
+    def handle(self, tls: ssl.SSLSocket) -> None:
+        messages: list[CastMessage] = []
+        self.connections.append(messages)
+        buffer = b""
+        while not self.stop.is_set():
+            try:
+                data = tls.recv(65536)
+            except TimeoutError:
+                continue
+            if not data:
+                return
+            buffer += data
+            while len(buffer) >= 4:
+                (length,) = unpack(">I", buffer[:4])
+                if len(buffer) < 4 + length:
+                    break
+                message = CastMessage()
+                message.ParseFromString(buffer[4 : 4 + length])
+                buffer = buffer[4 + length :]
+                messages.append(message)
+                if not self._respond(tls, message, first=len(messages) == 1):
+                    return
+
+    def _respond(self, tls: ssl.SSLSocket, message: CastMessage, first: bool) -> bool:
+        """Respond to a message, return False to close the connection."""
+        if message.namespace == NS_DEVICE_AUTH and first:
+            if self.mode == "silent":
+                return True
+            if self.mode == "close":
+                return False
+            if self.mode == "slow":
+                time.sleep(0.3)
+            challenge = DeviceAuthMessage()
+            challenge.ParseFromString(message.payload_binary)
+            for reply in self._auth_reply(challenge.challenge.sender_nonce):
+                tls.sendall(frame(reply))
+            return True
+        data = json.loads(message.payload_utf8 or "{}")
+        if message.namespace == NS_RECEIVER and data.get("type") == "GET_STATUS":
+            tls.sendall(frame(_receiver_status(data.get("requestId", 0))))
+        elif message.namespace == NS_HEARTBEAT and data.get("type") == "PING":
+            tls.sendall(frame(_json_message(NS_HEARTBEAT, {"type": "PONG"})))
+        return True
+
+
+class TLSRelay(TLSServer):
+    """A relay with its own TLS certificate, forwarding to a receiver."""
+
+    def __init__(self, tmp_path: Path, upstream_port: int) -> None:
+        key = rsa_key()
+        self.upstream_port = upstream_port
+        super().__init__(tmp_path, "relay", make_tls_cert(str(TEST_UUID), key), key)
+
+    def handle(self, tls: ssl.SSLSocket) -> None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        upstream = context.wrap_socket(
+            socket.create_connection(("127.0.0.1", self.upstream_port), 2)
+        )
+        upstream.settimeout(0.05)
+        peers = {tls: upstream, upstream: tls}
+        try:
+            # One thread, SSL sockets must not be read and written concurrently
+            while not self.stop.is_set():
+                readable = [sock for sock in peers if sock.pending()]
+                if not readable:
+                    readable, _, _ = select.select(list(peers), [], [], 0.05)
+                for source in readable:
+                    try:
+                        data = source.recv(65536)
+                    except TimeoutError, ssl.SSLWantReadError:
+                        continue
+                    if not data:
+                        return
+                    peers[source].sendall(data)
+        finally:
+            upstream.close()
+
+
+@pytest.fixture(name="receiver_factory")
+def receiver_factory_fixture(
+    pki: TestPKI, tmp_path: Path
+) -> Generator[Callable[..., FakeReceiver]]:
+    """Return a factory of fake receivers, stopped after the test."""
+    servers: list[TLSServer] = []
+
+    def make(mode: str = "genuine", **kwargs: Any) -> FakeReceiver:
+        receiver = FakeReceiver(pki, tmp_path, mode, **kwargs)
+        servers.append(receiver)
+        return receiver
+
+    yield make
+    for server in servers:
+        server.close()
+
+
+def _e2e_client(
+    make_client: Callable[..., SocketClient], pki: TestPKI, port: int, **kwargs: Any
+) -> SocketClient:
+    options: dict[str, Any] = {
+        "services": {HostServiceInfo("127.0.0.1", port)},
+        "timeout": 2,
+        "trust_roots": [pki.root],
+    }
+    options.update(kwargs)
+    return make_client(**options)
+
+
+def _is_challenge(message: CastMessage) -> bool:
+    if message.namespace != NS_DEVICE_AUTH:
+        return False
+    auth_message = DeviceAuthMessage()
+    auth_message.ParseFromString(message.payload_binary)
+    return auth_message.HasField("challenge")
+
+
+def _nonce(message: CastMessage) -> bytes:
+    auth_message = DeviceAuthMessage()
+    auth_message.ParseFromString(message.payload_binary)
+    return auth_message.challenge.sender_nonce
+
+
+def _wait_for(condition: Callable[[], bool], timeout: float = 5) -> None:
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.01)
+
+
+def test_e2e_genuine_connects(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test connecting to a genuine device."""
+    receiver = receiver_factory()
+    client = _e2e_client(make_client, pki, receiver.port)
+    result = _connect(client)
+
+    assert client.is_connected
+    assert result.verified
+    assert result.uuid_checked
+    _wait_for(
+        lambda: len(receiver.connections) == 1 and len(receiver.connections[0]) >= 2
+    )
+    messages = receiver.connections[0]
+    assert _is_challenge(messages[0])
+    assert messages[1].namespace == NS_CONNECTION
+    assert json.loads(messages[1].payload_utf8)["type"] == "CONNECT"
+
+
+def test_e2e_genuine_threaded(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a genuine device through the worker thread."""
+    receiver = receiver_factory()
+    client = _e2e_client(make_client, pki, receiver.port)
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    received: list[CastStatus] = []
+    status_event = threading.Event()
+
+    class Listener:
+        def new_cast_status(self, status: CastStatus) -> None:
+            received.append(status)
+            status_event.set()
+
+    client.receiver_controller.register_status_listener(Listener())  # type: ignore[arg-type]
+    client.start()
+    try:
+        assert recorder.connected.wait(5)
+        assert status_event.wait(5)
+        assert received[0].volume_level == 0.5
+        connected = [
+            s for s in recorder.statuses if s.status == CONNECTION_STATUS_CONNECTED
+        ]
+        assert connected[0].device_auth is not None
+        assert connected[0].device_auth.verified
+    finally:
+        client.disconnect()
+        client.join(5)
+    assert not client.is_alive()
+
+
+@pytest.mark.parametrize(
+    ("mode", "kwargs", "status"),
+    [
+        ("no_echo", {}, DeviceAuthStatus.NONCE_MISSING),
+        ("wrong_sig", {}, DeviceAuthStatus.SIGNATURE_INVALID),
+        ("auth_error", {}, DeviceAuthStatus.AUTH_ERROR_REPLY),
+        ("status_first", {}, DeviceAuthStatus.UNEXPECTED_MESSAGE),
+        ("silent", {}, DeviceAuthStatus.NO_REPLY),
+        ("close", {}, DeviceAuthStatus.CONNECTION_CLOSED),
+        ("expired_ica", {}, DeviceAuthStatus.CERT_EXPIRED),
+        ("genuine", {"tls_cn": str(OTHER_UUID)}, DeviceAuthStatus.UUID_MISMATCH),
+    ],
+)
+def test_e2e_rejected(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+    mode: str,
+    kwargs: dict,
+    status: DeviceAuthStatus,
+) -> None:
+    """Test a device failing authentication only receives the challenge."""
+    receiver = receiver_factory(mode, **kwargs)
+    client = _e2e_client(make_client, pki, receiver.port)
+    with (
+        patch("pychromecast.socket_client.DEVICE_AUTH_TIMEOUT", 0.5),
+        pytest.raises(DeviceAuthenticationError) as err,
+    ):
+        client.initialize_connection()
+
+    receiver.wait_idle()
+    assert len(receiver.connections) == 1
+    messages = receiver.connections[0]
+    assert len(messages) == 1
+    assert _is_challenge(messages[0])
+    assert err.value.result.status is status
+
+
+def test_e2e_relay_rejected(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+    tmp_path: Path,
+) -> None:
+    """Test a relay to a genuine device, with its own TLS certificate, is rejected."""
+    receiver = receiver_factory()
+    relay = TLSRelay(tmp_path, receiver.port)
+    try:
+        client = _e2e_client(make_client, pki, relay.port)
+        with pytest.raises(DeviceAuthenticationError) as err:
+            client.initialize_connection()
+        assert err.value.result.status is DeviceAuthStatus.SIGNATURE_INVALID
+        relay.wait_idle()
+        receiver.wait_idle()
+        assert len(receiver.connections) == 1
+        assert len(receiver.connections[0]) == 1
+        assert _is_challenge(receiver.connections[0][0])
+    finally:
+        relay.close()
+
+
+def test_e2e_opt_out_talks_to_fake(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test opting out connects to a device which would fail authentication."""
+    receiver = receiver_factory("wrong_sig")
+    client = _e2e_client(make_client, pki, receiver.port, auth_enabled=False)
+    result = _connect(client)
+
+    assert client.is_connected
+    assert result.status is DeviceAuthStatus.DISABLED
+    _wait_for(
+        lambda: len(receiver.connections) == 1 and len(receiver.connections[0]) >= 1
+    )
+    first = receiver.connections[0][0]
+    assert first.namespace == NS_CONNECTION
+    assert not any(m.namespace == NS_DEVICE_AUTH for m in receiver.connections[0])
+
+
+def test_e2e_reauth_on_reconnect(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test the device is authenticated again on reconnect."""
+    receiver = receiver_factory()
+    client = _e2e_client(make_client, pki, receiver.port)
+    client.initialize_connection()
+    client._force_recon = True  # pylint: disable=protected-access
+    assert not client._check_connection()  # pylint: disable=protected-access
+
+    assert client.is_connected
+    _wait_for(lambda: len(receiver.connections) == 2 and bool(receiver.connections[1]))
+    first, second = receiver.connections[0][0], receiver.connections[1][0]
+    assert _is_challenge(first)
+    assert _is_challenge(second)
+    assert _nonce(first) != _nonce(second)
+
+
+def test_e2e_send_during_auth_raises(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test other threads can't send while the device is being authenticated."""
+    receiver = receiver_factory("slow")
+    client = _e2e_client(make_client, pki, receiver.port)
+    thread = threading.Thread(target=client.initialize_connection)
+    thread.start()
+    try:
+        _wait_for(lambda: bool(receiver.connections and receiver.connections[0]))
+        with pytest.raises(NotConnected):
+            client.send_message(
+                "receiver-0",
+                NS_RECEIVER,
+                {"type": "GET_STATUS"},
+                no_add_request_id=True,
+            )
+        # The challenge, nothing else is sent before the reply
+        assert len(receiver.connections[0]) == 1
+    finally:
+        thread.join(5)
+    assert client.is_connected
+    _wait_for(lambda: len(receiver.connections[0]) >= 2)
+    assert _is_challenge(receiver.connections[0][0])
+    assert receiver.connections[0][1].namespace == NS_CONNECTION
+
+
+def test_e2e_selector_not_registered_on_failure(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a device failing authentication is never registered with the selector."""
+    receiver = receiver_factory("wrong_sig")
+    client = _e2e_client(make_client, pki, receiver.port)
+    with (
+        patch.object(client.selector, "register") as register,
+        pytest.raises(ChromecastConnectionError),
+    ):
+        client.initialize_connection()
+    register.assert_not_called()
+    assert list(client.selector.get_map().values()) == [client.wakeup_selector_key]
+
+
+def test_e2e_group_served_by_genuine_leader(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a group served by a genuine device with another UUID is accepted."""
+    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
+    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
+    result = _connect(client)
+
+    assert client.is_connected
+    assert result.verified
+    assert not result.uuid_checked
+    assert result.tls_cert_cn == str(OTHER_UUID)
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_final_error_carries_result(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test running out of retries raises the device authentication result."""
+    client = make_client()
+    result = _failure(DeviceAuthStatus.CHAIN_UNTRUSTED)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=result),
+        pytest.raises(DeviceAuthenticationError) as err,
+    ):
+        client.initialize_connection()
+    assert err.value.result is result
+
+
+@pytest.mark.usefixtures("fake_tls", "connect_patches")
+def test_auth_result_reset_per_attempt(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test a network failure after an auth failure is not blamed on auth."""
+    client = make_client(tries=2)
+    client.retry_wait = 0
+    with (
+        patch(
+            "socket.create_connection",
+            side_effect=[MagicMock(), ConnectionRefusedError("refused")],
+        ),
+        patch(
+            "pychromecast.socket_client.authenticate",
+            return_value=_failure(DeviceAuthStatus.CHAIN_UNTRUSTED),
+        ),
+        pytest.raises(ChromecastConnectionError) as err,
+    ):
+        client.initialize_connection()
+    assert not isinstance(err.value, DeviceAuthenticationError)
+
+
+def test_e2e_group_not_genuine(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a group endpoint which is not genuine is refused."""
+    receiver = receiver_factory("wrong_sig", tls_cn=str(OTHER_UUID))
+    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
+    with pytest.raises(DeviceAuthenticationError) as err:
+        client.initialize_connection()
+
+    assert err.value.result.status is DeviceAuthStatus.SIGNATURE_INVALID
+    receiver.wait_idle()
+    assert len(receiver.connections[0]) == 1
+
+
+# Copilot review of PR 1333
+
+
+@pytest.mark.usefixtures("fake_tls", "connect_patches")
+@pytest.mark.parametrize("auth_enabled", [False, True])
+def test_setup_failure_after_auth_is_not_auth_failure(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    auth_enabled: bool,
+) -> None:
+    """Test a failure after DISABLED or VERIFIED ends with the generic error."""
+    client = make_client(auth_enabled=auth_enabled)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        patch.object(
+            client.selector, "register", side_effect=OSError("register failed")
+        ),
+        caplog.at_level(logging.ERROR, logger="pychromecast.socket_client"),
+        pytest.raises(ChromecastConnectionError) as err,
+    ):
+        client.initialize_connection()
+    assert type(err.value) is ChromecastConnectionError
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1
+    assert "Failed to connect. No retries." in errors[0]
+    assert "device authentication failed" not in errors[0]
+
+
+# disconnect() while connecting
+
+
+class SlowHandshakeReceiver(FakeReceiver):
+    """A fake receiver which waits before the TLS handshake."""
+
+    def _serve(self, conn: socket.socket) -> None:
+        time.sleep(0.4)
+        super()._serve(conn)
+
+
+def _disconnect_while_connecting(
+    client: SocketClient, connecting: Callable[[], bool]
+) -> StatusRecorder:
+    """Start the client, disconnect once connecting() is True, wait for it."""
+    errors: list[BaseException | None] = []
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with patch.object(
+        threading, "excepthook", lambda args: errors.append(args.exc_value)
+    ):
+        client.start()
+        _wait_for(connecting)
+        client.disconnect()
+        client.join(5)
+    assert not client.is_alive()
+    assert errors == []
+    assert client.socket is None
+    assert not client.is_connected
+    assert CONNECTION_STATUS_CONNECTED not in recorder.names
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+    _assert_cleaned_up(client)
+    return recorder
+
+
+def _assert_cleaned_up(client: SocketClient) -> None:
+    """Assert the worker thread closed its socketpair and selector."""
+    assert client.socketpair[0].fileno() == -1
+    assert client.socketpair[1].fileno() == -1
+    assert client.selector.get_map() is None
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_run_cleans_up_after_failed_connect(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test the worker cleans up when it gives up connecting."""
+    client = make_client(tries=1)
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with patch(
+        "pychromecast.socket_client.authenticate",
+        return_value=_failure(DeviceAuthStatus.CHAIN_UNTRUSTED),
+    ):
+        client.start()
+        client.join(5)
+    assert not client.is_alive()
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+    assert recorder.names.count(CONNECTION_STATUS_DISCONNECTED) == 1
+    _assert_cleaned_up(client)
+
+
+def test_e2e_disconnect_during_challenge(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test disconnect() while the device replies to the challenge."""
+    receiver = receiver_factory("slow")
+    client = _e2e_client(make_client, pki, receiver.port)
+    _disconnect_while_connecting(
+        client, lambda: bool(receiver.connections and receiver.connections[0])
+    )
+    receiver.wait_idle()
+    assert len(receiver.connections[0]) == 1
+    assert _is_challenge(receiver.connections[0][0])
+
+
+def test_e2e_disconnect_during_handshake_opted_out(
+    make_client: Callable[..., SocketClient],
+    pki: TestPKI,
+    tmp_path: Path,
+) -> None:
+    """Test disconnect() during the TLS handshake, without device auth."""
+    receiver = SlowHandshakeReceiver(pki, tmp_path)
+    try:
+        client = _e2e_client(make_client, pki, receiver.port, auth_enabled=False)
+        _disconnect_while_connecting(client, lambda: bool(receiver.handlers))
+        receiver.wait_idle()
+        assert all(messages == [] for messages in receiver.connections)
+    finally:
+        receiver.close()
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_run_stopped_right_after_connecting(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test run() cleans up if disconnect() comes right after the stop check."""
+    client = make_client()
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with (
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
+        patch.object(
+            client.receiver_controller,
+            "update_status",
+            side_effect=PyChromecastStopped("stopped"),
+        ),
+    ):
+        client.run()
+    assert client.socket is None
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+
+
+# The first authentication failure is warned about, whatever its class
+
+
+@pytest.mark.usefixtures("fake_tls", "connect_patches")
+@pytest.mark.parametrize(
+    "statuses",
+    [
+        [DeviceAuthStatus.CERT_EXPIRED] + [DeviceAuthStatus.CHAIN_UNTRUSTED] * 3,
+        [DeviceAuthStatus.CHAIN_UNTRUSTED] + [DeviceAuthStatus.CERT_EXPIRED] * 3,
+        [DeviceAuthStatus.NO_REPLY] + [DeviceAuthStatus.UUID_MISMATCH] * 3,
+    ],
+    ids=["clock_first", "not_genuine_first", "transient_first"],
+)
+def test_first_auth_failure_warns(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    statuses: list[DeviceAuthStatus],
+) -> None:
+    """Test only the first auth failure of a connection attempt is warned about."""
+    client = make_client(tries=len(statuses))
+    client.retry_wait = 0
+    with (
+        patch(
+            "pychromecast.socket_client.authenticate",
+            side_effect=[_failure(status) for status in statuses],
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+        pytest.raises(DeviceAuthenticationError),
+    ):
+        client.initialize_connection()
+    levels = [
+        r.levelno
+        for r in caplog.records
+        if r.levelno < logging.ERROR
+        and (
+            "Device authentication" in r.getMessage()
+            or WRONG_IDENTITY_TEXT in r.getMessage()
+        )
+    ]
+    assert levels == [logging.WARNING, logging.DEBUG, logging.DEBUG, logging.DEBUG]
+
+
+# Wiring of authenticate_endpoint and of the logging
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+@pytest.mark.parametrize(
+    ("cast_type", "expected_uuid"), [("cast", TEST_UUID), ("group", None)]
+)
+def test_group_uuid_not_checked(
+    make_client: Callable[..., SocketClient],
+    cast_type: str,
+    expected_uuid: UUID | None,
+) -> None:
+    """Test a group is only checked to be served by a genuine device."""
+    client = make_client(cast_type=cast_type)
+    with patch(
+        "pychromecast.socket_client.authenticate", return_value=VERIFIED
+    ) as auth:
+        client.initialize_connection()
+    assert auth.call_args.kwargs["expected_uuid"] == expected_uuid
+
+
+@pytest.mark.usefixtures("connect_patches", "fake_tls")
+@pytest.mark.parametrize("cast_type", ["cast", "group"])
+@pytest.mark.parametrize("auth_enabled", [True, False])
+def test_network_failure_logging(
+    make_client: Callable[..., SocketClient],
+    caplog: pytest.LogCaptureFixture,
+    cast_type: str,
+    auth_enabled: bool,
+) -> None:
+    """Test a network failure is logged at info once, for groups too."""
+    client = make_client(cast_type=cast_type, tries=3, auth_enabled=auth_enabled)
+    client.retry_wait = 0
+    text = "Failed to connect to service"
+    with (
+        patch(
+            "socket.create_connection", side_effect=ConnectionRefusedError("refused")
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
+    ):
+        with pytest.raises(ChromecastConnectionError):
+            client.initialize_connection()
+        assert _retry_levels(caplog, text) == [
+            logging.INFO,
+            logging.DEBUG,
+            logging.DEBUG,
+        ]
+
+
+def test_e2e_device_on_its_group_port_accepted(
+    make_client: Callable[..., SocketClient],
+    receiver_factory: Callable[..., FakeReceiver],
+    pki: TestPKI,
+) -> None:
+    """Test a device presenting its UUID is accepted on a port of a group it leads.
+
+    This documents a known limitation, see the README: a spoofed mDNS record can
+    point a device at the port of a group the device leads.
+    """
+    receiver = receiver_factory()
+    client = _e2e_client(make_client, pki, receiver.port)
+    result = _connect(client)
+    assert client.is_connected
+    assert result.uuid_checked

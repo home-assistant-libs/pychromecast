@@ -22,8 +22,8 @@ your Chromecast or Cast-enabled device like Google Home.*
 Dependencies
 ------------
 
-PyChromecast depends on the Python packages requests, protobuf and
-zeroconf. Make sure you have these dependencies installed using
+PyChromecast depends on the Python packages protobuf, zeroconf, casttube
+and cryptography. Make sure you have these dependencies installed using
 ``pip install -r requirements.txt``
 
 How to use
@@ -166,6 +166,81 @@ Pychromecast relies on mDNS to discover cast devices. The mDNS protocol relies o
 -  The device running pychromecast must be on the same subnet as the cast devices because mDNS packets are not routed across subnets.
 
 If not all of these conditions are met, discovery will not work. In cases where these conditions are impossible to meet, it's possible to pass a list of known IP-addresses or host names to the discovery functions.
+
+Device authentication
+---------------------
+PyChromecast authenticates every cast device it connects to, the same way
+Google's own Cast senders do. Right after the TLS handshake, on every connect
+and reconnect, it sends the device a challenge with a fresh random nonce. The
+device must answer with its device certificate, which must chain up to one of
+Google's Cast root certificates, and a signature made with that certificate's
+key over the nonce and the device's TLS certificate. This proves the device is
+a genuine cast device, and that the TLS connection ends at that device: a
+relay in between can't read or alter the traffic. A relay which just forwards
+the encrypted traffic can still choose which endpoint of that genuine device
+is reached, see the limitations below.
+
+PyChromecast also checks that the common name of the device's TLS certificate
+is the UUID the device was discovered with. Because the signature covers the
+TLS certificate, a genuine device can't claim another device's UUID. A device
+presenting the expected UUID is accepted on any port.
+
+A cast group is served by its current leader, which authenticates as itself:
+nothing it sends names the group. A cast group is therefore only checked to be
+served by a genuine cast device, not by which one.
+
+Nothing but the challenge is sent on a connection to a device which fails
+authentication. Unauthenticated
+metadata requests made outside the cast connection, like the ``eureka_info``
+request which looks up a device's cast type when it isn't known, for example
+for ``get_chromecast_from_host``, or discovery of ``known_hosts``, may still
+reach an endpoint before it is authenticated. They carry no credentials.
+
+When a device fails authentication, the connection status ``FAILED_AUTH``
+(``pychromecast.socket_client.CONNECTION_STATUS_FAILED_AUTH``) is reported
+rather than ``FAILED``, so listeners treating only ``FAILED`` as a failure
+need updating. The reason is in ``ConnectionStatus.device_auth``, a
+``pychromecast.device_auth.DeviceAuthResult``, and the connection is retried
+with the same backoff as network failures. If no retries are left,
+``pychromecast.DeviceAuthenticationError``, a ``ChromecastConnectionError``
+carrying the result, is raised. ``DeviceAuthResult.verified`` and
+``DeviceAuthResult.failure_class``, a
+``pychromecast.device_auth.DeviceAuthFailureClass``, are the stable interface. The
+``DeviceAuthStatus`` values and the ``detail`` texts are diagnostics, which may
+change between releases.
+
+A failure describes whoever answered at the device's address, which can
+change: for example after an IP address change another genuine device may
+answer for a while. Such failures are of class
+``pychromecast.device_auth.DeviceAuthFailureClass.WRONG_IDENTITY``, and consumers should
+apply a grace period before surfacing them. A failure of class ``CLOCK`` comes
+from a genuine device whose certificates are not valid at the current time:
+the system clock is wrong, or the device needs a firmware update. A failure of
+class ``TRANSIENT`` means there was no usable answer to the challenge. The first
+authentication failure of a connection
+attempt is logged as a warning, later ones at debug level.
+
+Unofficial receivers, such as receivers emulating a cast device, fail
+authentication by design. To talk to them, pass ``device_auth=False`` to
+``get_chromecasts``, ``get_listed_chromecasts``,
+``get_chromecast_from_cast_info``, ``get_chromecast_from_host`` or
+``Chromecast``. The identity of the device is then not verified, so don't use
+controllers which send credentials, such as ``HomeAssistantController`` or
+``PlexController``, with devices which are not authenticated.
+
+Limitations: the certificate revocation list sent by the device is not
+checked, and devices are not pinned. A rooted genuine device can still pass
+authentication for any UUID. A cast group is only checked to be served by a
+genuine device, so an attacker who can spoof mDNS or ARP can redirect a group
+connection to any genuine device they own. Whether a cast is a group comes
+from its unauthenticated mDNS record: a port other than 8009, the model name
+``Google Cast Group``, or, for an unknown model, its capabilities. So an
+attacker who can spoof mDNS can also redirect a device connection to a genuine
+device they own, by advertising the device's UUID as a group. An attacker who
+can spoof mDNS can point a device at the port of a group the device leads, and
+an attacker who can also forward TCP can redirect a connection to another
+endpoint of the same genuine device. Traffic and credentials stay end to end
+with the genuine device which answers.
 
 Thanks
 ------

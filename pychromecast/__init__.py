@@ -29,6 +29,7 @@ from .dial import get_cast_type
 from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED, MediaController  # noqa: F401
 from .controllers.receiver import CastStatus, CastStatusListener
+from .device_auth import DeviceAuthSettings
 from .error import NotConnected, RequestTimeout
 from .models import CastInfo, HostServiceInfo, MDNSServiceInfo
 from .response_handler import WaitResponse
@@ -46,8 +47,13 @@ def get_chromecast_from_host(
     tries: int | None = None,
     retry_wait: float | None = None,
     timeout: float | None = None,
+    *,
+    device_auth: bool = True,
 ) -> Chromecast:
-    """Creates a Chromecast object from a zeroconf host."""
+    """Creates a Chromecast object from a zeroconf host.
+
+    The UUID is the expected UUID of the device, see Chromecast.
+    """
     # Build device status from the mDNS info, this information is
     # the primary source and the remaining will be fetched
     # later on.
@@ -65,6 +71,7 @@ def get_chromecast_from_host(
         tries=tries,
         timeout=timeout,
         retry_wait=retry_wait,
+        device_auth=device_auth,
     )
 
 
@@ -78,6 +85,8 @@ def get_chromecast_from_cast_info(
     tries: int | None = None,
     retry_wait: float | None = None,
     timeout: float | None = None,
+    *,
+    device_auth: bool = True,
 ) -> Chromecast:
     """Creates a Chromecast object from a zeroconf service."""
     _LOGGER.debug("get_chromecast_from_cast_info %s", cast_info)
@@ -87,6 +96,7 @@ def get_chromecast_from_cast_info(
         timeout=timeout,
         retry_wait=retry_wait,
         zconf=zconf,
+        device_auth=device_auth,
     )
 
 
@@ -105,6 +115,8 @@ def get_listed_chromecasts(
     discovery_timeout: float = DISCOVER_TIMEOUT,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    *,
+    device_auth: bool = True,
 ) -> tuple[list[Chromecast], CastBrowser]:
     """
     Searches the network for chromecast devices matching a list of friendly
@@ -127,6 +139,7 @@ def get_listed_chromecasts(
     :param discovery_timeout: A floating point number specifying the time to wait
                                devices matching the criteria have been found.
     :param zeroconf_instance: An existing zeroconf instance.
+    :param device_auth: passed to get_chromecasts
     """
 
     cc_list: dict[UUID, Chromecast] = {}
@@ -143,6 +156,7 @@ def get_listed_chromecasts(
                 tries=tries,
                 retry_wait=retry_wait,
                 timeout=timeout,
+                device_auth=device_auth,
             )
 
         friendly_name = browser.devices[uuid].friendly_name
@@ -180,6 +194,8 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    *,
+    device_auth: bool = True,
 ) -> tuple[list[Chromecast], CastBrowser]: ...
 
 
@@ -193,6 +209,7 @@ def get_chromecasts(
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    device_auth: bool = True,
 ) -> CastBrowser: ...
 
 
@@ -204,6 +221,8 @@ def get_chromecasts(  # pylint: disable=too-many-locals
     callback: Callable[[Chromecast], None] | None = None,
     zeroconf_instance: zeroconf.Zeroconf | None = None,
     known_hosts: list[str] | None = None,
+    *,
+    device_auth: bool = True,
 ) -> tuple[list[Chromecast], CastBrowser] | CastBrowser:
     """
     Searches the network for chromecast devices and creates a Chromecast object
@@ -234,6 +253,8 @@ def get_chromecasts(  # pylint: disable=too-many-locals
     :param callback: Callback which is triggered for each discovered chromecast when
                      blocking = False.
     :param zeroconf_instance: An existing zeroconf instance.
+    :param device_auth: Authenticate each device on every connect and don't talk
+                        to devices which are not genuine, see Chromecast.
     """
     if blocking:
         # Thread blocking chromecast discovery
@@ -251,6 +272,7 @@ def get_chromecasts(  # pylint: disable=too-many-locals
                         tries=tries,
                         retry_wait=retry_wait,
                         timeout=timeout,
+                        device_auth=device_auth,
                     )
                 )
             except ChromecastConnectionError:  # noqa: F405
@@ -277,6 +299,7 @@ def get_chromecasts(  # pylint: disable=too-many-locals
                     tries=tries,
                     retry_wait=retry_wait,
                     timeout=timeout,
+                    device_auth=device_auth,
                 )
             )
             known_uuids.add(uuid)
@@ -306,6 +329,12 @@ class Chromecast(CastStatusListener):
                   mDNS services.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
+    :param device_auth: Authenticate the device on every connect, and don't talk to
+                        a device which is not genuine, or whose certificate is not
+                        for cast_info.uuid. A cast group is only checked to
+                        be served by a genuine device. Set to False to talk to
+                        any device, the device's identity is then not
+                        verified.
     """
 
     def __init__(
@@ -316,6 +345,7 @@ class Chromecast(CastStatusListener):
         timeout: float | None = None,
         retry_wait: float | None = None,
         zconf: zeroconf.Zeroconf | None = None,
+        device_auth: bool = True,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -338,6 +368,9 @@ class Chromecast(CastStatusListener):
             retry_wait=retry_wait,
             services=cast_info.services,
             zconf=zconf,
+            device_auth=DeviceAuthSettings(
+                enabled=device_auth, expected_uuid=cast_info.uuid
+            ),
         )
 
         receiver_controller = self.socket_client.receiver_controller

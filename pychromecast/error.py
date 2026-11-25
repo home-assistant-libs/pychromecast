@@ -2,6 +2,11 @@
 Errors to be used by PyChromecast.
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .device_auth import DeviceAuthResult
+
 
 class PyChromecastError(Exception):
     """Base error for PyChromecast."""
@@ -9,6 +14,14 @@ class PyChromecastError(Exception):
 
 class ChromecastConnectionError(PyChromecastError):
     """When a connection error occurs within PyChromecast."""
+
+
+class DeviceAuthenticationError(ChromecastConnectionError):
+    """The cast device failed Cast device authentication."""
+
+    def __init__(self, result: DeviceAuthResult) -> None:
+        super().__init__(f"Device authentication failed, {result.message}")
+        self.result = result
 
 
 class ChromecastConnectionClosed(PyChromecastError):

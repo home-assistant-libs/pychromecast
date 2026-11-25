@@ -25,16 +25,30 @@ from typing import Any
 import zeroconf
 
 from .config import APP_AUDIBLE
-from .const import MESSAGE_TYPE, PLATFORM_DESTINATION_ID, REQUEST_ID, SESSION_ID
+from .const import (
+    CAST_TYPE_GROUP,
+    MESSAGE_TYPE,
+    PLATFORM_DESTINATION_ID,
+    REQUEST_ID,
+    SESSION_ID,
+)
 from .controllers import BaseController, CallbackType, Listeners
 from .controllers.heartbeat import NS_HEARTBEAT, HeartbeatController
 from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
+from .device_auth import (
+    DEVICE_AUTH_TIMEOUT,
+    DeviceAuthResult,
+    DeviceAuthSettings,
+    DeviceAuthStatus,
+    authenticate,
+)
 from .dial import get_host_from_service
 from .error import (
     ChromecastConnectionError,
     ChromecastConnectionClosed,
     ControllerNotRegistered,
+    DeviceAuthenticationError,
     NotConnected,
     PyChromecastStopped,
     UnsupportedNamespace,
@@ -60,6 +74,9 @@ CONNECTION_STATUS_DISCONNECTED = "DISCONNECTED"
 CONNECTION_STATUS_FAILED = "FAILED"
 # Failed to resolve service name
 CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
+# The device failed device authentication and was not talked to, the result is
+# in ConnectionStatus.device_auth.
+CONNECTION_STATUS_FAILED_AUTH = "FAILED_AUTH"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
 
@@ -120,6 +137,7 @@ class ConnectionStatus:
     status: str
     address: NetworkAddress | None
     service: HostServiceInfo | MDNSServiceInfo | None
+    device_auth: DeviceAuthResult | None = None
 
 
 class _SocketClientLogger(logging.LoggerAdapter):
@@ -179,6 +197,9 @@ class SocketClient(threading.Thread, CastStatusListener):
     :param zconf: A zeroconf instance, needed if a list of services is passed.
                   The zeroconf instance may be obtained from the browser returned by
                   pychromecast.start_discovery().
+    :param device_auth: How the device is authenticated, see
+                        device_auth.DeviceAuthSettings. None for the defaults:
+                        authenticated, without checking its identity.
     """
 
     # pylint: disable-next=too-many-arguments
@@ -191,6 +212,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         retry_wait: float | None,
         services: set[HostServiceInfo | MDNSServiceInfo],
         zconf: zeroconf.Zeroconf | None,
+        device_auth: DeviceAuthSettings | None = None,
     ) -> None:
         super().__init__()
 
@@ -207,6 +229,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.retry_wait = retry_wait or RETRY_TIME
         self.services = services
         self.zconf = zconf
+        self.device_auth = device_auth or DeviceAuthSettings()
 
         self.host = "unknown"
         self.port = 8009
@@ -251,6 +274,13 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         self.receiver_controller.register_status_listener(self)
 
+        if not self.device_auth.enabled:
+            self.logger.info(
+                "Cast device authentication is disabled; "
+                "the identity of the device at %s is not verified",
+                services,
+            )
+
     def initialize_connection(  # pylint:disable=too-many-statements, too-many-branches, too-many-locals
         self,
     ) -> None:
@@ -279,6 +309,8 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.session_id = None
 
         retry_log_fun = self.logger.info
+        auth_log_fun = self.logger.warning
+        failed_auth: DeviceAuthResult | None = None
 
         # Dict keeping track of individual retry delay for each named service
         retries: dict[HostServiceInfo | MDNSServiceInfo, dict[str, float]] = {}
@@ -309,6 +341,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 if now < retry["next_retry"]:
                     continue
                 try:
+                    failed_auth = None
                     self._report_connection_status(
                         ConnectionStatus(
                             CONNECTION_STATUS_CONNECTING,
@@ -356,10 +389,24 @@ class SocketClient(threading.Thread, CastStatusListener):
                         (self.host, self.port), self.timeout
                     )
                     try:
-                        self.socket = context.wrap_socket(raw_socket)
+                        tls_socket = context.wrap_socket(raw_socket)
                     except BaseException:
                         raw_socket.close()
                         raise
+                    # Authenticate before anything else is sent, the socket is
+                    # only published once the device is authenticated
+                    try:
+                        auth_result = self._authenticate_device(tls_socket)
+                        if self.stop.is_set():
+                            # disconnect() was called while connecting, don't
+                            # publish the socket
+                            raise ChromecastConnectionError(
+                                "Failed to connect, stopped while connecting"
+                            )
+                    except BaseException:
+                        tls_socket.close()
+                        raise
+                    self.socket = tls_socket
                     self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
                     )
@@ -370,6 +417,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                             CONNECTION_STATUS_CONNECTED,
                             NetworkAddress(self.host, self.port),
                             None,
+                            device_auth=auth_result,
                         )
                     )
                     self.receiver_controller.update_status()
@@ -382,6 +430,33 @@ class SocketClient(threading.Thread, CastStatusListener):
                     else:
                         self.logger.info("Connection reestablished!")
                     return
+
+                except DeviceAuthenticationError as err:
+                    self.connecting = True
+                    failed_auth = err.result
+                    self._close_socket()
+                    if self.stop.is_set():
+                        self.logger.debug(
+                            "Failed to connect: %s. aborting due to stop signal.", err
+                        )
+                        raise ChromecastConnectionError("Failed to connect") from err
+
+                    self._report_connection_status(
+                        ConnectionStatus(
+                            CONNECTION_STATUS_FAILED_AUTH,
+                            NetworkAddress(self.host, self.port),
+                            None,
+                            device_auth=err.result,
+                        )
+                    )
+                    auth_log_fun(
+                        "Device authentication failed, %s. Not connecting, retrying "
+                        "in %.1fs",
+                        err.result.message,
+                        retry["delay"],
+                    )
+                    auth_log_fun = self.logger.debug
+                    mdns_backoff(service, retry)
 
                 # OSError raised if connecting to the socket fails, NotConnected raised
                 # if another thread tries - and fails - to send a message before the
@@ -423,8 +498,39 @@ class SocketClient(threading.Thread, CastStatusListener):
                 tries -= 1
 
         self.stop.set()
+        if failed_auth is not None:
+            self.logger.error(
+                "Failed to connect, device authentication failed (%s). No retries.",
+                failed_auth.status,
+            )
+            raise DeviceAuthenticationError(failed_auth)
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
+
+    def _authenticate_device(self, tls_socket: ssl.SSLSocket) -> DeviceAuthResult:
+        """Authenticate the device, raise DeviceAuthenticationError on failure."""
+        if not self.device_auth.enabled:
+            return DeviceAuthResult(
+                DeviceAuthStatus.DISABLED, "device authentication disabled"
+            )
+        # A group is served by its current leader, which authenticates as
+        # itself, so only check that a genuine device serves it
+        is_group = self.cast_type == CAST_TYPE_GROUP
+        result = authenticate(
+            tls_socket,
+            expected_uuid=None if is_group else self.device_auth.expected_uuid,
+            timeout=min(self.timeout, DEVICE_AUTH_TIMEOUT),
+        )
+        if not result.verified:
+            raise DeviceAuthenticationError(result)
+        identity = "" if result.uuid_checked else " (UUID not checked)"
+        self.logger.debug(
+            "Device authenticated: %s via %s%s",
+            result.device_cert_subject,
+            result.trust_root,
+            identity,
+        )
+        return result
 
     def _close_socket(self) -> None:
         """Close the socket to the Chromecast, if any."""
@@ -524,14 +630,9 @@ class SocketClient(threading.Thread, CastStatusListener):
         """Connect to the cast and start polling the socket."""
         try:
             self.initialize_connection()
-        except ChromecastConnectionError:
-            self._report_connection_status(
-                ConnectionStatus(
-                    CONNECTION_STATUS_DISCONNECTED,
-                    NetworkAddress(self.host, self.port),
-                    None,
-                )
-            )
+        except ChromecastConnectionError, PyChromecastStopped:
+            # Failed to connect, or disconnect() was called while connecting
+            self._cleanup()
             return
 
         self.heartbeat_controller.reset()
