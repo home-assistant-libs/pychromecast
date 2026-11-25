@@ -8,24 +8,110 @@ import ipaddress
 import json
 import logging
 import ssl
+import time
 import urllib.request
 import urllib.error
 from urllib.parse import unquote, quote, urlsplit
 from uuid import UUID
-from typing import Any
+from typing import Any, TypedDict, cast
 
+from google.protobuf.message import DecodeError
 import zeroconf
 
-from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
+from .const import (
+    CAST_TYPE_AUDIO,
+    CAST_TYPE_CHROMECAST,
+    CAST_TYPE_GROUP,
+    MESSAGE_TYPE,
+    PLATFORM_DESTINATION_ID,
+)
 from .error import ZeroConfInstanceRequired
+
+# pylint: disable-next=no-name-in-module
+from .generated.cast_channel_pb2 import CastMessage
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
+from .protocol import (
+    NS_CONNECTION,
+    SENDER_ID,
+    build_message,
+    connect_message,
+    frame_message,
+    get_ssl_context,
+    open_connection,
+    recv_message,
+)
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL_HTTP = "http://{}:8008"
 FORMAT_BASE_URL_HTTPS = "https://{}:8443"
 
+NS_SETUP = "urn:x-cast:com.google.cast.setup"
+SETUP_REQUEST_ID = 1
+
 _LOGGER = logging.getLogger(__name__)
+
+
+class EurekaCapabilities(TypedDict, total=False):
+    """Capabilities in the device_info of eureka_info."""
+
+    display_supported: bool
+    multizone_supported: bool
+
+
+class EurekaDeviceInfo(TypedDict, total=False):
+    """The device_info of eureka_info."""
+
+    capabilities: EurekaCapabilities
+    mac_address: str
+    manufacturer: str
+    model_name: str
+    name: str
+    product_name: str
+    ssdp_udn: str
+
+
+class EurekaBuildInfo(TypedDict, total=False):
+    """The build_info of eureka_info."""
+
+    cast_build_revision: str
+
+
+class EurekaGroup(TypedDict, total=False):
+    """A group or dynamic group in the multizone of eureka_info.
+
+    The leader is "self" if the device leads the group, else the leader's
+    host:port. Static groups report it in elected_leader, with leader empty,
+    and the leader reports the cast_port. Dynamic groups report it in leader,
+    without elected_leader and cast_port.
+    """
+
+    cast_port: int
+    elected_leader: str
+    leader: str
+    name: str
+    uuid: str
+
+
+class EurekaMultizone(TypedDict, total=False):
+    """The multizone of eureka_info."""
+
+    dynamic_groups: list[EurekaGroup]
+    groups: list[EurekaGroup]
+
+
+class EurekaInfo(TypedDict, total=False):
+    """The eureka_info of a cast device, with the requested params.
+
+    Devices which don't support the params give the legacy format, with
+    ssdp_udn at the top level.
+    """
+
+    build_info: EurekaBuildInfo
+    device_info: EurekaDeviceInfo
+    multizone: EurekaMultizone
+    name: str
+    ssdp_udn: str
 
 
 def get_host_from_service(
@@ -161,12 +247,65 @@ def _get_status(
     return (host, json.loads(data.decode("utf-8")))
 
 
-def get_ssl_context() -> ssl.SSLContext:
-    """Create an SSL context."""
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return context
+def _get_eureka_info_cast(
+    host: str,
+    port: int,
+    params: list[str],
+    timeout: float,
+    context: ssl.SSLContext | None,
+) -> EurekaInfo:
+    """Query the eureka_info of a cast device over a cast connection.
+
+    The platform receiver answers on the setup namespace with the same data as
+    the eureka_info HTTP endpoint. The endpoints of groups don't answer.
+    """
+    deadline = time.monotonic() + timeout
+    with open_connection(host, port, timeout, context) as sock:
+        for namespace, data in (
+            (NS_CONNECTION, connect_message()),
+            (
+                NS_SETUP,
+                {
+                    MESSAGE_TYPE: "eureka_info",
+                    "request_id": SETUP_REQUEST_ID,
+                    "data": {"params": params},
+                },
+            ),
+        ):
+            msg = build_message(SENDER_ID, PLATFORM_DESTINATION_ID, namespace, data)
+            sock.sendall(frame_message(msg))
+        while True:
+            msg = recv_message(sock, deadline)
+            if msg.namespace != NS_SETUP or msg.payload_type != CastMessage.STRING:
+                continue
+            reply = json.loads(msg.payload_utf8)
+            if not isinstance(reply, dict):
+                continue
+            if reply.get("request_id") != SETUP_REQUEST_ID:
+                continue
+            if reply.get("response_code") != HTTPStatus.OK:
+                raise ValueError(
+                    f"eureka_info failed: {reply.get('response_code')} "
+                    f"{reply.get('response_string')}"
+                )
+            status = reply.get("data")
+            if not isinstance(status, dict):
+                raise ValueError("eureka_info reply has no data")
+            return cast(EurekaInfo, status)
+
+
+def _resolve_services(
+    services: set[HostServiceInfo | MDNSServiceInfo],
+    zconf: zeroconf.Zeroconf | None,
+) -> tuple[str, int]:
+    """Resolve the host and port of the first resolvable service."""
+    for service in services.copy():
+        host, port, _ = get_host_from_service(service, zconf)
+        if host and port:
+            _LOGGER.debug("Resolved service %s to %s:%s", service, host, port)
+            return host, port
+    # raise same as the url open would raise on invalid host
+    raise urllib.error.URLError(f"Unable to resolve host for services {services}")
 
 
 def _get_eureka_info(
@@ -175,14 +314,42 @@ def _get_eureka_info(
     params: list[str],
     timeout: float,
     context: ssl.SSLContext | None,
-) -> Any:
-    """Query the eureka_info of a cast device."""
-    path = f"/setup/eureka_info?params={','.join(params)}"
-    # Try connection with SSL first, and if it fails fall back to non-SSL
+    *,
+    http_fallback: bool = True,
+) -> EurekaInfo:
+    """Query the eureka_info of a cast device.
+
+    It's queried over a cast connection first, then over HTTPS and, if
+    http_fallback is set, over HTTP.
+    """
+    host, port = _resolve_services(services, zconf)
+    attempts = 3 if http_fallback else 2
     try:
-        _, status = _get_status(services, zconf, path, True, timeout / 2, context)
+        return _get_eureka_info_cast(host, port, params, timeout / attempts, context)
+    except (OSError, ValueError, DecodeError) as err:
+        _LOGGER.debug(
+            "Failed to get eureka_info from %s:%s over cast: %s (%s)",
+            host,
+            port,
+            err,
+            type(err),
+        )
+    resolved: set[HostServiceInfo | MDNSServiceInfo] = {HostServiceInfo(host, port)}
+    path = f"/setup/eureka_info?params={','.join(params)}"
+    status: EurekaInfo
+    if not http_fallback:
+        _, status = _get_status(
+            resolved, zconf, path, True, timeout / attempts, context
+        )
+        return status
+    try:
+        _, status = _get_status(
+            resolved, zconf, path, True, timeout / attempts, context
+        )
     except urllib.error.HTTPError, urllib.error.URLError:
-        _, status = _get_status(services, zconf, path, False, timeout / 2, context)
+        _, status = _get_status(
+            resolved, zconf, path, False, timeout / attempts, context
+        )
     return status
 
 
@@ -347,14 +514,14 @@ def _get_leader_host(elected_leader: str) -> str | None:
     return unquote(hostname) if hostname else None
 
 
-def _get_group_info(host: str, group: Any) -> MultizoneInfo:
+def _get_group_info(host: str, group: EurekaGroup) -> MultizoneInfo:
     """Parse group JSON data and return a MultizoneInfo instance."""
     name = group.get("name", "Unknown group name")
     udn = group.get("uuid", None)
     uuid = None
     if udn:
         uuid = UUID(udn.replace("-", ""))
-    elected_leader = group.get("elected_leader", "")
+    elected_leader = group.get("elected_leader") or group.get("leader") or ""
 
     leader_host = None
     leader_port = None
@@ -382,13 +549,8 @@ def get_multizone_status(
     try:
         if services is None:
             services = {HostServiceInfo(host, 8009)}
-        _, status = _get_status(
-            services,
-            zconf,
-            "/setup/eureka_info?params=multizone",
-            True,
-            timeout,
-            context,
+        status = _get_eureka_info(
+            services, zconf, ["multizone"], timeout, context, http_fallback=False
         )
 
         dynamic_groups = []
