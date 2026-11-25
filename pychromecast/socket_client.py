@@ -19,7 +19,6 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from struct import pack, unpack
 from typing import Any
 
 import zeroconf
@@ -43,11 +42,17 @@ from .error import (
 # pylint: disable-next=no-name-in-module
 from .generated.cast_channel_pb2 import CastMessage
 from .models import HostServiceInfo, MDNSServiceInfo
+from .protocol import (
+    NS_CONNECTION,
+    SENDER_ID,
+    TYPE_CLOSE,
+    build_message,
+    connect_message,
+    frame_message,
+    open_connection,
+    parse_frames,
+)
 
-NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
-
-TYPE_CONNECT = "CONNECT"
-TYPE_CLOSE = "CLOSE"
 TYPE_LOAD = "LOAD"
 
 # The socket connection is being setup
@@ -211,7 +216,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         self.host = "unknown"
         self.port = 8009
 
-        self.source_id = "sender-0"
+        self.source_id = SENDER_ID
         self.stop = threading.Event()
         # socketpair used to interrupt the worker thread
         self.socketpair = socket.socketpair()
@@ -349,17 +354,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                         continue
 
                     self.logger.debug("Connecting")
-                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    raw_socket = socket.create_connection(
-                        (self.host, self.port), self.timeout
-                    )
-                    try:
-                        self.socket = context.wrap_socket(raw_socket)
-                    except BaseException:
-                        raw_socket.close()
-                        raise
+                    self.socket = open_connection(self.host, self.port, self.timeout)
                     self.remote_selector_key = self.selector.register(
                         self.socket, selectors.EVENT_READ
                     )
@@ -780,19 +775,9 @@ class SocketClient(threading.Thread, CastStatusListener):
 
         A partial message is kept until the rest of it has been received.
         """
-        self._recv_buffer += self._read_bytes_from_socket()
-
-        messages = []
-        # each message is prefixed with its Big-Endian 4 byte length
-        while len(self._recv_buffer) >= 4:
-            (read_len,) = unpack(">I", self._recv_buffer[:4])
-            if len(self._recv_buffer) < 4 + read_len:
-                break
-            message = CastMessage()
-            message.ParseFromString(self._recv_buffer[4 : 4 + read_len])
-            self._recv_buffer = self._recv_buffer[4 + read_len :]
-            messages.append(message)
-
+        messages, self._recv_buffer = parse_frames(
+            self._recv_buffer + self._read_bytes_from_socket()
+        )
         return messages
 
     # pylint: disable=too-many-arguments, too-many-branches
@@ -859,17 +844,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         if inc_session_id:
             data[SESSION_ID] = self.session_id
 
-        msg = CastMessage()
-
-        msg.protocol_version = msg.CASTV2_1_0
-        msg.source_id = self.source_id
-        msg.destination_id = destination_id
-        msg.payload_type = CastMessage.STRING
-        msg.namespace = namespace
-        msg.payload_utf8 = json.dumps(data, ensure_ascii=False)
-
-        # prepend message with Big-Endian 4 byte payload size
-        be_size = pack(">I", msg.ByteSize())
+        msg = build_message(self.source_id, destination_id, namespace, data)
 
         # Log all messages except heartbeat
         if (
@@ -889,7 +864,7 @@ class SocketClient(threading.Thread, CastStatusListener):
         if callback_function and request_id is not None:
             self._request_callbacks[request_id] = callback_function
         try:
-            self.socket.sendall(be_size + msg.SerializeToString())
+            self.socket.sendall(frame_message(msg))
         except OSError as exc:
             if request_id is not None:
                 self._request_callbacks.pop(request_id, None)
@@ -973,19 +948,7 @@ class SocketClient(threading.Thread, CastStatusListener):
                 self.send_message(
                     destination_id,
                     NS_CONNECTION,
-                    {
-                        MESSAGE_TYPE: TYPE_CONNECT,
-                        "origin": {},
-                        "userAgent": "PyChromecast",
-                        "senderInfo": {
-                            "sdkType": 2,
-                            "version": "15.605.1.3",
-                            "browserVersion": "44.0.2403.30",
-                            "platform": 4,
-                            "systemVersion": "Macintosh; Intel Mac OS X10_10_3",
-                            "connectionType": 1,
-                        },
-                    },
+                    connect_message(),
                     no_add_request_id=True,
                 )
             except Exception:

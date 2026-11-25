@@ -16,6 +16,7 @@ from pychromecast.const import (
     CastCapability,
 )
 from pychromecast.dial import (
+    EurekaGroup,
     _get_eureka_info,
     _get_group_info,
     _url_encode_hostname,
@@ -48,7 +49,7 @@ def test_get_group_info_elected_leader(hostname: str, encoded: str) -> None:
 
     The zone of a link local leader is local to the device, so it's dropped.
     """
-    group = {"elected_leader": f"{encoded}:8009"}
+    group: EurekaGroup = {"elected_leader": f"{encoded}:8009"}
     assert _get_group_info("10.0.0.1", group).host == hostname.partition("%")[0]
 
 
@@ -74,7 +75,7 @@ def test_get_group_info_elected_leader_scope(
     host: str, elected_leader: str, leader_host: str
 ) -> None:
     """Test that an unscoped link local leader inherits the polled host's scope."""
-    group = {"elected_leader": elected_leader}
+    group: EurekaGroup = {"elected_leader": elected_leader}
     assert _get_group_info(host, group).host == leader_host
 
 
@@ -92,15 +93,32 @@ def test_get_group_info_elected_leader_format(
     elected_leader: str, leader_host: str | None
 ) -> None:
     """Test parsing of elected leaders in other formats."""
-    group = {"elected_leader": elected_leader}
+    group: EurekaGroup = {"elected_leader": elected_leader}
     assert _get_group_info("10.0.0.1", group).host == leader_host
 
 
 def test_get_group_info_elected_leader_self() -> None:
     """Test that a self elected leader uses the host and cast port."""
-    group = {"elected_leader": "self", "cast_port": 32187}
+    group: EurekaGroup = {"elected_leader": "self", "cast_port": 32187}
     info = _get_group_info("10.0.0.1", group)
     assert (info.host, info.port) == ("10.0.0.1", 32187)
+
+
+@pytest.mark.parametrize(
+    ("group", "leader_host"),
+    [
+        # Static groups report the leader in elected_leader, and leader empty
+        ({"elected_leader": "10.0.0.2:10001", "leader": ""}, "10.0.0.2"),
+        # Dynamic groups report the leader in leader
+        ({"leader": "10.0.0.2:10001"}, "10.0.0.2"),
+        # Dynamic groups have no cast port, so the port of a leader is unknown
+        ({"leader": "self"}, None),
+        ({}, None),
+    ],
+)
+def test_get_group_info_leader(group: EurekaGroup, leader_host: str | None) -> None:
+    """Test that the leader of static and dynamic groups is found."""
+    assert _get_group_info("10.0.0.1", group).host == leader_host
 
 
 @pytest.mark.parametrize(("hostname", "encoded"), HOSTNAMES)

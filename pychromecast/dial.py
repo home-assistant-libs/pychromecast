@@ -12,13 +12,14 @@ import urllib.request
 import urllib.error
 from urllib.parse import unquote, quote, urlsplit
 from uuid import UUID
-from typing import Any
+from typing import Any, TypedDict
 
 import zeroconf
 
 from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .error import ZeroConfInstanceRequired
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
+from .protocol import get_ssl_context
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
@@ -29,6 +30,68 @@ FORMAT_BASE_URL_HTTPS = "https://{}:8443"
 PLACEHOLDER_MAC_ADDRESS = "00:00:00:00:00:00"
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class EurekaCapabilities(TypedDict, total=False):
+    """Capabilities in the device_info of eureka_info."""
+
+    display_supported: bool
+    multizone_supported: bool
+
+
+class EurekaDeviceInfo(TypedDict, total=False):
+    """The device_info of eureka_info."""
+
+    capabilities: EurekaCapabilities
+    mac_address: str
+    manufacturer: str
+    model_name: str
+    name: str
+    product_name: str
+    ssdp_udn: str
+
+
+class EurekaBuildInfo(TypedDict, total=False):
+    """The build_info of eureka_info."""
+
+    cast_build_revision: str
+
+
+class EurekaGroup(TypedDict, total=False):
+    """A group or dynamic group in the multizone of eureka_info.
+
+    The leader is "self" if the device leads the group, else the leader's
+    host:port. Static groups report it in elected_leader, with leader empty,
+    and the leader reports the cast_port. Dynamic groups report it in leader,
+    without elected_leader and cast_port.
+    """
+
+    cast_port: int
+    elected_leader: str
+    leader: str
+    name: str
+    uuid: str
+
+
+class EurekaMultizone(TypedDict, total=False):
+    """The multizone of eureka_info."""
+
+    dynamic_groups: list[EurekaGroup]
+    groups: list[EurekaGroup]
+
+
+class EurekaInfo(TypedDict, total=False):
+    """The eureka_info of a cast device, with the requested params.
+
+    Devices which don't support the params give the legacy format, with
+    ssdp_udn at the top level.
+    """
+
+    build_info: EurekaBuildInfo
+    device_info: EurekaDeviceInfo
+    multizone: EurekaMultizone
+    name: str
+    ssdp_udn: str
 
 
 def get_host_from_service(
@@ -164,23 +227,16 @@ def _get_status(
     return (host, json.loads(data.decode("utf-8")))
 
 
-def get_ssl_context() -> ssl.SSLContext:
-    """Create an SSL context."""
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return context
-
-
 def _get_eureka_info(
     services: set[HostServiceInfo | MDNSServiceInfo],
     zconf: zeroconf.Zeroconf | None,
     params: list[str],
     timeout: float,
     context: ssl.SSLContext | None,
-) -> Any:
+) -> EurekaInfo:
     """Query the eureka_info of a cast device."""
     path = f"/setup/eureka_info?params={','.join(params)}"
+    status: EurekaInfo
     # Try connection with SSL first, and if it fails fall back to non-SSL
     try:
         _, status = _get_status(services, zconf, path, True, timeout / 2, context)
@@ -352,14 +408,14 @@ def _get_leader_host(elected_leader: str) -> str | None:
     return unquote(hostname) if hostname else None
 
 
-def _get_group_info(host: str, group: Any) -> MultizoneInfo:
+def _get_group_info(host: str, group: EurekaGroup) -> MultizoneInfo:
     """Parse group JSON data and return a MultizoneInfo instance."""
     name = group.get("name", "Unknown group name")
     udn = group.get("uuid", None)
     uuid = None
     if udn:
         uuid = UUID(udn.replace("-", ""))
-    elected_leader = group.get("elected_leader", "")
+    elected_leader = group.get("elected_leader") or group.get("leader") or ""
 
     leader_host = None
     leader_port = None
@@ -387,6 +443,7 @@ def get_multizone_status(
     try:
         if services is None:
             services = {HostServiceInfo(host, 8009)}
+        status: EurekaInfo
         _, status = _get_status(
             services,
             zconf,
