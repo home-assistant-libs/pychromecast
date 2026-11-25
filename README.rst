@@ -231,10 +231,12 @@ controllers which send credentials, such as ``HomeAssistantController`` or
 Limitations: the certificate revocation list sent by the device is not
 checked, and devices are not pinned. A rooted genuine device can still pass
 authentication for any UUID. A cast group is only checked to be served by a
-genuine device, and whether a cast is a group comes from discovery: a service
-on a port other than 8009 is a group. So an attacker who can spoof mDNS or ARP
-can redirect a group connection, or a device connection by advertising the
-device's UUID on another port, to any genuine device they own. An attacker who
+genuine device, so an attacker who can spoof mDNS or ARP can redirect a group
+connection to any genuine device they own. Whether a cast is a group comes
+from its unauthenticated mDNS record: a port other than 8009, the model name
+``Google Cast Group``, or, for an unknown model, its capabilities. So an
+attacker who can spoof mDNS can also redirect a device connection to a genuine
+device they own, by advertising the device's UUID as a group. An attacker who
 can spoof mDNS can point a device at the port of a group the device leads, and
 an attacker who can also forward TCP can redirect a connection to another
 endpoint of the same genuine device. Traffic and credentials stay end to end
