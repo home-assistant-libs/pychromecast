@@ -242,6 +242,29 @@ class DeviceAuthResult:
         return _FAILURE_CLASSES.get(self.status)
 
     @property
+    def message(self) -> str:
+        """Return a description of the result, for logging."""
+        failure_class = self.failure_class
+        if failure_class is DeviceAuthFailureClass.NOT_GENUINE:
+            return (
+                "the device may not be a genuine Cast device: "
+                f"{self.status} ({self.detail})"
+            )
+        if failure_class is DeviceAuthFailureClass.CLOCK:
+            return (
+                f"{self.status} ({self.detail}). Check the system clock; if it's "
+                "correct, the device may need a firmware update"
+            )
+        if failure_class is DeviceAuthFailureClass.WRONG_IDENTITY:
+            return (
+                f"the device is genuine, but {self.detail}. Another device may be "
+                "using its old address"
+            )
+        if failure_class is DeviceAuthFailureClass.TRANSIENT:
+            return f"{self.status} ({self.detail})"
+        return self.detail
+
+    @property
     def tls_cert_uuid(self) -> UUID | None:
         """Return the common name of the TLS certificate as a UUID, if it is one."""
         if self.tls_cert_cn is None:

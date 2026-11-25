@@ -38,7 +38,6 @@ from .controllers.media import MediaController
 from .controllers.receiver import CastStatus, CastStatusListener, ReceiverController
 from .device_auth import (
     DEVICE_AUTH_TIMEOUT,
-    DeviceAuthFailureClass,
     DeviceAuthResult,
     DeviceAuthSettings,
     DeviceAuthStatus,
@@ -453,7 +452,12 @@ class SocketClient(threading.Thread, CastStatusListener):
                             device_auth=err.result,
                         )
                     )
-                    self._log_auth_failure(auth_log_fun, err.result, retry["delay"])
+                    auth_log_fun(
+                        "Device authentication failed, %s. Not connecting, retrying "
+                        "in %.1fs",
+                        err.result.message,
+                        retry["delay"],
+                    )
                     auth_log_fun = self.logger.debug
                     mdns_backoff(service, retry)
 
@@ -508,50 +512,6 @@ class SocketClient(threading.Thread, CastStatusListener):
             raise DeviceAuthenticationError(last_result)
         self.logger.error("Failed to connect. No retries.")
         raise ChromecastConnectionError("Failed to connect")
-
-    def _log_auth_failure(
-        self, log_fun: Callable[..., None], result: DeviceAuthResult, delay: float
-    ) -> None:
-        """Log a device authentication failure."""
-        failure_class = result.failure_class
-        if failure_class is DeviceAuthFailureClass.WRONG_IDENTITY:
-            expected_uuid = self.device_auth.expected_uuid
-            expected = f"{self.fn} ({expected_uuid})" if self.fn else str(expected_uuid)
-            log_fun(
-                "The Cast device at %s:%s is genuine, but its certificate identifies "
-                "it as %s, not %s: %s. Another device may be using its old address; "
-                "retrying in %.1fs",
-                self.host,
-                self.port,
-                result.tls_cert_cn,
-                expected,
-                result.detail,
-                delay,
-            )
-        elif failure_class is DeviceAuthFailureClass.CLOCK:
-            log_fun(
-                "Device authentication failed: %s (%s). Check the system clock; if "
-                "it's correct, the device may need a firmware update. Not "
-                "connecting, retrying in %.1fs",
-                result.status,
-                result.detail,
-                delay,
-            )
-        elif failure_class is DeviceAuthFailureClass.TRANSIENT:
-            log_fun(
-                "Device authentication failed: %s (%s), retrying in %.1fs",
-                result.status,
-                result.detail,
-                delay,
-            )
-        else:
-            log_fun(
-                "Device authentication failed, the device may not be a genuine Cast "
-                "device: %s (%s). Not connecting, retrying in %.1fs",
-                result.status,
-                result.detail,
-                delay,
-            )
 
     def _authenticate_device(self, tls_socket: ssl.SSLSocket) -> DeviceAuthResult:
         """Authenticate the device, raise DeviceAuthenticationError on failure."""

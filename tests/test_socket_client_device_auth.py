@@ -368,13 +368,13 @@ def test_transient_logging(
         pytest.raises(ChromecastConnectionError),
     ):
         client.initialize_connection()
-    assert _retry_levels(caplog, "failed: no_reply") == [logging.WARNING, logging.DEBUG]
+    assert _retry_levels(caplog, "failed, no_reply") == [logging.WARNING, logging.DEBUG]
 
 
 def _mismatch(cn: UUID = OTHER_UUID) -> DeviceAuthResult:
     return DeviceAuthResult(
         DeviceAuthStatus.UUID_MISMATCH,
-        f"TLS certificate CN {str(cn)!r} does not match",
+        f"TLS certificate CN {str(cn)!r} does not match the expected UUID {TEST_UUID}",
         device_cert_subject="CN=LEADER",
         trust_root="Test Root CA",
         tls_cert_cn=str(cn),
@@ -382,7 +382,7 @@ def _mismatch(cn: UUID = OTHER_UUID) -> DeviceAuthResult:
     )
 
 
-WRONG_IDENTITY_TEXT = "is genuine, but its certificate identifies it as"
+WRONG_IDENTITY_TEXT = "the device is genuine, but TLS certificate CN"
 
 
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
@@ -410,7 +410,8 @@ def test_wrong_identity_logging(
         logging.DEBUG,
         logging.DEBUG,
     ]
-    assert f"identifies it as {OTHER_UUID}, not Kitchen ({TEST_UUID})" in message
+    assert message.startswith("[Kitchen(192.0.2.1):8009] Device authentication failed")
+    assert f"CN '{OTHER_UUID}' does not match the expected UUID {TEST_UUID}" in message
     assert "Another device may be using its old address" in message
     # The message is about the identity in the certificate, not about the address
     assert "IP address change" not in message

@@ -808,6 +808,33 @@ def test_failure_classes() -> None:
         assert DeviceAuthResult(status).failure_class is failure_class, status
 
 
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (DeviceAuthStatus.VERIFIED, "the detail"),
+        (DeviceAuthStatus.DISABLED, "the detail"),
+        (
+            DeviceAuthStatus.UUID_MISMATCH,
+            "the device is genuine, but the detail. Another device may be using "
+            "its old address",
+        ),
+        (
+            DeviceAuthStatus.CHAIN_UNTRUSTED,
+            "the device may not be a genuine Cast device: chain_untrusted (the detail)",
+        ),
+        (
+            DeviceAuthStatus.CERT_EXPIRED,
+            "cert_expired (the detail). Check the system clock; if it's correct, "
+            "the device may need a firmware update",
+        ),
+        (DeviceAuthStatus.NO_REPLY, "no_reply (the detail)"),
+    ],
+)
+def test_message(status: DeviceAuthStatus, message: str) -> None:
+    """Test the message of each failure class."""
+    assert DeviceAuthResult(status, "the detail").message == message
+
+
 # Only a genuine signature can lead to a failure blamed on the clock
 
 

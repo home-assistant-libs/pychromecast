@@ -20,9 +20,7 @@ class DeviceAuthenticationError(ChromecastConnectionError):
     """The cast device failed Cast device authentication."""
 
     def __init__(self, result: DeviceAuthResult) -> None:
-        super().__init__(
-            f"Device authentication failed: {result.status}: {result.detail}"
-        )
+        super().__init__(f"Device authentication failed, {result.message}")
         self.result = result
 
 
