@@ -202,6 +202,19 @@ def test_get_device_info_no_details() -> None:
     assert device_status.cast_build_revision is None
 
 
+def test_get_device_info_placeholder_mac_address() -> None:
+    """Test that the all zeros MAC address of Android TV devices gives None."""
+    status = {
+        "name": "TV",
+        "device_info": {"mac_address": "00:00:00:00:00:00", "product_name": "tv"},
+    }
+    with patch("pychromecast.dial._get_status", return_value=("192.0.2.1", status)):
+        device_status = get_device_info("192.0.2.1")
+    assert device_status is not None
+    assert device_status.mac_address is None
+    assert device_status.product_name == "tv"
+
+
 def _cast_info(port: int = 8009) -> CastInfo:
     return CastInfo(
         {HostServiceInfo("192.0.2.1", port)},
