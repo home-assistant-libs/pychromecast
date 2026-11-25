@@ -14,7 +14,12 @@ from pychromecast.const import (
     CastCapability,
 )
 from pychromecast.dial import DeviceStatus
-from pychromecast.discovery import HostBrowser, ZeroConfListener
+from pychromecast.discovery import (
+    CastBrowser,
+    HostBrowser,
+    ZeroConfListener,
+    discover_listed_chromecasts,
+)
 from pychromecast.models import CastInfo, MDNSServiceInfo
 
 HOST = "192.0.2.1"
@@ -225,3 +230,56 @@ def test_mdns_update_keeps_details() -> None:
     assert cast_info.mac_address == MAC_ADDRESS
     assert cast_info.product_name == "product"
     assert cast_info.cast_build_revision == "1.2.3"
+
+
+@patch("pychromecast.discovery.zeroconf.ServiceBrowser")
+def test_stop_discovery_keeps_caller_zeroconf(service_browser: MagicMock) -> None:
+    """Test that stopping discovery leaves a zeroconf instance passed in open."""
+    zconf = MagicMock()
+    browser = CastBrowser(MagicMock(), zconf)
+    browser.start_discovery()
+    browser.stop_discovery()
+
+    service_browser.return_value.cancel.assert_called_once()
+    zconf.close.assert_not_called()
+
+
+@patch("pychromecast.discovery.zeroconf.ServiceBrowser")
+def test_stop_discovery_closes_owned_zeroconf(service_browser: MagicMock) -> None:
+    """Test that stopping discovery closes a zeroconf instance the browser owns."""
+    zconf = MagicMock()
+    browser = CastBrowser(MagicMock(), zconf, owns_zeroconf=True)
+    browser.start_discovery()
+    browser.stop_discovery()
+
+    zconf.close.assert_called_once()
+
+
+@patch("pychromecast.discovery.zeroconf.ServiceBrowser")
+@patch("pychromecast.discovery.create_zeroconf")
+def test_stop_discovery_closes_created_zeroconf(
+    create_zeroconf: MagicMock, service_browser: MagicMock
+) -> None:
+    """Test that stopping discovery closes a zeroconf instance pychromecast made."""
+    _, browser = discover_listed_chromecasts(discovery_timeout=0)
+    browser.stop_discovery()
+    browser.stop_discovery()
+
+    service_browser.return_value.cancel.assert_called_once()
+    create_zeroconf.return_value.close.assert_called_once()
+
+
+@patch("pychromecast.discovery.zeroconf.ServiceBrowser")
+@patch("pychromecast.discovery.create_zeroconf")
+def test_stop_discovery_keeps_zeroconf_passed_to_helper(
+    create_zeroconf: MagicMock, service_browser: MagicMock
+) -> None:
+    """Test that a zeroconf instance passed to a discovery helper is left open."""
+    zconf = MagicMock()
+    _, browser = discover_listed_chromecasts(
+        discovery_timeout=0, zeroconf_instance=zconf
+    )
+    browser.stop_discovery()
+
+    create_zeroconf.assert_not_called()
+    zconf.close.assert_not_called()
