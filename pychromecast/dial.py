@@ -8,46 +8,23 @@ import ipaddress
 import json
 import logging
 import ssl
-import time
 import urllib.request
 import urllib.error
 from urllib.parse import unquote, quote, urlsplit
 from uuid import UUID
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
-from google.protobuf.message import DecodeError
 import zeroconf
 
-from .const import (
-    CAST_TYPE_AUDIO,
-    CAST_TYPE_CHROMECAST,
-    CAST_TYPE_GROUP,
-    MESSAGE_TYPE,
-    PLATFORM_DESTINATION_ID,
-)
+from .const import CAST_TYPE_AUDIO, CAST_TYPE_CHROMECAST, CAST_TYPE_GROUP
 from .error import ZeroConfInstanceRequired
-
-# pylint: disable-next=no-name-in-module
-from .generated.cast_channel_pb2 import CastMessage
 from .models import ZEROCONF_ERRORS, CastInfo, HostServiceInfo, MDNSServiceInfo
-from .protocol import (
-    NS_CONNECTION,
-    SENDER_ID,
-    build_message,
-    connect_message,
-    frame_message,
-    get_ssl_context,
-    open_connection,
-    recv_message,
-)
+from .protocol import get_ssl_context
 
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL_HTTP = "http://{}:8008"
 FORMAT_BASE_URL_HTTPS = "https://{}:8443"
-
-NS_SETUP = "urn:x-cast:com.google.cast.setup"
-SETUP_REQUEST_ID = 1
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -247,109 +224,21 @@ def _get_status(
     return (host, json.loads(data.decode("utf-8")))
 
 
-def _get_eureka_info_cast(
-    host: str,
-    port: int,
-    params: list[str],
-    timeout: float,
-    context: ssl.SSLContext | None,
-) -> EurekaInfo:
-    """Query the eureka_info of a cast device over a cast connection.
-
-    The platform receiver answers on the setup namespace with the same data as
-    the eureka_info HTTP endpoint. The endpoints of groups don't answer.
-    """
-    deadline = time.monotonic() + timeout
-    with open_connection(host, port, timeout, context) as sock:
-        for namespace, data in (
-            (NS_CONNECTION, connect_message()),
-            (
-                NS_SETUP,
-                {
-                    MESSAGE_TYPE: "eureka_info",
-                    "request_id": SETUP_REQUEST_ID,
-                    "data": {"params": params},
-                },
-            ),
-        ):
-            msg = build_message(SENDER_ID, PLATFORM_DESTINATION_ID, namespace, data)
-            sock.sendall(frame_message(msg))
-        while True:
-            msg = recv_message(sock, deadline)
-            if msg.namespace != NS_SETUP or msg.payload_type != CastMessage.STRING:
-                continue
-            reply = json.loads(msg.payload_utf8)
-            if not isinstance(reply, dict):
-                continue
-            if reply.get("request_id") != SETUP_REQUEST_ID:
-                continue
-            if reply.get("response_code") != HTTPStatus.OK:
-                raise ValueError(
-                    f"eureka_info failed: {reply.get('response_code')} "
-                    f"{reply.get('response_string')}"
-                )
-            status = reply.get("data")
-            if not isinstance(status, dict):
-                raise ValueError("eureka_info reply has no data")
-            return cast(EurekaInfo, status)
-
-
-def _resolve_services(
-    services: set[HostServiceInfo | MDNSServiceInfo],
-    zconf: zeroconf.Zeroconf | None,
-) -> tuple[str, int]:
-    """Resolve the host and port of the first resolvable service."""
-    for service in services.copy():
-        host, port, _ = get_host_from_service(service, zconf)
-        if host and port:
-            _LOGGER.debug("Resolved service %s to %s:%s", service, host, port)
-            return host, port
-    # raise same as the url open would raise on invalid host
-    raise urllib.error.URLError(f"Unable to resolve host for services {services}")
-
-
 def _get_eureka_info(
     services: set[HostServiceInfo | MDNSServiceInfo],
     zconf: zeroconf.Zeroconf | None,
     params: list[str],
     timeout: float,
     context: ssl.SSLContext | None,
-    *,
-    http_fallback: bool = True,
 ) -> EurekaInfo:
-    """Query the eureka_info of a cast device.
-
-    It's queried over a cast connection first, then over HTTPS and, if
-    http_fallback is set, over HTTP.
-    """
-    host, port = _resolve_services(services, zconf)
-    attempts = 3 if http_fallback else 2
-    try:
-        return _get_eureka_info_cast(host, port, params, timeout / attempts, context)
-    except (OSError, ValueError, DecodeError) as err:
-        _LOGGER.debug(
-            "Failed to get eureka_info from %s:%s over cast: %s (%s)",
-            host,
-            port,
-            err,
-            type(err),
-        )
-    resolved: set[HostServiceInfo | MDNSServiceInfo] = {HostServiceInfo(host, port)}
+    """Query the eureka_info of a cast device."""
     path = f"/setup/eureka_info?params={','.join(params)}"
     status: EurekaInfo
-    if not http_fallback:
-        _, status = _get_status(
-            resolved, zconf, path, True, timeout / attempts, context
-        )
-        return status
+    # Try connection with SSL first, and if it fails fall back to non-SSL
     try:
-        _, status = _get_status(
-            resolved, zconf, path, True, timeout / attempts, context
-        )
+        _, status = _get_status(services, zconf, path, True, timeout / 2, context)
     except urllib.error.HTTPError, urllib.error.URLError:
-        _, status = _get_status(
-            resolved, zconf, path, False, timeout / attempts, context
-        )
+        _, status = _get_status(services, zconf, path, False, timeout / 2, context)
     return status
 
 
@@ -549,8 +438,14 @@ def get_multizone_status(
     try:
         if services is None:
             services = {HostServiceInfo(host, 8009)}
-        status = _get_eureka_info(
-            services, zconf, ["multizone"], timeout, context, http_fallback=False
+        status: EurekaInfo
+        _, status = _get_status(
+            services,
+            zconf,
+            "/setup/eureka_info?params=multizone",
+            True,
+            timeout,
+            context,
         )
 
         dynamic_groups = []

@@ -7,7 +7,6 @@ import json
 import socket
 import ssl
 from struct import pack, unpack
-import time
 
 from .const import MESSAGE_TYPE
 
@@ -20,9 +19,6 @@ TYPE_CONNECT = "CONNECT"
 TYPE_CLOSE = "CLOSE"
 
 SENDER_ID = "sender-0"
-
-# Largest message accepted by recv_message, as in Chromium
-MAX_MESSAGE_SIZE = 65536
 
 # Each message is prefixed with its length, a big-endian 4 byte integer
 _LENGTH_SIZE = 4
@@ -102,33 +98,3 @@ def parse_frames(buffer: bytes) -> tuple[list[CastMessage], bytes]:
         messages.append(msg)
         buffer = buffer[end:]
     return messages, buffer
-
-
-def _recv_exact(sock: ssl.SSLSocket, size: int, deadline: float) -> bytes:
-    """Receive exactly size bytes before the deadline."""
-    data = b""
-    while len(data) < size:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("timed out waiting for the cast device")
-        sock.settimeout(remaining)
-        chunk = sock.recv(size - len(data))
-        if not chunk:
-            raise ConnectionError("connection closed by the cast device")
-        data += chunk
-    return data
-
-
-def recv_message(sock: ssl.SSLSocket, deadline: float) -> CastMessage:
-    """Receive one message on a blocking socket before the deadline.
-
-    Raises TimeoutError, ConnectionError if the connection is closed, ValueError
-    if the message is larger than MAX_MESSAGE_SIZE and DecodeError if it can't
-    be parsed.
-    """
-    (size,) = unpack(">I", _recv_exact(sock, _LENGTH_SIZE, deadline))
-    if size > MAX_MESSAGE_SIZE:
-        raise ValueError(f"message of {size} bytes is too large")
-    msg = CastMessage()
-    msg.ParseFromString(_recv_exact(sock, size, deadline))
-    return msg

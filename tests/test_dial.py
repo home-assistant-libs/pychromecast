@@ -1,16 +1,12 @@
 """Tests for pychromecast.dial."""
 
-from collections.abc import Iterator
 from dataclasses import replace
-import json
-from struct import pack, unpack
-from typing import Any, Self
+from typing import Any
 import urllib.error
 import urllib.request
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
-from google.protobuf.message import DecodeError
 import pytest
 
 from pychromecast.const import (
@@ -20,34 +16,16 @@ from pychromecast.const import (
     CastCapability,
 )
 from pychromecast.dial import (
-    NS_SETUP,
     EurekaGroup,
     _get_eureka_info,
-    _get_eureka_info_cast,
     _get_group_info,
     _url_encode_hostname,
     _url_host_header,
     get_cast_type,
     get_device_info,
     get_host_from_zc_service_info,
-    get_multizone_status,
-)
-from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
-    CastMessage,
 )
 from pychromecast.models import CastInfo, HostServiceInfo
-from pychromecast.protocol import NS_CONNECTION, connect_message
-
-
-@pytest.fixture(name="no_cast_eureka_info", autouse=True)
-def fixture_no_cast_eureka_info() -> Iterator[MagicMock]:
-    """Fail eureka_info over cast, so it's fetched over HTTP."""
-    with patch(
-        "pychromecast.dial._get_eureka_info_cast",
-        side_effect=OSError("no cast connection"),
-    ) as get_eureka_info_cast:
-        yield get_eureka_info_cast
-
 
 HOSTNAMES = [
     # (hostname, hostname encoded for use in a url)
@@ -316,220 +294,17 @@ def test_get_cast_type_failed(side_effect: Any) -> None:
     assert result.cast_build_revision == "1.2.3"
 
 
-SERVICES: set[HostServiceInfo | Any] = {HostServiceInfo("192.0.2.1", 8009)}
-
-
-def test_get_eureka_info_falls_back_to_http(no_cast_eureka_info: MagicMock) -> None:
-    """Test that eureka_info is requested over HTTPS, then HTTP, if cast fails."""
+def test_get_eureka_info_falls_back_to_http() -> None:
+    """Test that eureka_info is requested over HTTP if HTTPS fails."""
     with patch(
         "pychromecast.dial._get_status",
         side_effect=[urllib.error.URLError("no https"), ("192.0.2.1", STATUS)],
     ) as get_status:
-        status = _get_eureka_info(SERVICES, None, ["device_info", "name"], 30, None)
+        status = _get_eureka_info(set(), None, ["device_info", "name"], 30, None)
     assert status == STATUS
-    assert no_cast_eureka_info.call_args[0][:4] == (
-        "192.0.2.1",
-        8009,
-        ["device_info", "name"],
-        10,
-    )
     assert [call[0][2:5] for call in get_status.call_args_list] == [
-        ("/setup/eureka_info?params=device_info,name", True, 10),
-        ("/setup/eureka_info?params=device_info,name", False, 10),
-    ]
-
-
-def test_get_eureka_info_no_http_fallback(no_cast_eureka_info: MagicMock) -> None:
-    """Test that only HTTPS is tried after cast without the HTTP fallback."""
-    with (
-        patch(
-            "pychromecast.dial._get_status",
-            side_effect=urllib.error.URLError("no https"),
-        ) as get_status,
-        pytest.raises(urllib.error.URLError),
-    ):
-        _get_eureka_info(SERVICES, None, ["multizone"], 30, None, http_fallback=False)
-    assert no_cast_eureka_info.call_args[0][3] == 15
-    assert [call[0][2:5] for call in get_status.call_args_list] == [
-        ("/setup/eureka_info?params=multizone", True, 15),
-    ]
-
-
-def test_get_eureka_info_over_cast(no_cast_eureka_info: MagicMock) -> None:
-    """Test that HTTP isn't used when eureka_info is received over cast."""
-    no_cast_eureka_info.side_effect = None
-    no_cast_eureka_info.return_value = STATUS
-    with patch("pychromecast.dial._get_status") as get_status:
-        status = _get_eureka_info(SERVICES, None, ["device_info"], 30, None)
-    assert status == STATUS
-    get_status.assert_not_called()
-
-
-def test_get_eureka_info_unresolved() -> None:
-    """Test that nothing is queried when no service resolves."""
-    with (
-        patch("pychromecast.dial._get_status") as get_status,
-        pytest.raises(urllib.error.URLError),
-    ):
-        _get_eureka_info(set(), None, ["device_info"], 30, None)
-    get_status.assert_not_called()
-
-
-def _frame(namespace: str, payload: Any) -> bytes:
-    """Return a framed message from the platform receiver."""
-    msg = CastMessage()
-    msg.protocol_version = msg.CASTV2_1_0
-    msg.source_id = "receiver-0"
-    msg.destination_id = "sender-0"
-    msg.namespace = namespace
-    if isinstance(payload, bytes):
-        msg.payload_type = CastMessage.BINARY
-        msg.payload_binary = payload
-    else:
-        msg.payload_type = CastMessage.STRING
-        msg.payload_utf8 = json.dumps(payload)
-    return pack(">I", msg.ByteSize()) + msg.SerializeToString()
-
-
-def _setup_reply(data: Any, request_id: int = 1, code: int = 200) -> bytes:
-    return _frame(
-        NS_SETUP,
-        {
-            "type": "eureka_info",
-            "request_id": request_id,
-            "response_code": code,
-            "response_string": "OK" if code == 200 else "Error",
-            "data": data,
-        },
-    )
-
-
-class FakeCastSocket:
-    """A TLS socket of a cast device which sends prepared data in small chunks."""
-
-    def __init__(self, data: bytes) -> None:
-        self.received = b""
-        self._data = data
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        pass
-
-    def sendall(self, data: bytes) -> None:
-        self.received += data
-
-    def settimeout(self, timeout: float) -> None:
-        assert timeout > 0
-
-    def recv(self, size: int) -> bytes:
-        chunk, self._data = self._data[: min(size, 7)], self._data[min(size, 7) :]
-        return chunk
-
-    def messages(self) -> list[tuple[str, dict]]:
-        """Return the namespaces and payloads of the messages sent to the device."""
-        messages = []
-        data = self.received
-        while data:
-            (size,) = unpack(">I", data[:4])
-            msg = CastMessage()
-            msg.ParseFromString(data[4 : 4 + size])
-            assert msg.source_id == "sender-0"
-            assert msg.destination_id == "receiver-0"
-            messages.append((msg.namespace, json.loads(msg.payload_utf8)))
-            data = data[4 + size :]
-        return messages
-
-
-def _query_cast(data: bytes) -> tuple[Any, FakeCastSocket]:
-    sock = FakeCastSocket(data)
-    context = MagicMock()
-    context.wrap_socket.return_value = sock
-    with patch("socket.create_connection") as create_connection:
-        status = _get_eureka_info_cast(
-            "192.0.2.1", 8009, ["device_info", "multizone"], 10, context
-        )
-    assert create_connection.call_args[0] == (("192.0.2.1", 8009), 10)
-    return status, sock
-
-
-def test_get_eureka_info_cast() -> None:
-    """Test that eureka_info is requested on the setup namespace."""
-    status, sock = _query_cast(
-        _frame("urn:x-cast:com.google.cast.receiver", {"type": "RECEIVER_STATUS"})
-        + _frame(NS_SETUP, b"binary")
-        + _frame(NS_SETUP, ["not", "a", "dict"])
-        + _setup_reply({"name": "other request"}, request_id=0)
-        + _setup_reply(STATUS)
-    )
-    assert status == STATUS
-    assert sock.messages() == [
-        (NS_CONNECTION, connect_message()),
-        (
-            NS_SETUP,
-            {
-                "type": "eureka_info",
-                "request_id": 1,
-                "data": {"params": ["device_info", "multizone"]},
-            },
-        ),
-    ]
-
-
-@pytest.mark.parametrize(
-    ("data", "error"),
-    [
-        (b"", ConnectionError),
-        (_setup_reply(STATUS)[:-1], ConnectionError),
-        (pack(">I", 65537), ValueError),
-        (_setup_reply(STATUS, code=404), ValueError),
-        (_setup_reply(None), ValueError),
-        (_setup_reply(["not", "a", "dict"]), ValueError),
-        (pack(">I", 20) + b"\xff" * 20, DecodeError),
-    ],
-)
-def test_get_eureka_info_cast_failed(data: bytes, error: type[Exception]) -> None:
-    """Test that a closed connection or a bad reply raises."""
-    with pytest.raises(error):
-        _query_cast(data)
-
-
-def test_get_eureka_info_cast_timeout() -> None:
-    """Test that waiting for the reply times out."""
-    with (
-        patch("time.monotonic", side_effect=[0, 0, 11]),
-        pytest.raises(TimeoutError),
-    ):
-        _query_cast(_setup_reply(STATUS))
-
-
-def test_get_multizone_status_over_cast(no_cast_eureka_info: MagicMock) -> None:
-    """Test that the groups led by a device are read from eureka_info."""
-    no_cast_eureka_info.side_effect = None
-    no_cast_eureka_info.return_value = {
-        "multizone": {
-            "dynamic_groups": [],
-            "groups": [
-                {
-                    "cast_port": 32000,
-                    "elected_leader": "self",
-                    "name": "Group",
-                    "uuid": UUID_STR,
-                }
-            ],
-        }
-    }
-    status = get_multizone_status("192.0.2.1")
-    assert no_cast_eureka_info.call_args[0][:3] == (
-        "192.0.2.1",
-        8009,
-        ["multizone"],
-    )
-    assert status is not None
-    assert not status.dynamic_groups
-    assert [(g.uuid, g.host, g.port) for g in status.groups] == [
-        (UUID(UUID_STR), "192.0.2.1", 32000)
+        ("/setup/eureka_info?params=device_info,name", True, 15),
+        ("/setup/eureka_info?params=device_info,name", False, 15),
     ]
 
 
