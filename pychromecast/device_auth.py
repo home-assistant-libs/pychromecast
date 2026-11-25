@@ -86,6 +86,7 @@ from cryptography.x509.oid import NameOID, SignatureAlgorithmOID
 from google.protobuf.message import DecodeError
 
 from .device_auth_roots import CAST_ROOT_CA_PEM, EUREKA_ROOT_CA_PEM
+from .dial import _url_encode_hostname, _url_host_header
 
 # pylint: disable-next=no-name-in-module
 from .generated.cast_channel_pb2 import (
@@ -118,7 +119,6 @@ MIN_RSA_KEY_SIZE = 2048
 GROUP_ATTESTATION_PORT = 8443
 GROUP_ATTESTATION_PATH = "/setup/eureka_info?params=multizone"
 # Largest eureka_info response accepted
-MAX_EUREKA_INFO_SIZE = 1024 * 1024
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -279,6 +279,24 @@ class DeviceAuthResult:
             return UUID(self.tls_cert_cn)
         except ValueError:
             return None
+
+
+@dataclass(frozen=True)
+class DeviceAuthSettings:
+    """How a socket client authenticates the device it connects to.
+
+    :param enabled: Authenticate the device on every connect, and don't talk to
+                    a device which is not genuine. If False, any device is
+                    talked to and its identity is not verified.
+    :param expected_uuid: The UUID of the device or group. If set, a device
+                          whose TLS certificate is for another UUID fails
+                          authentication, unless the endpoint is a group the
+                          device proves it leads, see verify_group_leader. If
+                          None, the identity is not checked.
+    """
+
+    enabled: bool = True
+    expected_uuid: UUID | None = None
 
 
 class _AuthFailure(Exception):
@@ -556,13 +574,8 @@ def _extension[ExtensionT: x509.ExtensionType](
         ) from err
 
 
-def _check_path(path: Sequence[x509.Certificate]) -> None:
-    """Check the keys and constraints of a path [leaf, intermediates..., root].
-
-    The root is trusted as is, its validity and constraints are not checked.
-    Validity is checked by _check_path_validity, once the signature verified.
-    """
-    leaf = path[0]
+def _check_leaf(leaf: x509.Certificate) -> None:
+    """Check the key and the key usage of the device certificate."""
     _check_rsa_key(leaf, "device certificate")
     key_usage = _extension(leaf, x509.KeyUsage, "device certificate")
     if key_usage is None or not key_usage.digital_signature:
@@ -571,6 +584,12 @@ def _check_path(path: Sequence[x509.Certificate]) -> None:
             f"device certificate {_subject(leaf)} does not allow digital signatures",
         )
 
+
+def _check_path(path: Sequence[x509.Certificate]) -> None:
+    """Check the intermediates of a path [leaf, intermediates..., root].
+
+    The root is trusted as is, its validity and constraints are not checked.
+    """
     for index in range(1, len(path) - 1):
         intermediate = path[index]
         what = "intermediate certificate"
@@ -603,17 +622,11 @@ def _check_path_validity(path: Sequence[x509.Certificate], now: datetime) -> Non
         _check_validity(intermediate, "intermediate certificate", now)
 
 
-def _verify_chain(
+def _candidate_chain_paths(
     response: AuthResponse,
     roots: Sequence[x509.Certificate],
-) -> tuple[list[list[x509.Certificate]], dict[int, _AuthFailure]]:
-    """Find the paths from the device certificate to a root which pass constraints.
-
-    Returns the paths [leaf, intermediates..., root] whose keys and constraints
-    are acceptable, and the failure of each path which isn't, by index of the
-    path among all found. Validity is not checked. Raises the failure of the
-    first path found if no path is acceptable.
-    """
+) -> list[list[x509.Certificate]]:
+    """Return the signed paths [leaf, intermediates..., root] to a trusted root."""
     if len(response.intermediate_certificate) > MAX_INTERMEDIATES:
         raise _AuthFailure(
             DeviceAuthStatus.MALFORMED_REPLY,
@@ -626,25 +639,13 @@ def _verify_chain(
         _parse_cert(der, status, "intermediate certificate")
         for der in response.intermediate_certificate
     ]
-    # An expired or unusable intermediate may come before a usable one
     paths = list(_candidate_paths(leaf, intermediates, roots))
     if not paths:
         raise _AuthFailure(
             DeviceAuthStatus.CHAIN_UNTRUSTED,
             f"device certificate {_subject(leaf)} does not chain up to a trusted root",
         )
-    usable: list[list[x509.Certificate]] = []
-    failures: dict[int, _AuthFailure] = {}
-    for index, path in enumerate(paths):
-        try:
-            _check_path(path)
-        except _AuthFailure as failure:
-            failures[index] = failure
-            continue
-        usable.append(path)
-    if not usable:
-        raise failures[0]
-    return usable, failures
+    return paths
 
 
 def _verify_signature(
@@ -655,7 +656,7 @@ def _verify_signature(
 ) -> None:
     """Verify the signature over the echoed nonce and the TLS certificate."""
     key = leaf.public_key()
-    assert isinstance(key, rsa.RSAPublicKey)  # Checked by _check_path
+    assert isinstance(key, rsa.RSAPublicKey)  # Checked by _check_leaf
     try:
         key.verify(
             response.signature,
@@ -669,31 +670,24 @@ def _verify_signature(
         ) from err
 
 
-def _first_valid_path(
-    paths: list[list[x509.Certificate]],
-    failures: dict[int, _AuthFailure],
-    now: datetime,
+def _usable_path(
+    paths: list[list[x509.Certificate]], now: datetime
 ) -> list[x509.Certificate]:
-    """Return the first path valid now.
+    """Return the first path whose intermediates are acceptable and valid now.
 
-    If none is, raise the failure of the first path found, which may be a
-    constraint failure from _verify_chain.
+    An expired or unusable intermediate may come before a usable one. Raises an
+    ExceptionGroup with the failure of each path if none is usable.
     """
-    # The classification depends on the order of the paths: if the first path
-    # failed its constraints and the usable paths are expired, the constraint
-    # failure (not genuine) is reported rather than the expiry (clock). Either
-    # way the device fails authentication.
-    first_failure: _AuthFailure | None = failures.get(0)
+    failures: list[_AuthFailure] = []
     for path in paths:
         try:
+            _check_path(path)
             _check_path_validity(path, now)
         except _AuthFailure as failure:
-            if first_failure is None:
-                first_failure = failure
+            failures.append(failure)
             continue
         return path
-    assert first_failure is not None
-    raise first_failure
+    raise ExceptionGroup("no usable certificate path", failures)
 
 
 def _verify(
@@ -713,12 +707,13 @@ def _verify(
     hash_algorithm = _response_hash(response)
     tls_cert = _parse_tls_cert(peer_cert_der)
     assert peer_cert_der is not None  # Checked by _parse_tls_cert
-    paths, failures = _verify_chain(response, roots)
+    paths = _candidate_chain_paths(response, roots)
     # All paths start with the device certificate, which signed the reply
     leaf = paths[0][0]
+    _check_leaf(leaf)
     _verify_signature(response, leaf, peer_cert_der, hash_algorithm)
     _check_tls_cert_validity(tls_cert, now)
-    path = _first_valid_path(paths, failures, now)
+    path = _usable_path(paths, now)
 
     result = DeviceAuthResult(
         DeviceAuthStatus.VERIFIED,
@@ -782,8 +777,14 @@ def verify_auth_reply(
         return _verify(reply, nonce, peer_cert_der, expected_uuid, trust_roots, now)
     except _AuthFailure as failure:
         return failure.result()
+    except ExceptionGroup as group:
+        # No usable certificate path, report the failure of the first path
+        first = group.exceptions[0]
+        assert isinstance(first, _AuthFailure)
+        return first.result()
     except Exception as err:  # pylint: disable=broad-exception-caught
         # Fail closed if a malformed reply trips something unexpected
+        _LOGGER.debug("Unexpected error verifying the reply", exc_info=True)
         return DeviceAuthResult(
             DeviceAuthStatus.MALFORMED_REPLY,
             f"unexpected error verifying the reply: {err!r}",
@@ -846,8 +847,7 @@ def authenticate(
     """Authenticate the device on a newly connected TLS socket.
 
     Sends the challenge and waits for exactly one message, which must be the
-    reply. Nothing else is sent. The socket's timeout is changed, the caller
-    should restore it.
+    reply. Nothing else is sent.
 
     Returns a result for every authentication outcome, including no reply and
     the connection being closed. Other network errors are raised as OSError.
@@ -867,10 +867,14 @@ def authenticate(
     challenge = build_challenge(nonce)
     deadline = time.monotonic() + timeout
     sock.sendall(pack(">I", challenge.ByteSize()) + challenge.SerializeToString())
+    # _recv_exact changes the socket's timeout
+    socket_timeout = sock.gettimeout()
     try:
         reply = _recv_frame(sock, deadline)
     except _AuthFailure as failure:
         return failure.result()
+    finally:
+        sock.settimeout(socket_timeout)
     return verify_auth_reply(
         reply,
         nonce=nonce,
@@ -890,12 +894,6 @@ def _peer_host(sockaddr: tuple) -> str:
     if len(sockaddr) >= 4 and sockaddr[3]:
         return f"{sockaddr[0]}%{sockaddr[3]}"
     return str(sockaddr[0])
-
-
-def _host_header(address: str, port: int) -> str:
-    """Return the Host header for an IP address, without its IPv6 scope."""
-    address = address.partition("%")[0]
-    return f"[{address}]:{port}" if ":" in address else f"{address}:{port}"
 
 
 def _connect_pinned(
@@ -958,7 +956,9 @@ def _fetch_eureka_info(
             GROUP_ATTESTATION_PATH,
             headers={
                 # Devices reject a host name in the Host header
-                "Host": _host_header(tls.getpeername()[0], https_port),
+                "Host": _url_host_header(
+                    f"https://{_url_encode_hostname(tls.getpeername()[0])}:{https_port}"
+                ),
                 "Connection": "close",
             },
         )
@@ -968,16 +968,13 @@ def _fetch_eureka_info(
                 unavailable,
                 f"eureka_info request failed with HTTP status {response.status}",
             )
-        # Devices keep the connection open, don't read until EOF
-        body = response.read(MAX_EUREKA_INFO_SIZE + 1)
+        body = response.read()
     except (OSError, http.client.HTTPException) as err:
         raise _AuthFailure(unavailable, f"eureka_info request failed: {err!r}") from err
     finally:
         if conn is not None:
             conn.close()
         tls.close()
-    if len(body) > MAX_EUREKA_INFO_SIZE:
-        raise _AuthFailure(unavailable, "eureka_info response is too large")
     try:
         return json.loads(body)
     except ValueError as err:
@@ -1112,6 +1109,7 @@ def verify_group_leader(
     except _AuthFailure as failure:
         return failure.result()
     except Exception as err:  # pylint: disable=broad-exception-caught
+        _LOGGER.debug("Unexpected error checking the group leader", exc_info=True)
         return DeviceAuthResult(
             DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
             f"unexpected error checking the group leader: {err!r}",
@@ -1147,8 +1145,7 @@ def authenticate_endpoint(
     - else the result is UUID_MISMATCH.
 
     Returns a result for every authentication outcome. Other network errors are
-    raised as OSError. The socket's timeout is changed, the caller should
-    restore it.
+    raised as OSError.
     """
     deadline = time.monotonic() + timeout
     result = authenticate(

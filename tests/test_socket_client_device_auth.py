@@ -13,9 +13,11 @@ from struct import unpack
 import threading
 import time
 from typing import Any
+from contextlib import ExitStack
 from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID
 
+from cryptography import x509
 import pytest
 from device_auth_helpers import (
     NOW,
@@ -43,6 +45,7 @@ from pychromecast.device_auth import (
     NS_DEVICE_AUTH,
     DeviceAuthFailureClass,
     DeviceAuthResult,
+    DeviceAuthSettings,
     DeviceAuthStatus,
 )
 from pychromecast.error import (
@@ -113,10 +116,20 @@ def _close_client(client: SocketClient) -> None:
 
 @pytest.fixture(name="make_client")
 def make_client_fixture() -> Generator[Callable[..., SocketClient]]:
-    """Return a factory of socket clients, closed after the test."""
-    clients: list[SocketClient] = []
+    """Return a factory of socket clients, closed after the test.
 
-    def make(**kwargs: Any) -> SocketClient:
+    trust_roots replaces the bundled Google Cast roots until the end of the test.
+    """
+    clients: list[SocketClient] = []
+    patches = ExitStack()
+
+    def make(
+        *,
+        auth_enabled: bool = True,
+        expected_uuid: UUID | None = TEST_UUID,
+        trust_roots: list[x509.Certificate] | None = None,
+        **kwargs: Any,
+    ) -> SocketClient:
         options: dict[str, Any] = {
             "cast_type": "cast",
             "tries": 1,
@@ -124,16 +137,26 @@ def make_client_fixture() -> Generator[Callable[..., SocketClient]]:
             "retry_wait": 0.01,
             "services": {HostServiceInfo("192.0.2.1", 8009)},
             "zconf": None,
-            "expected_uuid": TEST_UUID,
+            "device_auth": DeviceAuthSettings(
+                enabled=auth_enabled, expected_uuid=expected_uuid
+            ),
         }
         options.update(kwargs)
+        if trust_roots is not None:
+            patches.enter_context(
+                patch(
+                    "pychromecast.device_auth.default_trust_roots",
+                    return_value=tuple(trust_roots),
+                )
+            )
         client = SocketClient(**options)
         clients.append(client)
         return client
 
-    yield make
-    for client in clients:
-        _close_client(client)
+    with patches:
+        yield make
+        for client in clients:
+            _close_client(client)
 
 
 class PeerSocket(socket.socket):
@@ -242,15 +265,12 @@ def test_auth_runs_before_register_and_connect(
         expected_uuid=TEST_UUID,
         is_group=False,
         timeout=5,
-        trust_roots=None,
     )
     assert client.device_auth_result is VERIFIED
     assert client.device_auth_result.verified
     assert client.socket is fake_tls.tls_sockets[0]
     assert recorder.statuses[-1].status == CONNECTION_STATUS_CONNECTED
     assert recorder.statuses[-1].device_auth is VERIFIED
-    # The socket timeout is restored
-    assert fake_tls.tls_sockets[0].gettimeout() == 5
 
 
 @pytest.mark.usefixtures("fake_tls")
@@ -363,8 +383,7 @@ def test_transient_logging(
         pytest.raises(ChromecastConnectionError),
     ):
         client.initialize_connection()
-    assert _retry_levels(caplog, "failed: no_reply") == [logging.INFO, logging.DEBUG]
-    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert _retry_levels(caplog, "failed: no_reply") == [logging.WARNING, logging.DEBUG]
 
 
 def _mismatch(cn: UUID = LEADER_UUID) -> DeviceAuthResult:
@@ -386,7 +405,7 @@ WRONG_IDENTITY_TEXT = "is genuine, but its certificate identifies it as"
 def test_wrong_identity_logging(
     make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test a wrong identity is only logged at debug level, it's left to consumers."""
+    """Test the first wrong identity is warned about, the next at debug level."""
     client = make_client(tries=3)
     client.retry_wait = 0
     client.fn = "Kitchen"
@@ -399,11 +418,14 @@ def test_wrong_identity_logging(
         pytest.raises(DeviceAuthenticationError),
     ):
         client.initialize_connection()
-    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
     message = next(
         r.getMessage() for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
     )
-    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.DEBUG] * 3
+    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [
+        logging.WARNING,
+        logging.DEBUG,
+        logging.DEBUG,
+    ]
     assert f"identifies it as {LEADER_UUID}, not Kitchen ({TEST_UUID})" in message
     assert "Another device may be using its old address" in message
     # The message is about the identity in the certificate, not about the address
@@ -478,7 +500,10 @@ def test_group_leader_change(
     assert failed is not None
     assert failed.status is DeviceAuthStatus.GROUP_NOT_LED
     assert failed.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    # The failure while the leader changed is warned about once
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    assert WRONG_IDENTITY_TEXT in warnings[0].getMessage()
 
 
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
@@ -511,7 +536,7 @@ def test_opt_out_skips_handshake(
 ) -> None:
     """Test opting out skips device authentication."""
     with caplog.at_level(logging.INFO, logger="pychromecast.socket_client"):
-        client = make_client(device_auth=False)
+        client = make_client(auth_enabled=False)
     # Opting out is intentional, it's logged but not warned about
     disabled = [
         record
@@ -543,8 +568,9 @@ def test_default_is_enabled() -> None:
         zconf=None,
     )
     try:
-        assert client.device_auth is True
-        assert client.expected_uuid is None
+        assert client.device_auth == DeviceAuthSettings()
+        assert client.device_auth.enabled
+        assert client.device_auth.expected_uuid is None
         assert client.device_auth_result is None
     finally:
         _close_client(client)
@@ -762,7 +788,7 @@ def _e2e_client(
     options: dict[str, Any] = {
         "services": {HostServiceInfo("127.0.0.1", port)},
         "timeout": 2,
-        "device_auth_trust_roots": [pki.root],
+        "trust_roots": [pki.root],
     }
     options.update(kwargs)
     return make_client(**options)
@@ -917,7 +943,7 @@ def test_e2e_opt_out_talks_to_fake(
 ) -> None:
     """Test opting out connects to a device which would fail authentication."""
     receiver = receiver_factory("wrong_sig")
-    client = _e2e_client(make_client, pki, receiver.port, device_auth=False)
+    client = _e2e_client(make_client, pki, receiver.port, auth_enabled=False)
     client.initialize_connection()
 
     assert client.is_connected
@@ -1173,7 +1199,7 @@ def test_setup_failure_after_auth_is_not_auth_failure(
     auth_enabled: bool,
 ) -> None:
     """Test a failure after DISABLED or VERIFIED ends with the generic error."""
-    client = make_client(device_auth=auth_enabled)
+    client = make_client(auth_enabled=auth_enabled)
     with (
         patch(
             "pychromecast.socket_client.authenticate_endpoint", return_value=VERIFIED
@@ -1199,8 +1225,8 @@ def test_group_network_failure_then_wrong_identity_logging(
 ) -> None:
     """Test a group which refuses connections, then a genuine non-leader answers.
 
-    The network failure is logged once at info level, the wrong identity only at
-    debug level, nothing is warned about.
+    The first network failure is logged at info level, the first authentication
+    failure as a warning, both are logged at debug level after that.
     """
     client = make_client(cast_type="group", tries=6)
     client.retry_wait = 0
@@ -1224,11 +1250,10 @@ def test_group_network_failure_then_wrong_identity_logging(
         pytest.raises(ChromecastConnectionError),
     ):
         client.initialize_connection()
-    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
     identity_levels = [
         r.levelno for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
     ]
-    assert identity_levels == [logging.DEBUG] * 3
+    assert identity_levels == [logging.WARNING, logging.DEBUG, logging.DEBUG]
     assert _retry_levels(caplog, "Failed to connect to service") == [
         logging.INFO,
         logging.DEBUG,
@@ -1366,7 +1391,35 @@ def _disconnect_while_connecting(
     assert not client.is_connected
     assert CONNECTION_STATUS_CONNECTED not in recorder.names
     assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+    _assert_cleaned_up(client)
     return recorder
+
+
+def _assert_cleaned_up(client: SocketClient) -> None:
+    """Assert the worker thread closed its socketpair and selector."""
+    assert client.socketpair[0].fileno() == -1
+    assert client.socketpair[1].fileno() == -1
+    assert client.selector.get_map() is None
+
+
+@pytest.mark.usefixtures("fake_tls")
+def test_run_cleans_up_after_failed_connect(
+    make_client: Callable[..., SocketClient],
+) -> None:
+    """Test the worker cleans up when it gives up connecting."""
+    client = make_client(tries=1)
+    recorder = StatusRecorder()
+    client.register_connection_listener(recorder)
+    with patch(
+        "pychromecast.socket_client.authenticate_endpoint",
+        return_value=_failure(DeviceAuthStatus.CHAIN_UNTRUSTED),
+    ):
+        client.start()
+        client.join(5)
+    assert not client.is_alive()
+    assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
+    assert recorder.names.count(CONNECTION_STATUS_DISCONNECTED) == 1
+    _assert_cleaned_up(client)
 
 
 def test_e2e_disconnect_during_challenge(
@@ -1410,7 +1463,7 @@ def test_e2e_disconnect_during_handshake_opted_out(
     """Test disconnect() during the TLS handshake, without device auth."""
     receiver = SlowHandshakeReceiver(pki, tmp_path)
     try:
-        client = _e2e_client(make_client, pki, receiver.port, device_auth=False)
+        client = _e2e_client(make_client, pki, receiver.port, auth_enabled=False)
         _disconnect_while_connecting(client, lambda: bool(receiver.handlers))
         receiver.wait_idle()
         assert all(messages == [] for messages in receiver.connections)
@@ -1438,8 +1491,8 @@ def test_e2e_group_without_multizone_is_wrong_identity(
     assert result is not None
     assert result.status is DeviceAuthStatus.GROUP_NOT_LED
     assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    # Only logged at debug level, not warned about
-    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.DEBUG]
+    # The first authentication failure is warned about
+    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.WARNING]
     receiver.wait_idle()
     assert len(receiver.connections[0]) == 1
 
@@ -1496,7 +1549,7 @@ def test_e2e_group_attested_at_connected_address(
     assert verify_group.call_args.args[:2] == ("127.0.0.1", receiver.port)
 
 
-# One warning per class of failure
+# The first authentication failure is warned about, whatever its class
 
 
 @pytest.mark.usefixtures("fake_tls", "connect_patches")
@@ -1505,15 +1558,16 @@ def test_e2e_group_attested_at_connected_address(
     [
         [DeviceAuthStatus.CERT_EXPIRED] + [DeviceAuthStatus.CHAIN_UNTRUSTED] * 3,
         [DeviceAuthStatus.CHAIN_UNTRUSTED] + [DeviceAuthStatus.CERT_EXPIRED] * 3,
+        [DeviceAuthStatus.NO_REPLY] + [DeviceAuthStatus.UUID_MISMATCH] * 3,
     ],
-    ids=["clock_first", "not_genuine_first"],
+    ids=["clock_first", "not_genuine_first", "transient_first"],
 )
-def test_warning_per_failure_class(
+def test_first_auth_failure_warns(
     make_client: Callable[..., SocketClient],
     caplog: pytest.LogCaptureFixture,
     statuses: list[DeviceAuthStatus],
 ) -> None:
-    """Test a warning of one class doesn't hide the first of another class."""
+    """Test only the first auth failure of a connection attempt is warned about."""
     client = make_client(tries=len(statuses))
     client.retry_wait = 0
     with (
@@ -1525,14 +1579,16 @@ def test_warning_per_failure_class(
         pytest.raises(DeviceAuthenticationError),
     ):
         client.initialize_connection()
-    levels = {
-        text: [r.levelno for r in caplog.records if text in r.getMessage()]
-        for text in ("system clock", "may not be a genuine")
-    }
-    for text_levels in levels.values():
-        assert text_levels.count(logging.WARNING) == 1
-        assert text_levels[0] == logging.WARNING
-    assert sorted(len(text_levels) for text_levels in levels.values()) == [1, 3]
+    levels = [
+        r.levelno
+        for r in caplog.records
+        if r.levelno < logging.ERROR
+        and (
+            "Device authentication" in r.getMessage()
+            or WRONG_IDENTITY_TEXT in r.getMessage()
+        )
+    ]
+    assert levels == [logging.WARNING, logging.DEBUG, logging.DEBUG, logging.DEBUG]
 
 
 # Wiring of authenticate_endpoint and of the logging
@@ -1563,7 +1619,7 @@ def test_network_failure_logging(
     auth_enabled: bool,
 ) -> None:
     """Test a network failure is logged at info once, for groups too."""
-    client = make_client(cast_type=cast_type, tries=3, device_auth=auth_enabled)
+    client = make_client(cast_type=cast_type, tries=3, auth_enabled=auth_enabled)
     client.retry_wait = 0
     text = "Failed to connect to service"
     with (

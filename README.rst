@@ -225,16 +225,14 @@ change between releases.
 A failure describes whoever answered at the device's address, which can
 change: for example after an IP address change another genuine device may
 answer for a while, and a group leader change takes a moment to be picked up
-from mDNS. Such failures, of class
-``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, are only logged at
-debug level, and consumers should apply a grace period before surfacing them.
-A failure of class
-``CLOCK`` comes from a genuine device whose certificates are not valid at the
-current time: the system clock is wrong, or the device needs a firmware
-update. Failures of class ``NOT_GENUINE`` and ``CLOCK`` are logged as a warning
-the first time. A failure of class ``TRANSIENT``, no usable answer to the
-challenge or a group check which couldn't be made, is logged like a network
-failure.
+from mDNS. Such failures are of class
+``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, and consumers should
+apply a grace period before surfacing them. A failure of class ``CLOCK`` comes
+from a genuine device whose certificates are not valid at the current time:
+the system clock is wrong, or the device needs a firmware update. A failure of
+class ``TRANSIENT`` means there was no usable answer to the challenge, or a
+group check couldn't be made. The first authentication failure of a connection
+attempt is logged as a warning, later ones at debug level.
 
 Unofficial receivers, such as receivers emulating a cast device, fail
 authentication by design. To talk to them, pass ``device_auth=False`` to

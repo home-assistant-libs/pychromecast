@@ -32,6 +32,7 @@ from .controllers.receiver import CastStatus, CastStatusListener
 from .device_auth import (  # noqa: F401
     DeviceAuthFailureClass,
     DeviceAuthResult,
+    DeviceAuthSettings,
     DeviceAuthStatus,
 )
 from .error import NotConnected, RequestTimeout
@@ -373,8 +374,9 @@ class Chromecast(CastStatusListener):
             retry_wait=retry_wait,
             services=cast_info.services,
             zconf=zconf,
-            device_auth=device_auth,
-            expected_uuid=cast_info.uuid,
+            device_auth=DeviceAuthSettings(
+                enabled=device_auth, expected_uuid=cast_info.uuid
+            ),
         )
 
         receiver_controller = self.socket_client.receiver_controller

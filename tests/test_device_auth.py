@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
+import logging
 import socket
 from struct import pack, unpack
 import threading
@@ -39,7 +40,6 @@ from cryptography.x509.oid import NameOID
 
 from pychromecast import device_auth
 from pychromecast.device_auth import (
-    MAX_EUREKA_INFO_SIZE,
     MAX_SIGNATURE_CHECKS,
     NONCE_LENGTH,
     NS_DEVICE_AUTH,
@@ -51,7 +51,6 @@ from pychromecast.device_auth import (
     build_challenge,
     _common_name,
     _candidate_paths,
-    _host_header,
     _peer_host,
     default_trust_roots,
     verify_auth_reply,
@@ -660,6 +659,10 @@ class FakeAuthSocket:
         """Record the timeout."""
         self.timeouts.append(timeout)
 
+    def gettimeout(self) -> float | None:
+        """Return the last timeout set, like a socket created with timeout 10."""
+        return self.timeouts[-1] if self.timeouts else 10.0
+
 
 def _genuine(pki: TestPKI) -> Callable[[bytes], list[bytes | BaseException]]:
     """Return a responder answering the challenge like a genuine device."""
@@ -683,12 +686,14 @@ def _authenticate(pki: TestPKI, sock: FakeAuthSocket) -> DeviceAuthResult:
 
 
 def test_authenticate_genuine(pki: TestPKI) -> None:
-    """Test authenticating a genuine device."""
+    """Test authenticating a genuine device, the socket timeout is restored."""
     sock = FakeAuthSocket(pki.tls_der, _genuine(pki))
     result = _authenticate(pki, sock)
     assert result.status is DeviceAuthStatus.VERIFIED
-    assert sock.timeouts
-    assert all(timeout is not None and timeout <= 1 for timeout in sock.timeouts)
+    *waits, restored = sock.timeouts
+    assert waits
+    assert all(timeout is not None and timeout <= 1 for timeout in waits)
+    assert restored == 10.0
 
 
 def test_authenticate_sends_only_challenge(pki: TestPKI) -> None:
@@ -709,9 +714,10 @@ def test_authenticate_sends_only_challenge(pki: TestPKI) -> None:
 
 
 def test_authenticate_timeout(pki: TestPKI) -> None:
-    """Test a device which does not reply."""
+    """Test a device which does not reply, the socket timeout is restored."""
     sock = FakeAuthSocket(pki.tls_der, lambda _: [TimeoutError("timed out")])
     assert _authenticate(pki, sock).status is DeviceAuthStatus.NO_REPLY
+    assert sock.timeouts[-1] == 10.0
 
 
 def test_authenticate_eof(pki: TestPKI) -> None:
@@ -1096,14 +1102,26 @@ def test_small_rsa_intermediate(pki: TestPKI) -> None:
     assert "1024" in result.detail
 
 
-def test_unexpected_error_fails_closed(pki: TestPKI) -> None:
-    """Test an unexpected error while verifying is a failure."""
-    with patch(
-        "pychromecast.device_auth._check_path", side_effect=RuntimeError("boom")
+def _logged_trace(caplog: pytest.LogCaptureFixture) -> str:
+    """Return the message of the exception logged with its trace at debug level."""
+    (record,) = [r for r in caplog.records if r.exc_info]
+    assert record.levelno == logging.DEBUG
+    assert record.exc_info is not None
+    return str(record.exc_info[1])
+
+
+def test_unexpected_error_fails_closed(
+    pki: TestPKI, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test an unexpected error while verifying is a failure, logged at debug."""
+    with (
+        patch("pychromecast.device_auth._check_path", side_effect=RuntimeError("boom")),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.device_auth"),
     ):
         result = _verify(pki, _reply(pki))
     assert result.status is DeviceAuthStatus.MALFORMED_REPLY
     assert "boom" in result.detail
+    assert _logged_trace(caplog) == "boom"
 
 
 # A real chain: the device certificate leaked with the shanocast receiver
@@ -1246,6 +1264,10 @@ class DripSocket:
         """Set the timeout."""
         self._sock.settimeout(timeout)
 
+    def gettimeout(self) -> float | None:
+        """Return the timeout."""
+        return self._sock.gettimeout()
+
     def close(self) -> None:
         """Stop dripping and close the sockets."""
         self._stop.set()
@@ -1273,30 +1295,24 @@ def test_authenticate_reply_deadline(pki: TestPKI) -> None:
     assert 0.9 <= elapsed < 1.2
 
 
-def test_group_eureka_info_size_limit(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a too large eureka_info is not used."""
-    body = eureka_info([group_entry(GROUP_PORT)])
-    body["padding"] = "x" * MAX_EUREKA_INFO_SIZE
-    server = eureka_factory(body=body)
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert "too large" in result.detail
-
-
 def test_group_unexpected_error_fails_closed(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
+    pki: TestPKI,
+    eureka_factory: Callable[..., EurekaServer],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test an unexpected error while checking a group is a failure."""
     server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    with patch(
-        "pychromecast.device_auth._check_group_leadership",
-        side_effect=RuntimeError("boom"),
+    with (
+        patch(
+            "pychromecast.device_auth._check_group_leadership",
+            side_effect=RuntimeError("boom"),
+        ),
+        caplog.at_level(logging.DEBUG, logger="pychromecast.device_auth"),
     ):
         result = _verify_group(pki, server)
     assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
     assert "boom" in result.detail
+    assert _logged_trace(caplog) == "boom"
 
 
 def test_default_attestation_port(pki: TestPKI) -> None:
@@ -1373,19 +1389,6 @@ def test_group_host_header_is_address(
     )
     assert result.status is DeviceAuthStatus.VERIFIED
     assert server.headers[-1]["Host"] == f"127.0.0.1:{server.port}"
-
-
-@pytest.mark.parametrize(
-    ("address", "header"),
-    [
-        ("192.168.0.161", "192.168.0.161:8443"),
-        ("::1", "[::1]:8443"),
-        ("fe80::1%eth0", "[fe80::1]:8443"),
-    ],
-)
-def test_host_header(address: str, header: str) -> None:
-    """Test the Host header for IPv4 and IPv6 addresses."""
-    assert _host_header(address, 8443) == header
 
 
 def test_group_host_header_ipv6(
@@ -1626,8 +1629,3 @@ def test_endpoint_group_attested_link_local(pki: TestPKI) -> None:
         result, verify_group = _authenticate_endpoint(pki, sock, is_group=True)
     assert result.status is DeviceAuthStatus.VERIFIED
     assert verify_group.call_args.args[:2] == ("fe80::1%3", GROUP_PORT)
-
-
-def test_host_header_of_scoped_address() -> None:
-    """Test the Host header never carries the scope."""
-    assert _host_header("fe80::1%3", 8443) == "[fe80::1]:8443"

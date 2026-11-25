@@ -38,8 +38,9 @@ def test_chromecast_device_auth(kwargs: dict[str, Any], device_auth: bool) -> No
     """Test Chromecast passes the device auth options to the socket client."""
     with patch("pychromecast.socket_client.SocketClient") as socket_client:
         pychromecast.Chromecast(_cast_info(), **kwargs)
-    assert socket_client.call_args.kwargs["device_auth"] is device_auth
-    assert socket_client.call_args.kwargs["expected_uuid"] == TEST_UUID
+    assert socket_client.call_args.kwargs[
+        "device_auth"
+    ] == pychromecast.DeviceAuthSettings(enabled=device_auth, expected_uuid=TEST_UUID)
 
 
 def test_chromecast_device_auth_result() -> None:

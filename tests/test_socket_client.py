@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
+from pychromecast.device_auth import DeviceAuthSettings
 from pychromecast.error import (
     ChromecastConnectionClosed,
     ChromecastConnectionError,
@@ -137,7 +138,7 @@ def socket_client_fixture() -> Generator[SocketClient]:
         zconf=None,
         # The fake sockets can't authenticate, device authentication is tested
         # in test_socket_client_device_auth.py
-        device_auth=False,
+        device_auth=DeviceAuthSettings(enabled=False),
     )
     yield client
     if client.socket is not None:
