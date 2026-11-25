@@ -336,10 +336,9 @@ class Chromecast(CastStatusListener):
                   pychromecast.start_discovery().
     :param device_auth: Authenticate the device on every connect, and don't talk to
                         a device which is not genuine, or whose certificate is not
-                        for cast_info.uuid. A cast group must be served by a
-                        genuine device which leads the group, checked through
-                        the device's eureka_info on port 8443. Set to False to
-                        talk to any device, the device's identity is then not
+                        for cast_info.uuid. A cast group is only checked to
+                        be served by a genuine device. Set to False to talk to
+                        any device, the device's identity is then not
                         verified.
     """
 

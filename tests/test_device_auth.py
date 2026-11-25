@@ -16,16 +16,12 @@ from device_auth_helpers import (
     NOW,
     OTHER_UUID,
     TEST_UUID,
-    EurekaServer,
-    eureka_info,
     frame,
-    group_entry,
     LEAF_KEY_USAGE,
     SHANOCAST_DEVICE_CERT_PEM,
     SHANOCAST_ICA_PEM,
     TestPKI,
     der,
-    refused_port,
     key_usage,
     make_cert,
     make_reply,
@@ -47,14 +43,11 @@ from pychromecast.device_auth import (
     DeviceAuthResult,
     DeviceAuthStatus,
     authenticate,
-    authenticate_endpoint,
     build_challenge,
     _common_name,
     _candidate_paths,
-    _peer_host,
     default_trust_roots,
     verify_auth_reply,
-    verify_group_leader,
 )
 from pychromecast.generated.cast_channel_pb2 import (  # pylint: disable=no-name-in-module
     SHA1,
@@ -629,10 +622,6 @@ class FakeAuthSocket:
         assert binary_form
         return self.peer_cert_der
 
-    def getpeername(self) -> tuple[str, int]:
-        """Return the address of the device."""
-        return ("192.0.2.1", GROUP_PORT)
-
     def sendall(self, data: bytes) -> None:
         """Record a message, and queue the response."""
         (length,) = unpack(">I", data[:4])
@@ -793,200 +782,12 @@ def test_authenticate_reply_split_across_reads(pki: TestPKI) -> None:
     assert _authenticate(pki, sock).status is DeviceAuthStatus.VERIFIED
 
 
-# verify_group_leader
-
-GROUP_PORT = 32149
-
-
-def _verify_group(
-    pki: TestPKI, server: EurekaServer, **kwargs: Any
-) -> DeviceAuthResult:
-    options: dict[str, Any] = {"timeout": 2, "https_port": server.port}
-    options.update(kwargs)
-    return verify_group_leader(
-        "127.0.0.1", GROUP_PORT, TEST_UUID, der(pki.leaf), **options
-    )
-
-
-def test_group_attested(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a device which leads the group on the port."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert server.requests == [b"GET /setup/eureka_info?params=multizone HTTP/1.1"]
-
-
-def test_group_attested_among_others(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test the group is found among other groups, its UUID in another format."""
-    other = group_entry(GROUP_PORT, uuid=str(OTHER_UUID), cast_port=32150)
-    entry = group_entry(GROUP_PORT, uuid=TEST_UUID.hex.upper())
-    server = eureka_factory(body=eureka_info([other, entry]))
-    assert _verify_group(pki, server).status is DeviceAuthStatus.VERIFIED
-
-
-def test_group_wrong_port(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a device which leads the group on another port."""
-    server = eureka_factory(
-        body=eureka_info([group_entry(GROUP_PORT, cast_port=32150)])
-    )
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_PORT_MISMATCH
-    assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    assert "32150" in result.detail
-
-
-def test_group_port_of_led_entry(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test only the port of an entry the device leads counts."""
-    led = group_entry(32150)
-    member = group_entry(GROUP_PORT, elected_leader="[::1]:10001")
-    server = eureka_factory(body=eureka_info([member, led]))
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_PORT_MISMATCH
-
-
-def test_group_attestation_no_answer(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a device which never answers the eureka_info request times out."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]), mode="silent")
-    start = time.monotonic()
-    result = _verify_group(pki, server, timeout=0.5)
-    elapsed = time.monotonic() - start
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert elapsed < 1.0
-
-
-def test_group_member_not_leader(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a member of the group which doesn't lead it."""
-    entry = group_entry(
-        GROUP_PORT, elected_leader="[::ffff:c0a8:a1]:10001", cast_port=None
-    )
-    server = eureka_factory(body=eureka_info([entry]))
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_NOT_LED
-    assert "[::ffff:c0a8:a1]:10001" in result.detail
-
-
-def test_group_missing(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a device which is not in the group."""
-    server = eureka_factory(
-        body=eureka_info([group_entry(GROUP_PORT, uuid=str(OTHER_UUID))])
-    )
-    assert _verify_group(pki, server).status is DeviceAuthStatus.GROUP_NOT_LED
-
-
-def test_group_leader_field_without_port(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test newer firmware, reportedly with leader instead of elected_leader."""
-    entry = group_entry(GROUP_PORT, elected_leader=None, leader="self", cast_port=None)
-    server = eureka_factory(body=eureka_info([entry]))
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert "port is not reported" in result.detail
-
-
-def test_group_dynamic(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a dynamic group, which has no port."""
-    entry = group_entry(GROUP_PORT, cast_port=None)
-    server = eureka_factory(body=eureka_info(dynamic_groups=[entry]))
-    assert _verify_group(pki, server).status is DeviceAuthStatus.VERIFIED
-
-
-def test_group_leader_cert_mismatch(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test port 8443 presenting another certificate with the same subject."""
-    key = rsa_key()
-    leaf = pki.make_leaf(public_key=key.public_key())
-    assert leaf.subject == pki.leaf.subject
-    server = eureka_factory(
-        cert=leaf, key=key, body=eureka_info([group_entry(GROUP_PORT)])
-    )
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH
-    assert result.failure_class is DeviceAuthFailureClass.NOT_GENUINE
-    # Nothing is requested from another device
-    server.wait_idle()
-    assert server.requests == []
-
-
-def test_group_no_device_cert(eureka_factory: Callable[..., EurekaServer]) -> None:
-    """Test attestation needs the authenticated device certificate."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    result = verify_group_leader(
-        "127.0.0.1", GROUP_PORT, TEST_UUID, None, https_port=server.port
-    )
-    assert result.status is DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH
-    # Nothing is contacted
-    server.wait_idle()
-    assert server.handlers == []
-
-
-def test_group_no_multizone_not_led(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test a genuine device without group information doesn't lead the group."""
-    server = eureka_factory(body={"name": "no multizone"})
-    result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_NOT_LED
-    assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    assert result.detail == "the device reports no group information"
-
-
-@pytest.mark.parametrize(
-    ("kwargs", "timeout"),
-    [
-        ({"mode": "close"}, 2),
-        ({"mode": "silent"}, 0.3),
-        ({"body": b"<html>not json</html>"}, 2),
-        ({"status": 403}, 2),
-    ],
-)
-def test_group_attestation_unavailable(
-    pki: TestPKI,
-    eureka_factory: Callable[..., EurekaServer],
-    kwargs: dict[str, Any],
-    timeout: float,
-) -> None:
-    """Test failures to fetch eureka_info."""
-    server = eureka_factory(**kwargs)
-    result = _verify_group(pki, server, timeout=timeout)
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert result.failure_class is DeviceAuthFailureClass.TRANSIENT
-
-
-def test_group_attestation_port_closed(pki: TestPKI) -> None:
-    """Test port 8443 refusing connections."""
-    with refused_port() as port:
-        result = verify_group_leader(
-            "127.0.0.1", GROUP_PORT, TEST_UUID, der(pki.leaf), https_port=port
-        )
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-
-
 def test_failure_classes() -> None:
     """Test the class of every status, as specified."""
     expected = {
         DeviceAuthStatus.VERIFIED: None,
         DeviceAuthStatus.DISABLED: None,
         DeviceAuthStatus.UUID_MISMATCH: DeviceAuthFailureClass.WRONG_IDENTITY,
-        DeviceAuthStatus.GROUP_NOT_LED: DeviceAuthFailureClass.WRONG_IDENTITY,
-        DeviceAuthStatus.GROUP_PORT_MISMATCH: DeviceAuthFailureClass.WRONG_IDENTITY,
         DeviceAuthStatus.CHAIN_UNTRUSTED: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.SIGNATURE_INVALID: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.NONCE_MISSING: DeviceAuthFailureClass.NOT_GENUINE,
@@ -996,24 +797,15 @@ def test_failure_classes() -> None:
         DeviceAuthStatus.AUTH_ERROR_REPLY: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.UNEXPECTED_MESSAGE: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.MALFORMED_REPLY: DeviceAuthFailureClass.NOT_GENUINE,
-        DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.TLS_CERT_MALFORMED: DeviceAuthFailureClass.NOT_GENUINE,
         DeviceAuthStatus.TLS_CERT_INVALID: DeviceAuthFailureClass.CLOCK,
         DeviceAuthStatus.CERT_EXPIRED: DeviceAuthFailureClass.CLOCK,
         DeviceAuthStatus.NO_REPLY: DeviceAuthFailureClass.TRANSIENT,
         DeviceAuthStatus.CONNECTION_CLOSED: DeviceAuthFailureClass.TRANSIENT,
-        DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE: DeviceAuthFailureClass.TRANSIENT,
     }
     assert set(expected) == set(DeviceAuthStatus)
     for status, failure_class in expected.items():
         assert DeviceAuthResult(status).failure_class is failure_class, status
-
-
-def test_device_cert_der_not_in_repr(pki: TestPKI) -> None:
-    """Test the device certificate is kept, but not shown in the repr."""
-    result = _verify(pki, _reply(pki))
-    assert result.device_cert_der == der(pki.leaf)
-    assert "device_cert_der" not in repr(result)
 
 
 # Only a genuine signature can lead to a failure blamed on the clock
@@ -1295,39 +1087,6 @@ def test_authenticate_reply_deadline(pki: TestPKI) -> None:
     assert 0.9 <= elapsed < 1.2
 
 
-def test_group_unexpected_error_fails_closed(
-    pki: TestPKI,
-    eureka_factory: Callable[..., EurekaServer],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test an unexpected error while checking a group is a failure."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    with (
-        patch(
-            "pychromecast.device_auth._check_group_leadership",
-            side_effect=RuntimeError("boom"),
-        ),
-        caplog.at_level(logging.DEBUG, logger="pychromecast.device_auth"),
-    ):
-        result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert "boom" in result.detail
-    assert _logged_trace(caplog) == "boom"
-
-
-def test_default_attestation_port(pki: TestPKI) -> None:
-    """Test eureka_info is fetched from GROUP_ATTESTATION_PORT by default."""
-    with (
-        refused_port() as port,
-        patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", port),
-        patch(
-            "pychromecast.device_auth._fetch_eureka_info", side_effect=RuntimeError
-        ) as fetch,
-    ):
-        verify_group_leader("127.0.0.1", GROUP_PORT, TEST_UUID, der(pki.leaf))
-    assert [call.args[1] for call in fetch.call_args_list] == [port]
-
-
 # Copilot review of PR 1333
 
 
@@ -1376,81 +1135,6 @@ def test_unusable_intermediate_beside_usable(pki: TestPKI) -> None:
     assert result.status is DeviceAuthStatus.CERT_INVALID
 
 
-def test_group_host_header_is_address(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test the Host header is the device's address, not a host name.
-
-    The devices reject a host name with 403.
-    """
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]), mode="ip_host")
-    result = verify_group_leader(
-        "localhost", GROUP_PORT, TEST_UUID, der(pki.leaf), https_port=server.port
-    )
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert server.headers[-1]["Host"] == f"127.0.0.1:{server.port}"
-
-
-def test_group_host_header_ipv6(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test an IPv6 address is bracketed in the Host header."""
-    try:
-        server = eureka_factory(
-            host="::1", body=eureka_info([group_entry(GROUP_PORT)]), mode="ip_host"
-        )
-    except OSError as err:
-        pytest.skip(f"IPv6 is not available: {err}")
-    result = verify_group_leader(
-        "::1", GROUP_PORT, TEST_UUID, der(pki.leaf), timeout=2, https_port=server.port
-    )
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert server.headers[-1]["Host"] == f"[::1]:{server.port}"
-
-
-def test_group_attestation_trickled_handshake(pki: TestPKI) -> None:
-    """Test a TLS handshake which never completes is bounded by the timeout."""
-    with socket.create_server(("127.0.0.1", 0)) as listener:
-        start = time.monotonic()
-        result = verify_group_leader(
-            "127.0.0.1",
-            GROUP_PORT,
-            TEST_UUID,
-            der(pki.leaf),
-            timeout=0.5,
-            https_port=listener.getsockname()[1],
-        )
-        elapsed = time.monotonic() - start
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert "timed out" in result.detail
-    assert elapsed < 1.0
-
-
-def test_group_attestation_closes_tls_socket(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test the pinned TLS socket is closed if the HTTP connection can't be made."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    sockets: list[Any] = []
-
-    def connect_pinned(*args: Any) -> Any:
-        sock = connect(*args)
-        sockets.append(sock)
-        return sock
-
-    connect = device_auth._connect_pinned  # pylint: disable=protected-access
-    with (
-        patch("pychromecast.device_auth._connect_pinned", side_effect=connect_pinned),
-        patch(
-            "pychromecast.device_auth.http.client.HTTPConnection",
-            side_effect=ValueError("bad host"),
-        ),
-    ):
-        result = _verify_group(pki, server)
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert sockets[0].fileno() == -1
-
-
 # authenticate_endpoint, the decision table
 
 
@@ -1473,159 +1157,3 @@ def _endpoint_socket(pki: TestPKI, cn: str, **kwargs: Any) -> FakeAuthSocket:
     """Return the socket of a genuine device whose TLS certificate is for cn."""
     tls_der = der(make_tls_cert(cn, pki.tls_key))
     return FakeAuthSocket(tls_der, _responder(pki, tls_der, **kwargs))
-
-
-def _authenticate_endpoint(
-    pki: TestPKI,
-    sock: FakeAuthSocket,
-    *,
-    is_group: bool,
-    expected_uuid: UUID | None = TEST_UUID,
-    attestation: DeviceAuthResult | None = None,
-) -> tuple[DeviceAuthResult, Any]:
-    """Authenticate an endpoint, return the result and the leader check mock."""
-    with patch(
-        "pychromecast.device_auth.verify_group_leader",
-        return_value=attestation
-        or DeviceAuthResult(DeviceAuthStatus.VERIFIED, "leads the group"),
-    ) as verify_group:
-        result = authenticate_endpoint(
-            sock,  # type: ignore[arg-type]
-            expected_uuid=expected_uuid,
-            is_group=is_group,
-            timeout=1,
-            trust_roots=[pki.root],
-            now=NOW,
-        )
-    return result, verify_group
-
-
-@pytest.mark.parametrize("is_group", [False, True])
-def test_endpoint_with_expected_uuid(pki: TestPKI, is_group: bool) -> None:
-    """Test a device presenting the expected UUID is accepted, on any port.
-
-    The device is accepted even if the endpoint is the port of a group it leads,
-    see the README: a spoofed mDNS record can point the device at such a port.
-    """
-    sock = _endpoint_socket(pki, str(TEST_UUID))
-    result, verify_group = _authenticate_endpoint(pki, sock, is_group=is_group)
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert result.uuid_checked
-    assert result.leader_uuid is None
-    verify_group.assert_not_called()
-    assert len(sock.sent) == 1
-
-
-def test_endpoint_device_with_other_uuid(pki: TestPKI) -> None:
-    """Test a device presenting another UUID is not checked as a group."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID))
-    result, verify_group = _authenticate_endpoint(pki, sock, is_group=False)
-    assert result.status is DeviceAuthStatus.UUID_MISMATCH
-    verify_group.assert_not_called()
-
-
-@pytest.mark.parametrize("is_group", [False, True])
-def test_endpoint_without_expected_uuid(pki: TestPKI, is_group: bool) -> None:
-    """Test the identity is not checked without an expected UUID."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID))
-    result, verify_group = _authenticate_endpoint(
-        pki, sock, is_group=is_group, expected_uuid=None
-    )
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert not result.uuid_checked
-    verify_group.assert_not_called()
-
-
-def test_endpoint_group_attested(pki: TestPKI) -> None:
-    """Test a group served by a genuine device which leads it."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID))
-    result, verify_group = _authenticate_endpoint(pki, sock, is_group=True)
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert result.uuid_checked
-    assert result.leader_uuid == OTHER_UUID
-    assert result.detail == "leads the group"
-    assert result.trust_root == "Test Root CA"
-    # At the address and port the socket is connected to
-    assert verify_group.call_args.args == (
-        "192.0.2.1",
-        GROUP_PORT,
-        TEST_UUID,
-        der(pki.leaf),
-    )
-    assert len(sock.sent) == 1
-
-
-@pytest.mark.parametrize(
-    "status",
-    [
-        DeviceAuthStatus.GROUP_NOT_LED,
-        DeviceAuthStatus.GROUP_PORT_MISMATCH,
-        DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-        DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH,
-    ],
-)
-def test_endpoint_group_not_attested(pki: TestPKI, status: DeviceAuthStatus) -> None:
-    """Test a group whose leadership fails keeps the device's details."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID))
-    result, _ = _authenticate_endpoint(
-        pki,
-        sock,
-        is_group=True,
-        attestation=DeviceAuthResult(status, "not attested"),
-    )
-    assert result.status is status
-    assert result.detail == "not attested"
-    assert result.tls_cert_cn == str(OTHER_UUID)
-    assert not result.uuid_checked
-    assert result.leader_uuid is None
-
-
-def test_endpoint_group_not_genuine(pki: TestPKI) -> None:
-    """Test a group endpoint which is not genuine is never checked further."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID), sign_over=b"something else")
-    result, verify_group = _authenticate_endpoint(pki, sock, is_group=True)
-    assert result.status is DeviceAuthStatus.SIGNATURE_INVALID
-    verify_group.assert_not_called()
-
-
-def test_endpoint_shared_deadline(pki: TestPKI) -> None:
-    """Test the group check gets the time left of one deadline."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID), delay=0.3)
-    _, verify_group = _authenticate_endpoint(pki, sock, is_group=True)
-    assert verify_group.call_args.kwargs["timeout"] <= 0.75
-
-
-def test_group_leader_no_time_left(
-    pki: TestPKI, eureka_factory: Callable[..., EurekaServer]
-) -> None:
-    """Test the group check with no time left doesn't connect."""
-    server = eureka_factory(body=eureka_info([group_entry(GROUP_PORT)]))
-    result = _verify_group(pki, server, timeout=0)
-    assert result.status is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    assert "no time left" in result.detail
-    server.wait_idle()
-    assert server.handlers == []
-
-
-@pytest.mark.parametrize(
-    ("sockaddr", "host"),
-    [
-        (("192.168.0.161", 32149), "192.168.0.161"),
-        (("2001:db8::1", 32149, 0, 0), "2001:db8::1"),
-        (("fe80::1", 32149, 0, 3), "fe80::1%3"),
-    ],
-)
-def test_peer_host(sockaddr: tuple, host: str) -> None:
-    """Test the host to connect to, with the scope of a link-local address."""
-    assert _peer_host(sockaddr) == host
-
-
-def test_endpoint_group_attested_link_local(pki: TestPKI) -> None:
-    """Test the group check keeps the scope of a link-local IPv6 peer."""
-    sock = _endpoint_socket(pki, str(OTHER_UUID))
-    with patch.object(
-        FakeAuthSocket, "getpeername", return_value=("fe80::1", GROUP_PORT, 0, 3)
-    ):
-        result, verify_group = _authenticate_endpoint(pki, sock, is_group=True)
-    assert result.status is DeviceAuthStatus.VERIFIED
-    assert verify_group.call_args.args[:2] == ("fe80::1%3", GROUP_PORT)

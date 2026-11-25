@@ -35,13 +35,9 @@ These checks are performed, in this order:
   UUID. Cast devices put their UUID there, and the signature covers the TLS
   certificate, so a genuine device can't claim another device's UUID.
 
-A cast group is served by its leader, whose TLS certificate names the leader,
-not the group. verify_group_leader checks that an authenticated device leads a
-group: it fetches the device's eureka_info over HTTPS on port 8443, where the
-device presents its device certificate. The certificate must be the one which
-just passed device authentication, and the device must list the group as led
-by itself, on the port which was connected to. authenticate_endpoint combines
-the checks for a cast endpoint, a device or a group.
+A cast group is served by its current leader, whose TLS certificate names the
+leader, not the group, and nothing the leader sends names the group. A group is
+only checked to be served by a genuine device, not by which one.
 
 The checks don't bind the connection to a port of the device: the TLS
 certificate and the signature are the same on every port of a device. A device
@@ -64,15 +60,12 @@ Things deliberately not done:
 
 import functools
 import hmac
-import http.client
-import json
 import logging
 import secrets
-import socket
 import ssl
 import time
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from struct import pack, unpack
@@ -86,7 +79,6 @@ from cryptography.x509.oid import NameOID, SignatureAlgorithmOID
 from google.protobuf.message import DecodeError
 
 from .device_auth_roots import CAST_ROOT_CA_PEM, EUREKA_ROOT_CA_PEM
-from .dial import _url_encode_hostname, _url_host_header
 
 # pylint: disable-next=no-name-in-module
 from .generated.cast_channel_pb2 import (
@@ -115,10 +107,6 @@ MAX_INTERMEDIATES = 8
 # Most certificate signatures checked while building a path
 MAX_SIGNATURE_CHECKS = 64
 MIN_RSA_KEY_SIZE = 2048
-# HTTPS port where cast devices serve eureka_info with their device certificate
-GROUP_ATTESTATION_PORT = 8443
-GROUP_ATTESTATION_PATH = "/setup/eureka_info?params=multizone"
-# Largest eureka_info response accepted
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -181,14 +169,6 @@ class DeviceAuthStatus(StrEnum):
     SIGNATURE_INVALID = "signature_invalid"
     # The device is genuine, but the TLS certificate is not for the expected UUID
     UUID_MISMATCH = "uuid_mismatch"
-    # The device is genuine, but doesn't lead the expected group
-    GROUP_NOT_LED = "group_not_led"
-    # The device is genuine and leads the expected group, but on another port
-    GROUP_PORT_MISMATCH = "group_port_mismatch"
-    # The device certificate on port 8443 is not the authenticated one
-    GROUP_LEADER_CERT_MISMATCH = "group_leader_cert_mismatch"
-    # The group leadership could not be checked, for example port 8443 is blocked
-    GROUP_ATTESTATION_UNAVAILABLE = "group_attestation_unavailable"
 
 
 class DeviceAuthFailureClass(StrEnum):
@@ -197,10 +177,9 @@ class DeviceAuthFailureClass(StrEnum):
     Part of the stable contract, unlike the DeviceAuthStatus values.
     """
 
-    # A genuine device answered, but it is another device or doesn't lead the
-    # group. Benign causes: a stale IP address, for example after a DHCP lease
-    # moved, or a group leader change. Consumers should apply a grace period
-    # before surfacing it.
+    # A genuine device answered, but it is another device. A benign cause is a
+    # stale IP address, for example after a DHCP lease moved. Consumers should
+    # apply a grace period before surfacing it.
     WRONG_IDENTITY = "wrong_identity"
     # The responder is not a genuine cast device, or misbehaves
     NOT_GENUINE = "not_genuine"
@@ -213,8 +192,6 @@ class DeviceAuthFailureClass(StrEnum):
 
 _FAILURE_CLASSES: dict[DeviceAuthStatus, DeviceAuthFailureClass] = {
     DeviceAuthStatus.UUID_MISMATCH: DeviceAuthFailureClass.WRONG_IDENTITY,
-    DeviceAuthStatus.GROUP_NOT_LED: DeviceAuthFailureClass.WRONG_IDENTITY,
-    DeviceAuthStatus.GROUP_PORT_MISMATCH: DeviceAuthFailureClass.WRONG_IDENTITY,
     DeviceAuthStatus.CHAIN_UNTRUSTED: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.SIGNATURE_INVALID: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.NONCE_MISSING: DeviceAuthFailureClass.NOT_GENUINE,
@@ -224,13 +201,11 @@ _FAILURE_CLASSES: dict[DeviceAuthStatus, DeviceAuthFailureClass] = {
     DeviceAuthStatus.AUTH_ERROR_REPLY: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.UNEXPECTED_MESSAGE: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.MALFORMED_REPLY: DeviceAuthFailureClass.NOT_GENUINE,
-    DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.TLS_CERT_MALFORMED: DeviceAuthFailureClass.NOT_GENUINE,
     DeviceAuthStatus.TLS_CERT_INVALID: DeviceAuthFailureClass.CLOCK,
     DeviceAuthStatus.CERT_EXPIRED: DeviceAuthFailureClass.CLOCK,
     DeviceAuthStatus.NO_REPLY: DeviceAuthFailureClass.TRANSIENT,
     DeviceAuthStatus.CONNECTION_CLOSED: DeviceAuthFailureClass.TRANSIENT,
-    DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE: DeviceAuthFailureClass.TRANSIENT,
 }
 
 
@@ -255,10 +230,6 @@ class DeviceAuthResult:
     uuid_checked: bool = False
     # Hash algorithm of the reply's signature, "sha256" or "sha1"
     hash_algorithm: str | None = None
-    # DER encoding of the device certificate, set if the device is genuine
-    device_cert_der: bytes | None = field(default=None, repr=False)
-    # UUID of the group leader, set when a group was verified through its leader
-    leader_uuid: UUID | None = None
 
     @property
     def verified(self) -> bool:
@@ -288,11 +259,9 @@ class DeviceAuthSettings:
     :param enabled: Authenticate the device on every connect, and don't talk to
                     a device which is not genuine. If False, any device is
                     talked to and its identity is not verified.
-    :param expected_uuid: The UUID of the device or group. If set, a device
-                          whose TLS certificate is for another UUID fails
-                          authentication, unless the endpoint is a group the
-                          device proves it leads, see verify_group_leader. If
-                          None, the identity is not checked.
+    :param expected_uuid: The UUID of the device. If set, a device whose TLS
+                          certificate is for another UUID fails authentication.
+                          None to not check the identity, as for a cast group.
     """
 
     enabled: bool = True
@@ -722,7 +691,6 @@ def _verify(
         trust_root=_common_name(path[-1].subject),
         tls_cert_cn=_common_name(tls_cert.subject),
         hash_algorithm=hash_algorithm.name,
-        device_cert_der=response.client_auth_certificate,
     )
     # The identity is checked last, a mismatch means the device is genuine
     if expected_uuid is None:
@@ -882,301 +850,4 @@ def authenticate(
         expected_uuid=expected_uuid,
         trust_roots=trust_roots,
         now=now,
-    )
-
-
-def _peer_host(sockaddr: tuple) -> str:
-    """Return the numeric host of a socket address, with any IPv6 scope.
-
-    A link-local IPv6 address can only be connected to with its scope, which
-    is not part of the address string, but the fourth element of the tuple.
-    """
-    if len(sockaddr) >= 4 and sockaddr[3]:
-        return f"{sockaddr[0]}%{sockaddr[3]}"
-    return str(sockaddr[0])
-
-
-def _connect_pinned(
-    host: str, https_port: int, device_cert_der: bytes, timeout: float
-) -> ssl.SSLSocket:
-    """Connect over TLS to a device which must present device_cert_der."""
-    unavailable = DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    try:
-        # The timeout applies to the connect, the handshake and each read
-        raw = socket.create_connection((host, https_port), timeout)
-    except OSError as err:
-        raise _AuthFailure(
-            unavailable, f"can't connect to port {https_port}: {err!r}"
-        ) from err
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    try:
-        try:
-            tls = context.wrap_socket(raw)
-        except OSError as err:
-            raise _AuthFailure(
-                unavailable, f"TLS handshake on port {https_port} failed: {err!r}"
-            ) from err
-    except BaseException:
-        raw.close()
-        raise
-    # The TLS handshake proved the device holds the certificate's key
-    if tls.getpeercert(binary_form=True) != device_cert_der:
-        tls.close()
-        raise _AuthFailure(
-            DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH,
-            f"the certificate on port {https_port} is not the device "
-            "certificate which passed device authentication",
-        )
-    return tls
-
-
-def _fetch_eureka_info(
-    host: str, https_port: int, device_cert_der: bytes, timeout: float
-) -> object:
-    """Fetch eureka_info from a device presenting the device certificate.
-
-    The connect, the TLS handshake and each read are bounded by timeout. The
-    response is only read from the device which proved it holds the device
-    certificate's key, on the local network, so a whole-response deadline isn't
-    needed.
-    """
-    unavailable = DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    if timeout <= 0:
-        raise _AuthFailure(unavailable, "no time left to fetch eureka_info")
-    tls = _connect_pinned(host, https_port, device_cert_der, timeout)
-    conn: http.client.HTTPConnection | None = None
-    try:
-        # Plain HTTP over the TLS socket which was already set up
-        conn = http.client.HTTPConnection(host, https_port, timeout=timeout)
-        conn.sock = tls
-        conn.request(
-            "GET",
-            GROUP_ATTESTATION_PATH,
-            headers={
-                # Devices reject a host name in the Host header
-                "Host": _url_host_header(
-                    f"https://{_url_encode_hostname(tls.getpeername()[0])}:{https_port}"
-                ),
-                "Connection": "close",
-            },
-        )
-        response = conn.getresponse()
-        if response.status != 200:
-            raise _AuthFailure(
-                unavailable,
-                f"eureka_info request failed with HTTP status {response.status}",
-            )
-        body = response.read()
-    except (OSError, http.client.HTTPException) as err:
-        raise _AuthFailure(unavailable, f"eureka_info request failed: {err!r}") from err
-    finally:
-        if conn is not None:
-            conn.close()
-        tls.close()
-    try:
-        return json.loads(body)
-    except ValueError as err:
-        raise _AuthFailure(
-            unavailable, f"eureka_info response is not JSON: {err}"
-        ) from err
-
-
-def _multizone_groups(eureka_info: object) -> list[dict] | None:
-    """Return the groups and dynamic groups of eureka_info.
-
-    Returns None if eureka_info has no multizone information.
-    """
-    multizone = eureka_info.get("multizone") if isinstance(eureka_info, dict) else None
-    if not isinstance(multizone, dict):
-        return None
-    entries: list[dict] = []
-    for key in ("groups", "dynamic_groups"):
-        groups = multizone.get(key)
-        if isinstance(groups, list):
-            entries.extend(entry for entry in groups if isinstance(entry, dict))
-    return entries
-
-
-def _is_led(entry: dict) -> bool:
-    """Return True if a group entry of eureka_info is led by the device."""
-    # Some firmware reportedly renames elected_leader to leader
-    return "self" in (entry.get("elected_leader"), entry.get("leader"))
-
-
-def _group_entries(eureka_info: object, group_uuid: UUID) -> list[dict]:
-    """Return the entries of eureka_info for a group."""
-    groups = _multizone_groups(eureka_info)
-    if groups is None:
-        # The genuine device answered, but it knows of no group
-        raise _AuthFailure(
-            DeviceAuthStatus.GROUP_NOT_LED,
-            "the device reports no group information",
-        )
-    entries = []
-    for entry in groups:
-        if not isinstance(entry.get("uuid"), str):
-            continue
-        try:
-            if UUID(entry["uuid"]) == group_uuid:
-                entries.append(entry)
-        except ValueError:
-            continue
-    return entries
-
-
-def _check_group_leadership(
-    eureka_info: object, group_uuid: UUID, port: int
-) -> DeviceAuthResult:
-    """Check eureka_info lists the group as led by the device, on the port."""
-    entries = _group_entries(eureka_info, group_uuid)
-    if not entries:
-        raise _AuthFailure(
-            DeviceAuthStatus.GROUP_NOT_LED,
-            f"the device is not a member of group {group_uuid}",
-        )
-    led = [entry for entry in entries if _is_led(entry)]
-    if not led:
-        leader = entries[0].get("elected_leader") or entries[0].get("leader")
-        raise _AuthFailure(
-            DeviceAuthStatus.GROUP_NOT_LED,
-            f"the device does not lead group {group_uuid}, the leader is {leader!r}",
-        )
-    for entry in led:
-        cast_port = entry.get("cast_port")
-        if cast_port == port:
-            return DeviceAuthResult(
-                DeviceAuthStatus.VERIFIED,
-                f"the device leads group {group_uuid} on port {port}",
-            )
-        if cast_port is None:
-            # Dynamic groups and some firmware don't report the port
-            _LOGGER.debug(
-                "Group %s is led by the device, its port is not reported and "
-                "can't be checked",
-                group_uuid,
-            )
-            return DeviceAuthResult(
-                DeviceAuthStatus.VERIFIED,
-                f"the device leads group {group_uuid}, its port is not reported",
-            )
-    raise _AuthFailure(
-        DeviceAuthStatus.GROUP_PORT_MISMATCH,
-        f"the device leads group {group_uuid} on port {led[0].get('cast_port')}, "
-        f"not on port {port}",
-    )
-
-
-def verify_group_leader(
-    host: str,
-    port: int,
-    group_uuid: UUID,
-    device_cert_der: bytes | None,
-    *,
-    timeout: float = DEVICE_AUTH_TIMEOUT,
-    https_port: int | None = None,
-) -> DeviceAuthResult:
-    """Verify an authenticated device leads a group on host:port.
-
-    :param host: The numeric address of the device, as connected for device
-                 authentication. A host name would be resolved again, and the
-                 fetch is only bounded by timeout once connected.
-    :param port: The port of the group endpoint.
-    :param group_uuid: The UUID of the group.
-    :param device_cert_der: The device certificate which passed device
-                            authentication on host:port.
-    :param timeout: The time allowed to fetch eureka_info, in seconds.
-    :param https_port: The port to fetch eureka_info from, None for
-                       GROUP_ATTESTATION_PORT.
-
-    Fetches eureka_info from https_port, where the device must present
-    device_cert_der. The device must list the group as led by itself, on port
-    if it reports the port. Returns a VERIFIED result or a failure, never
-    raises.
-    """
-    if device_cert_der is None:
-        # A programming error, only genuine devices have a device certificate
-        return DeviceAuthResult(
-            DeviceAuthStatus.GROUP_LEADER_CERT_MISMATCH,
-            "no authenticated device certificate to compare with",
-        )
-    try:
-        eureka_info = _fetch_eureka_info(
-            host, https_port or GROUP_ATTESTATION_PORT, device_cert_der, timeout
-        )
-        return _check_group_leadership(eureka_info, group_uuid, port)
-    except _AuthFailure as failure:
-        return failure.result()
-    except Exception as err:  # pylint: disable=broad-exception-caught
-        _LOGGER.debug("Unexpected error checking the group leader", exc_info=True)
-        return DeviceAuthResult(
-            DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-            f"unexpected error checking the group leader: {err!r}",
-        )
-
-
-def authenticate_endpoint(
-    sock: ssl.SSLSocket,
-    *,
-    expected_uuid: UUID | None,
-    is_group: bool,
-    timeout: float = DEVICE_AUTH_TIMEOUT,
-    trust_roots: Sequence[x509.Certificate] | None = None,
-    now: datetime | None = None,
-) -> DeviceAuthResult:
-    """Authenticate the cast endpoint, device or group, on a new TLS socket.
-
-    :param sock: The newly connected TLS socket.
-    :param expected_uuid: The UUID of the device or group, None to not check
-                          the identity.
-    :param is_group: True if the endpoint is a cast group.
-    :param timeout: The time allowed for all checks, in seconds.
-    :param trust_roots: The trusted roots, None for the bundled Cast roots.
-    :param now: The current time, None to use the system clock.
-
-    The device must be genuine, see authenticate. Then:
-
-    - if expected_uuid is None, the identity is not checked;
-    - if the TLS certificate is for expected_uuid, the endpoint is that
-      device, on whichever port;
-    - else, if the endpoint is a group, the device must lead the group, see
-      verify_group_leader, at the address and port the socket is connected to;
-    - else the result is UUID_MISMATCH.
-
-    Returns a result for every authentication outcome. Other network errors are
-    raised as OSError.
-    """
-    deadline = time.monotonic() + timeout
-    result = authenticate(
-        sock,
-        expected_uuid=expected_uuid,
-        timeout=timeout,
-        trust_roots=trust_roots,
-        now=now,
-    )
-    # A group is served by its leader, whose certificate names the leader
-    if (
-        result.status is not DeviceAuthStatus.UUID_MISMATCH
-        or not is_group
-        or expected_uuid is None
-    ):
-        return result
-    # The address as connected: a host name won't be resolved again
-    peer = sock.getpeername()
-    attestation = verify_group_leader(
-        _peer_host(peer),
-        peer[1],
-        expected_uuid,
-        result.device_cert_der,
-        timeout=max(deadline - time.monotonic(), 0.0),
-    )
-    if not attestation.verified:
-        return replace(result, status=attestation.status, detail=attestation.detail)
-    return replace(
-        result,
-        status=DeviceAuthStatus.VERIFIED,
-        detail=attestation.detail,
-        uuid_checked=True,
-        leader_uuid=result.tls_cert_uuid,
     )

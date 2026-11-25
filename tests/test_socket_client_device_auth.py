@@ -1,7 +1,6 @@
 """Tests for device authentication in pychromecast.socket_client."""
 
 from collections.abc import Callable, Generator
-from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
@@ -23,13 +22,9 @@ from device_auth_helpers import (
     NOW,
     OTHER_UUID,
     TEST_UUID,
-    EurekaServer,
     TestPKI,
     TLSServer,
-    eureka_info,
     frame,
-    group_entry,
-    refused_port,
     der,
     key_usage,
     make_cert,
@@ -40,10 +35,8 @@ from device_auth_helpers import (
 
 from pychromecast.controllers.heartbeat import NS_HEARTBEAT
 from pychromecast.controllers.receiver import NS_RECEIVER, CastStatus
-from pychromecast import device_auth
 from pychromecast.device_auth import (
     NS_DEVICE_AUTH,
-    DeviceAuthFailureClass,
     DeviceAuthResult,
     DeviceAuthSettings,
     DeviceAuthStatus,
@@ -211,7 +204,7 @@ def test_auth_failure_does_not_connect(
     wakeup = client.wakeup_selector_key
     result = _failure(DeviceAuthStatus.CHAIN_UNTRUSTED)
     with (
-        patch("pychromecast.socket_client.authenticate_endpoint", return_value=result),
+        patch("pychromecast.socket_client.authenticate", return_value=result),
         patch.object(client.receiver_controller, "update_status") as update_status,
         patch.object(client.heartbeat_controller, "ping") as ping,
         pytest.raises(ChromecastConnectionError, match="chain_untrusted"),
@@ -244,7 +237,7 @@ def test_auth_runs_before_register_and_connect(
     auth = Mock(return_value=VERIFIED)
     manager.attach_mock(auth, "authenticate")
     with (
-        patch("pychromecast.socket_client.authenticate_endpoint", auth),
+        patch("pychromecast.socket_client.authenticate", auth),
         patch.object(
             client.selector, "register", wraps=client.selector.register
         ) as register,
@@ -261,10 +254,7 @@ def test_auth_runs_before_register_and_connect(
         "update_status",
     ]
     auth.assert_called_once_with(
-        fake_tls.tls_sockets[0],
-        expected_uuid=TEST_UUID,
-        is_group=False,
-        timeout=5,
+        fake_tls.tls_sockets[0], expected_uuid=TEST_UUID, timeout=5
     )
     assert client.device_auth_result is VERIFIED
     assert client.device_auth_result.verified
@@ -278,17 +268,12 @@ def test_auth_timeout_capped(make_client: Callable[..., SocketClient]) -> None:
     """Test the handshake timeout is at most DEVICE_AUTH_TIMEOUT."""
     client = make_client(timeout=30)
     with (
-        patch(
-            "pychromecast.socket_client.authenticate_endpoint", return_value=VERIFIED
-        ) as auth,
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED) as auth,
         patch.object(client.receiver_controller, "update_status"),
         patch.object(client.heartbeat_controller, "ping"),
     ):
         client.initialize_connection()
     assert auth.call_args.kwargs["timeout"] == 10
-
-
-LEADER_UUID = OTHER_UUID
 
 
 def _retry_levels(caplog: pytest.LogCaptureFixture, text: str) -> list[int]:
@@ -323,7 +308,7 @@ def test_not_genuine_logging(
     no_nonce = _failure(DeviceAuthStatus.NONCE_MISSING)
     text = "may not be a genuine Cast device"
     with (
-        patch("pychromecast.socket_client.authenticate_endpoint") as auth,
+        patch("pychromecast.socket_client.authenticate") as auth,
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
     ):
         auth.side_effect = [untrusted, untrusted, no_nonce]
@@ -353,7 +338,7 @@ def test_clock_logging(
     client.retry_wait = 0
     with (
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             return_value=_failure(DeviceAuthStatus.CERT_EXPIRED),
         ),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
@@ -376,7 +361,7 @@ def test_transient_logging(
     client.retry_wait = 0
     with (
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             return_value=_failure(DeviceAuthStatus.NO_REPLY),
         ),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
@@ -386,7 +371,7 @@ def test_transient_logging(
     assert _retry_levels(caplog, "failed: no_reply") == [logging.WARNING, logging.DEBUG]
 
 
-def _mismatch(cn: UUID = LEADER_UUID) -> DeviceAuthResult:
+def _mismatch(cn: UUID = OTHER_UUID) -> DeviceAuthResult:
     return DeviceAuthResult(
         DeviceAuthStatus.UUID_MISMATCH,
         f"TLS certificate CN {str(cn)!r} does not match",
@@ -394,7 +379,6 @@ def _mismatch(cn: UUID = LEADER_UUID) -> DeviceAuthResult:
         trust_root="Test Root CA",
         tls_cert_cn=str(cn),
         hash_algorithm="sha256",
-        device_cert_der=b"device cert",
     )
 
 
@@ -411,7 +395,7 @@ def test_wrong_identity_logging(
     client.fn = "Kitchen"
     with (
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             side_effect=[_mismatch()] * 3,
         ),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
@@ -426,7 +410,7 @@ def test_wrong_identity_logging(
         logging.DEBUG,
         logging.DEBUG,
     ]
-    assert f"identifies it as {LEADER_UUID}, not Kitchen ({TEST_UUID})" in message
+    assert f"identifies it as {OTHER_UUID}, not Kitchen ({TEST_UUID})" in message
     assert "Another device may be using its old address" in message
     # The message is about the identity in the certificate, not about the address
     assert "IP address change" not in message
@@ -452,7 +436,7 @@ def test_auth_failure_uses_backoff(
     with (
         patch("pychromecast.socket_client.time", fake_time),
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             return_value=_failure(DeviceAuthStatus.SIGNATURE_INVALID),
         ) as auth,
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
@@ -470,66 +454,6 @@ def test_auth_failure_uses_backoff(
     assert sleeps == [1, 1, 1]
 
 
-@pytest.mark.usefixtures("connect_patches", "fake_tls")
-def test_group_leader_change(
-    make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
-) -> None:
-    """Test a group whose leader changes during connecting recovers silently."""
-    client = make_client(cast_type="group", tries=2)
-    client.retry_wait = 0
-    recorder = StatusRecorder()
-    client.register_connection_listener(recorder)
-    not_led = replace(
-        _mismatch(), status=DeviceAuthStatus.GROUP_NOT_LED, detail="not the leader"
-    )
-    with (
-        patch(
-            "pychromecast.socket_client.authenticate_endpoint",
-            side_effect=[not_led, VERIFIED],
-        ),
-        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-    ):
-        client.initialize_connection()
-    assert recorder.names == [
-        CONNECTION_STATUS_CONNECTING,
-        CONNECTION_STATUS_FAILED_AUTH,
-        CONNECTION_STATUS_CONNECTING,
-        CONNECTION_STATUS_CONNECTED,
-    ]
-    failed = recorder.statuses[1].device_auth
-    assert failed is not None
-    assert failed.status is DeviceAuthStatus.GROUP_NOT_LED
-    assert failed.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    # The failure while the leader changed is warned about once
-    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len(warnings) == 1
-    assert WRONG_IDENTITY_TEXT in warnings[0].getMessage()
-
-
-@pytest.mark.usefixtures("connect_patches", "fake_tls")
-def test_group_attestation_failure_retried(
-    make_client: Callable[..., SocketClient],
-) -> None:
-    """Test a group which can't be attested fails authentication and is retried."""
-    client = make_client(cast_type="group", tries=2)
-    client.retry_wait = 0
-    unavailable = replace(
-        _mismatch(),
-        status=DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE,
-        detail="port 8443 is blocked",
-    )
-    with (
-        patch(
-            "pychromecast.socket_client.authenticate_endpoint", return_value=unavailable
-        ) as auth,
-        pytest.raises(DeviceAuthenticationError),
-    ):
-        client.initialize_connection()
-    assert auth.call_count == 2
-    assert auth.call_args.kwargs["is_group"] is True
-    assert client.device_auth_result is unavailable
-
-
 @pytest.mark.usefixtures("fake_tls")
 def test_opt_out_skips_handshake(
     make_client: Callable[..., SocketClient], caplog: pytest.LogCaptureFixture
@@ -545,7 +469,7 @@ def test_opt_out_skips_handshake(
     ]
     assert [record.levelno for record in disabled] == [logging.INFO]
     with (
-        patch("pychromecast.socket_client.authenticate_endpoint") as auth,
+        patch("pychromecast.socket_client.authenticate") as auth,
         patch.object(client.receiver_controller, "update_status") as update_status,
         patch.object(client.heartbeat_controller, "ping"),
     ):
@@ -585,7 +509,7 @@ def test_auth_network_error_reports_failed(
     client.register_connection_listener(recorder)
     with (
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             side_effect=ConnectionResetError("reset"),
         ),
         pytest.raises(ChromecastConnectionError),
@@ -770,16 +694,6 @@ def receiver_factory_fixture(
     yield make
     for server in servers:
         server.close()
-
-
-@pytest.fixture(name="default_eureka", autouse=True)
-def default_eureka_fixture(
-    eureka_factory: Callable[..., EurekaServer],
-) -> Generator[EurekaServer]:
-    """Serve the eureka_info of the test device, which leads no group."""
-    server = eureka_factory()
-    with patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", server.port):
-        yield server
 
 
 def _e2e_client(
@@ -1023,111 +937,21 @@ def test_e2e_selector_not_registered_on_failure(
     assert list(client.selector.get_map().values()) == [client.wakeup_selector_key]
 
 
-def test_e2e_group_endpoint_with_own_uuid(
+def test_e2e_group_served_by_genuine_leader(
     make_client: Callable[..., SocketClient],
     receiver_factory: Callable[..., FakeReceiver],
-    eureka_factory: Callable[..., EurekaServer],
     pki: TestPKI,
 ) -> None:
-    """Test an endpoint labelled a group which presents the expected UUID.
-
-    It's accepted without fetching eureka_info, whatever the port.
-    """
-    receiver = receiver_factory()
-    eureka = eureka_factory(body=eureka_info([group_entry(1)]))
+    """Test a group served by a genuine device with another UUID is accepted."""
+    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
     client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    with patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", eureka.port):
-        client.initialize_connection()
+    client.initialize_connection()
 
     assert client.is_connected
     assert client.device_auth_result is not None
-    assert client.device_auth_result.uuid_checked
-    assert client.device_auth_result.leader_uuid is None
-    assert eureka.handlers == []
-
-
-def test_e2e_group_attested(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    eureka_factory: Callable[..., EurekaServer],
-    pki: TestPKI,
-) -> None:
-    """Test a group served by its leader."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    eureka = eureka_factory(body=eureka_info([group_entry(receiver.port)]))
-    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    with patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", eureka.port):
-        client.initialize_connection()
-
-    assert client.is_connected
-    result = client.device_auth_result
-    assert result is not None
-    assert result.verified
-    assert result.uuid_checked
-    assert result.leader_uuid == OTHER_UUID
-    assert eureka.requests == [b"GET /setup/eureka_info?params=multizone HTTP/1.1"]
-
-
-@pytest.mark.parametrize(
-    ("entry", "status"),
-    [
-        ({"elected_leader": "[::ffff:c0a8:a1]:10001"}, DeviceAuthStatus.GROUP_NOT_LED),
-        ({"cast_port": 1}, DeviceAuthStatus.GROUP_PORT_MISMATCH),
-        ({"uuid": str(OTHER_UUID)}, DeviceAuthStatus.GROUP_NOT_LED),
-    ],
-)
-def test_e2e_group_not_attested(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    eureka_factory: Callable[..., EurekaServer],
-    pki: TestPKI,
-    entry: dict[str, Any],
-    status: DeviceAuthStatus,
-) -> None:
-    """Test a group which is not led by the device only receives the challenge."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    eureka = eureka_factory(body=eureka_info([group_entry(receiver.port, **entry)]))
-    client = _e2e_client(make_client, pki, receiver.port, cast_type="group", tries=2)
-    client.retry_wait = 0
-    with (
-        patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", eureka.port),
-        pytest.raises(ChromecastConnectionError),
-    ):
-        client.initialize_connection()
-
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.status is status
-    receiver.wait_idle()
-    # Retried, and each connection only received the challenge
-    assert len(receiver.connections) == 2
-    for messages in receiver.connections:
-        assert len(messages) == 1
-        assert _is_challenge(messages[0])
-    assert len(eureka.requests) == 2
-
-
-def test_e2e_group_attestation_unavailable(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    pki: TestPKI,
-) -> None:
-    """Test a group whose leader's port 8443 can't be reached fails closed."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    with (
-        refused_port() as port,
-        patch("pychromecast.device_auth.GROUP_ATTESTATION_PORT", port),
-        pytest.raises(ChromecastConnectionError),
-    ):
-        client.initialize_connection()
-
-    assert client.device_auth_result is not None
-    assert (
-        client.device_auth_result.status
-        is DeviceAuthStatus.GROUP_ATTESTATION_UNAVAILABLE
-    )
-    receiver.wait_idle()
-    assert len(receiver.connections[0]) == 1
+    assert client.device_auth_result.verified
+    assert not client.device_auth_result.uuid_checked
+    assert client.device_auth_result.tls_cert_cn == str(OTHER_UUID)
 
 
 @pytest.mark.usefixtures("fake_tls")
@@ -1138,7 +962,7 @@ def test_final_error_carries_result(
     client = make_client()
     result = _failure(DeviceAuthStatus.CHAIN_UNTRUSTED)
     with (
-        patch("pychromecast.socket_client.authenticate_endpoint", return_value=result),
+        patch("pychromecast.socket_client.authenticate", return_value=result),
         pytest.raises(DeviceAuthenticationError) as err,
     ):
         client.initialize_connection()
@@ -1158,7 +982,7 @@ def test_auth_result_reset_per_attempt(
             side_effect=[MagicMock(), ConnectionRefusedError("refused")],
         ),
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             return_value=_failure(DeviceAuthStatus.CHAIN_UNTRUSTED),
         ),
         pytest.raises(ChromecastConnectionError) as err,
@@ -1171,10 +995,9 @@ def test_auth_result_reset_per_attempt(
 def test_e2e_group_not_genuine(
     make_client: Callable[..., SocketClient],
     receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
     pki: TestPKI,
 ) -> None:
-    """Test a group endpoint which is not genuine never gets the eureka request."""
+    """Test a group endpoint which is not genuine is refused."""
     receiver = receiver_factory("wrong_sig", tls_cn=str(OTHER_UUID))
     client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
     with pytest.raises(DeviceAuthenticationError):
@@ -1184,8 +1007,6 @@ def test_e2e_group_not_genuine(
     assert client.device_auth_result.status is DeviceAuthStatus.SIGNATURE_INVALID
     receiver.wait_idle()
     assert len(receiver.connections[0]) == 1
-    default_eureka.wait_idle()
-    assert default_eureka.handlers == []
 
 
 # Copilot review of PR 1333
@@ -1201,9 +1022,7 @@ def test_setup_failure_after_auth_is_not_auth_failure(
     """Test a failure after DISABLED or VERIFIED ends with the generic error."""
     client = make_client(auth_enabled=auth_enabled)
     with (
-        patch(
-            "pychromecast.socket_client.authenticate_endpoint", return_value=VERIFIED
-        ),
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
         patch.object(
             client.selector, "register", side_effect=OSError("register failed")
         ),
@@ -1216,148 +1035,6 @@ def test_setup_failure_after_auth_is_not_auth_failure(
     assert len(errors) == 1
     assert "Failed to connect. No retries." in errors[0]
     assert "device authentication failed" not in errors[0]
-
-
-@pytest.mark.usefixtures("fake_tls")
-def test_group_network_failure_then_wrong_identity_logging(
-    make_client: Callable[..., SocketClient],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test a group which refuses connections, then a genuine non-leader answers.
-
-    The first network failure is logged at info level, the first authentication
-    failure as a warning, both are logged at debug level after that.
-    """
-    client = make_client(cast_type="group", tries=6)
-    client.retry_wait = 0
-    calls = [0]
-
-    def connect(*_args: Any, **_kwargs: Any) -> Any:
-        calls[0] += 1
-        if calls[0] <= 3:
-            raise ConnectionRefusedError("refused")
-        return MagicMock()
-
-    not_led = DeviceAuthResult(
-        DeviceAuthStatus.GROUP_NOT_LED, "not the leader", tls_cert_cn=str(OTHER_UUID)
-    )
-    with (
-        patch("pychromecast.controllers.receiver.ReceiverController.update_status"),
-        patch("pychromecast.controllers.heartbeat.HeartbeatController.ping"),
-        patch("socket.create_connection", side_effect=connect),
-        patch("pychromecast.socket_client.authenticate_endpoint", return_value=not_led),
-        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-        pytest.raises(ChromecastConnectionError),
-    ):
-        client.initialize_connection()
-    identity_levels = [
-        r.levelno for r in caplog.records if WRONG_IDENTITY_TEXT in r.getMessage()
-    ]
-    assert identity_levels == [logging.WARNING, logging.DEBUG, logging.DEBUG]
-    assert _retry_levels(caplog, "Failed to connect to service") == [
-        logging.INFO,
-        logging.DEBUG,
-        logging.DEBUG,
-    ]
-
-
-class Forwarder:
-    """A plain TCP forwarder, like socat, which doesn't terminate TLS."""
-
-    def __init__(self, upstream_port: int) -> None:
-        self.upstream_port = upstream_port
-        self.server = socket.create_server(("127.0.0.1", 0))
-        self.server.settimeout(0.05)
-        self.port = self.server.getsockname()[1]
-        self._stop = threading.Event()
-        self._threads: list[threading.Thread] = []
-        self._sockets: list[socket.socket] = []
-        self._start(self._accept)
-
-    def _start(self, target: Callable[..., None], *args: Any) -> None:
-        thread = threading.Thread(target=target, args=args, daemon=True)
-        self._threads.append(thread)
-        thread.start()
-
-    def _pipe(self, source: socket.socket, target: socket.socket) -> None:
-        try:
-            while data := source.recv(65536):
-                target.sendall(data)
-        except OSError:
-            pass
-        finally:
-            for sock in (source, target):
-                try:
-                    sock.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
-
-    def _accept(self) -> None:
-        while not self._stop.is_set():
-            try:
-                conn, _ = self.server.accept()
-            except TimeoutError:
-                continue
-            except OSError:
-                return
-            conn.settimeout(None)
-            upstream = socket.create_connection(("127.0.0.1", self.upstream_port))
-            self._sockets += [conn, upstream]
-            self._start(self._pipe, conn, upstream)
-            self._start(self._pipe, upstream, conn)
-
-    def close(self) -> None:
-        """Stop forwarding."""
-        self._stop.set()
-        self.server.close()
-        for sock in self._sockets:
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-        for thread in self._threads:
-            thread.join(2)
-        for sock in self._sockets:
-            sock.close()
-
-
-def test_e2e_known_limitation_group_port_remap(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
-    pki: TestPKI,
-) -> None:
-    """Test a forwarder can redirect a group to another group of the same leader.
-
-    This documents a known limitation, see the README: neither the TLS
-    certificate nor the signature is specific to a port of the device, and the
-    port checked against eureka_info is the port as seen by the client. A
-    forwarder in front of group A's advertised port, which relays to group B's
-    port on the same genuine leader, is accepted as group A. Traffic stays end
-    to end with that leader. If this is ever fixed, this test is expected to
-    change.
-    """
-    group_b = receiver_factory(tls_cn=str(OTHER_UUID))
-    forwarder = Forwarder(group_b.port)
-    group_b_uuid = "11111111-2222-3333-4444-555555555555"
-    default_eureka.body = eureka_info(
-        [
-            # Group A, the expected one, on the port the client connects to
-            group_entry(forwarder.port),
-            group_entry(group_b.port, uuid=group_b_uuid, name="B"),
-        ]
-    )
-    client = _e2e_client(make_client, pki, forwarder.port, cast_type="group")
-    try:
-        client.initialize_connection()
-        assert client.device_auth_result is not None
-        assert client.device_auth_result.verified
-        assert client.device_auth_result.leader_uuid == OTHER_UUID
-        # The client talks to group B
-        _wait_for(lambda: len(group_b.connections[0]) >= 2)
-        assert group_b.connections[0][1].namespace == NS_CONNECTION
-    finally:
-        forwarder.close()
 
 
 # disconnect() while connecting
@@ -1411,7 +1088,7 @@ def test_run_cleans_up_after_failed_connect(
     recorder = StatusRecorder()
     client.register_connection_listener(recorder)
     with patch(
-        "pychromecast.socket_client.authenticate_endpoint",
+        "pychromecast.socket_client.authenticate",
         return_value=_failure(DeviceAuthStatus.CHAIN_UNTRUSTED),
     ):
         client.start()
@@ -1438,23 +1115,6 @@ def test_e2e_disconnect_during_challenge(
     assert _is_challenge(receiver.connections[0][0])
 
 
-def test_e2e_disconnect_during_group_attestation(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
-    pki: TestPKI,
-) -> None:
-    """Test disconnect() while the group leader's eureka_info is fetched."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    default_eureka.body = eureka_info([group_entry(receiver.port)])
-    default_eureka.mode = "slow"
-    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    _disconnect_while_connecting(client, lambda: bool(default_eureka.requests))
-    receiver.wait_idle()
-    assert len(receiver.connections[0]) == 1
-    assert _is_challenge(receiver.connections[0][0])
-
-
 def test_e2e_disconnect_during_handshake_opted_out(
     make_client: Callable[..., SocketClient],
     pki: TestPKI,
@@ -1471,32 +1131,6 @@ def test_e2e_disconnect_during_handshake_opted_out(
         receiver.close()
 
 
-def test_e2e_group_without_multizone_is_wrong_identity(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
-    pki: TestPKI,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test a genuine device without group information is a wrong identity."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    default_eureka.body = {"name": "no multizone"}
-    client = _e2e_client(make_client, pki, receiver.port, cast_type="group")
-    with (
-        caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
-        pytest.raises(DeviceAuthenticationError),
-    ):
-        client.initialize_connection()
-    result = client.device_auth_result
-    assert result is not None
-    assert result.status is DeviceAuthStatus.GROUP_NOT_LED
-    assert result.failure_class is DeviceAuthFailureClass.WRONG_IDENTITY
-    # The first authentication failure is warned about
-    assert _retry_levels(caplog, WRONG_IDENTITY_TEXT) == [logging.WARNING]
-    receiver.wait_idle()
-    assert len(receiver.connections[0]) == 1
-
-
 @pytest.mark.usefixtures("fake_tls")
 def test_run_stopped_right_after_connecting(
     make_client: Callable[..., SocketClient],
@@ -1506,9 +1140,7 @@ def test_run_stopped_right_after_connecting(
     recorder = StatusRecorder()
     client.register_connection_listener(recorder)
     with (
-        patch(
-            "pychromecast.socket_client.authenticate_endpoint", return_value=VERIFIED
-        ),
+        patch("pychromecast.socket_client.authenticate", return_value=VERIFIED),
         patch.object(
             client.receiver_controller,
             "update_status",
@@ -1518,35 +1150,6 @@ def test_run_stopped_right_after_connecting(
         client.run()
     assert client.socket is None
     assert recorder.names[-1] == CONNECTION_STATUS_DISCONNECTED
-
-
-# The device's eureka_info is fetched from its address as connected
-
-
-def test_e2e_group_attested_at_connected_address(
-    make_client: Callable[..., SocketClient],
-    receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
-    pki: TestPKI,
-) -> None:
-    """Test a group service with a host name is attested at the address used."""
-    receiver = receiver_factory(tls_cn=str(OTHER_UUID))
-    default_eureka.body = eureka_info([group_entry(receiver.port)])
-    client = _e2e_client(
-        make_client,
-        pki,
-        receiver.port,
-        cast_type="group",
-        services={HostServiceInfo("localhost", receiver.port)},
-    )
-    with patch(
-        "pychromecast.device_auth.verify_group_leader",
-        wraps=device_auth.verify_group_leader,
-    ) as verify_group:
-        client.initialize_connection()
-    assert client.device_auth_result is not None
-    assert client.device_auth_result.verified
-    assert verify_group.call_args.args[:2] == ("127.0.0.1", receiver.port)
 
 
 # The first authentication failure is warned about, whatever its class
@@ -1572,7 +1175,7 @@ def test_first_auth_failure_warns(
     client.retry_wait = 0
     with (
         patch(
-            "pychromecast.socket_client.authenticate_endpoint",
+            "pychromecast.socket_client.authenticate",
             side_effect=[_failure(status) for status in statuses],
         ),
         caplog.at_level(logging.DEBUG, logger="pychromecast.socket_client"),
@@ -1595,18 +1198,21 @@ def test_first_auth_failure_warns(
 
 
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
-@pytest.mark.parametrize(("cast_type", "is_group"), [("cast", False), ("group", True)])
-def test_is_group_passed(
-    make_client: Callable[..., SocketClient], cast_type: str, is_group: bool
+@pytest.mark.parametrize(
+    ("cast_type", "expected_uuid"), [("cast", TEST_UUID), ("group", None)]
+)
+def test_group_uuid_not_checked(
+    make_client: Callable[..., SocketClient],
+    cast_type: str,
+    expected_uuid: UUID | None,
 ) -> None:
-    """Test the endpoint is authenticated as a group if it's a group."""
+    """Test a group is only checked to be served by a genuine device."""
     client = make_client(cast_type=cast_type)
     with patch(
-        "pychromecast.socket_client.authenticate_endpoint", return_value=VERIFIED
+        "pychromecast.socket_client.authenticate", return_value=VERIFIED
     ) as auth:
         client.initialize_connection()
-    assert auth.call_args.kwargs["is_group"] is is_group
-    assert auth.call_args.kwargs["expected_uuid"] == TEST_UUID
+    assert auth.call_args.kwargs["expected_uuid"] == expected_uuid
 
 
 @pytest.mark.usefixtures("connect_patches", "fake_tls")
@@ -1640,7 +1246,6 @@ def test_network_failure_logging(
 def test_e2e_device_on_its_group_port_accepted(
     make_client: Callable[..., SocketClient],
     receiver_factory: Callable[..., FakeReceiver],
-    default_eureka: EurekaServer,
     pki: TestPKI,
 ) -> None:
     """Test a device presenting its UUID is accepted on a port of a group it leads.
@@ -1649,11 +1254,8 @@ def test_e2e_device_on_its_group_port_accepted(
     point a device at the port of a group the device leads.
     """
     receiver = receiver_factory()
-    default_eureka.body = eureka_info([group_entry(receiver.port)])
     client = _e2e_client(make_client, pki, receiver.port)
     client.initialize_connection()
     assert client.is_connected
     assert client.device_auth_result is not None
     assert client.device_auth_result.uuid_checked
-    default_eureka.wait_idle()
-    assert default_eureka.handlers == []

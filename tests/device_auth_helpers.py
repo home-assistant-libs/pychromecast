@@ -1,18 +1,14 @@
 """Helpers for the Cast device authentication tests: a test PKI and fake servers."""
 
-from collections.abc import Generator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import ipaddress
-import json
 from pathlib import Path
 import socket
 import ssl
 import threading
 import time
 from struct import pack
-from typing import Any
 from uuid import UUID
 
 from cryptography import x509
@@ -452,101 +448,6 @@ class TLSServer:
             handler.join(2)
 
 
-def eureka_info(
-    groups: list[dict[str, Any]] | None = None,
-    dynamic_groups: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Return eureka_info with multizone information."""
-    return {
-        "name": "Living room",
-        "multizone": {
-            "groups": groups or [],
-            "dynamic_groups": dynamic_groups or [],
-        },
-    }
-
-
-class EurekaServer(TLSServer):
-    """A fake HTTPS eureka_info endpoint of a cast device.
-
-    Like the devices, it keeps the connection open after responding.
-
-    Modes: respond; close, after the request; silent, never responding; slow,
-    the head and the body each after 0.4 s; ip_host, respond with 403 unless
-    the Host header is an IP address, like the devices.
-    """
-
-    def __init__(
-        self,
-        tmp_path: Path,
-        cert: x509.Certificate,
-        key: rsa.RSAPrivateKey,
-        *,
-        body: Any = None,
-        status: int = 200,
-        mode: str = "respond",
-        host: str = "127.0.0.1",
-    ) -> None:
-        self.body = eureka_info() if body is None else body
-        self.status = status
-        self.mode = mode
-        # The request lines and the headers received
-        self.requests: list[bytes] = []
-        self.headers: list[dict[str, str]] = []
-        super().__init__(tmp_path, "eureka", cert, key, host)
-
-    def _recv(self, tls: ssl.SSLSocket) -> bytes | None:
-        """Receive data, None when the connection is closed or stopping."""
-        while not self.stop.is_set():
-            try:
-                return tls.recv(65536)
-            except TimeoutError:
-                continue
-        return None
-
-    def _respond(self, tls: ssl.SSLSocket, headers: dict[str, str]) -> None:
-        """Send the response."""
-        status = self.status
-        if self.mode == "ip_host" and not _is_ip_address(headers.get("Host", "")):
-            status = 403
-        if isinstance(self.body, bytes):
-            body = self.body
-        else:
-            body = json.dumps(self.body).encode()
-        head = (
-            f"HTTP/1.1 {status} Status\r\n"
-            "Content-Type: application/json\r\n"
-            f"Content-Length: {len(body)}\r\n\r\n".encode()
-        )
-        if self.mode == "slow":
-            # Each part arrives in time on its own, not both together
-            time.sleep(0.4)
-            tls.sendall(head)
-            time.sleep(0.4)
-            tls.sendall(body)
-        else:
-            tls.sendall(head + body)
-
-    def handle(self, tls: ssl.SSLSocket) -> None:
-        data = b""
-        while b"\r\n\r\n" not in data:
-            chunk = self._recv(tls)
-            if not chunk:
-                return
-            data += chunk
-        lines = data.split(b"\r\n\r\n", 1)[0].decode().split("\r\n")
-        self.requests.append(lines[0].encode())
-        headers = dict(line.split(": ", 1) for line in lines[1:])
-        self.headers.append(headers)
-        if self.mode == "close":
-            return
-        if self.mode != "silent":
-            self._respond(tls, headers)
-        # Keep the connection open until the client closes it
-        while self._recv(tls):
-            pass
-
-
 def _is_ip_address(host: str) -> bool:
     """Return True if a Host header value, without the port, is an IP address."""
     host = host.rsplit(":", 1)[0].strip("[]")
@@ -561,36 +462,6 @@ def frame(message: CastMessage) -> bytes:
     """Return a message framed like on the wire."""
     payload = message.SerializeToString()
     return pack(">I", len(payload)) + payload
-
-
-def group_entry(port: int | None, **kwargs: Any) -> dict[str, Any]:
-    """Return an eureka_info group entry for TEST_UUID led by the device.
-
-    Keys set to None are left out.
-    """
-    entry: dict[str, Any] = {
-        "uuid": str(TEST_UUID),
-        "name": "Ground floor",
-        "elected_leader": "self",
-        "leader": "",
-        "cast_port": port,
-    }
-    entry.update(kwargs)
-    return {key: value for key, value in entry.items() if value is not None}
-
-
-@contextmanager
-def refused_port() -> Generator[int]:
-    """Return a port on localhost which refuses connections.
-
-    The port is bound but not listening, so it can't be reused meanwhile.
-    """
-    sock = socket.socket()
-    try:
-        sock.bind(("127.0.0.1", 0))
-        yield sock.getsockname()[1]
-    finally:
-        sock.close()
 
 
 # A real device certificate chain, for tests against the bundled roots. It is

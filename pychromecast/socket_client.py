@@ -42,7 +42,7 @@ from .device_auth import (
     DeviceAuthResult,
     DeviceAuthSettings,
     DeviceAuthStatus,
-    authenticate_endpoint,
+    authenticate,
 )
 from .dial import get_host_from_service
 from .error import (
@@ -79,8 +79,7 @@ CONNECTION_STATUS_FAILED_RESOLVE = "FAILED_RESOLVE"
 # in ConnectionStatus.device_auth. The connection is retried like after a
 # network failure. Consumers should apply a grace period before surfacing a
 # failure of class DeviceAuthFailureClass.WRONG_IDENTITY, it's expected for a
-# while when another device answers at a stale address, or after a group leader
-# change.
+# while when another device answers at a stale address.
 CONNECTION_STATUS_FAILED_AUTH = "FAILED_AUTH"
 # The socket connection was lost and needs to be retried
 CONNECTION_STATUS_LOST = "LOST"
@@ -520,8 +519,8 @@ class SocketClient(threading.Thread, CastStatusListener):
             expected = f"{self.fn} ({expected_uuid})" if self.fn else str(expected_uuid)
             log_fun(
                 "The Cast device at %s:%s is genuine, but its certificate identifies "
-                "it as %s, not %s: %s. Another device may be using its old address, "
-                "or a group leader may have changed; retrying in %.1fs",
+                "it as %s, not %s: %s. Another device may be using its old address; "
+                "retrying in %.1fs",
                 self.host,
                 self.port,
                 result.tls_cert_cn,
@@ -560,20 +559,17 @@ class SocketClient(threading.Thread, CastStatusListener):
             return DeviceAuthResult(
                 DeviceAuthStatus.DISABLED, "device authentication disabled"
             )
-        result = authenticate_endpoint(
+        # A group is served by its current leader, which authenticates as
+        # itself, so only check that a genuine device serves it
+        is_group = self.cast_type == CAST_TYPE_GROUP
+        result = authenticate(
             tls_socket,
-            expected_uuid=self.device_auth.expected_uuid,
-            is_group=self.cast_type == CAST_TYPE_GROUP,
+            expected_uuid=None if is_group else self.device_auth.expected_uuid,
             timeout=min(self.timeout, DEVICE_AUTH_TIMEOUT),
         )
         if not result.verified:
             raise DeviceAuthenticationError(result)
-        if result.leader_uuid is not None:
-            identity = f", the group leader {result.leader_uuid}"
-        elif result.uuid_checked:
-            identity = ""
-        else:
-            identity = " (UUID not checked)"
+        identity = "" if result.uuid_checked else " (UUID not checked)"
         self.logger.debug(
             "Device authenticated: %s via %s%s",
             result.device_cert_subject,

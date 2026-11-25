@@ -182,27 +182,15 @@ is reached, see the limitations below.
 
 PyChromecast also checks that the common name of the device's TLS certificate
 is the UUID the device was discovered with. Because the signature covers the
-TLS certificate, a genuine device can't claim another device's UUID. This
-applies to every endpoint, including endpoints discovered as a cast group. A
-device presenting the expected UUID is accepted on any port.
+TLS certificate, a genuine device can't claim another device's UUID. A device
+presenting the expected UUID is accepted on any port.
 
-A cast group is served by its leader, which presents its own TLS certificate.
-When the certificate of a group endpoint names another UUID, PyChromecast
-checks that the device leads the group: it fetches the device's
-``eureka_info`` over HTTPS on port 8443, where the device presents its device
-certificate. That certificate must be the one which just passed device
-authentication, so the answer comes from the same genuine device. The device
-must list the group as led by itself, on the port PyChromecast connected to.
-That is the port as seen by PyChromecast; it does not prove which of the
-device's ports a forwarder relayed the connection to.
-Dynamic groups, and reportedly newer firmware, don't report the group's port,
-then only the group and its leadership are checked. If port 8443 of the leader
-can't be reached, the group fails authentication and the connection is
-retried. The check runs on every connect and reconnect, so a group follows
-leader changes. The challenge and the group check share one timeout.
+A cast group is served by its current leader, which authenticates as itself:
+nothing it sends names the group. A cast group is therefore only checked to be
+served by a genuine cast device, not by which one.
 
-Nothing but the challenge, and where needed the ``eureka_info`` request, is
-sent on a connection to a device which fails authentication. Unauthenticated
+Nothing but the challenge is sent on a connection to a device which fails
+authentication. Unauthenticated
 metadata requests made outside the cast connection, like the ``eureka_info``
 request which looks up a device's cast type when it isn't known, for example
 for ``get_chromecast_from_host``, or discovery of ``known_hosts``, may still
@@ -224,14 +212,13 @@ change between releases.
 
 A failure describes whoever answered at the device's address, which can
 change: for example after an IP address change another genuine device may
-answer for a while, and a group leader change takes a moment to be picked up
-from mDNS. Such failures are of class
+answer for a while. Such failures are of class
 ``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, and consumers should
 apply a grace period before surfacing them. A failure of class ``CLOCK`` comes
 from a genuine device whose certificates are not valid at the current time:
 the system clock is wrong, or the device needs a firmware update. A failure of
-class ``TRANSIENT`` means there was no usable answer to the challenge, or a
-group check couldn't be made. The first authentication failure of a connection
+class ``TRANSIENT`` means there was no usable answer to the challenge. The first
+authentication failure of a connection
 attempt is logged as a warning, later ones at debug level.
 
 Unofficial receivers, such as receivers emulating a cast device, fail
@@ -244,13 +231,13 @@ controllers which send credentials, such as ``HomeAssistantController`` or
 
 Limitations: the certificate revocation list sent by the device is not
 checked, and devices are not pinned. A rooted genuine device can still pass
-authentication for any UUID. For groups, the check relies on the leader's
-genuine firmware: an attacker able to make a genuine device lead a group with
-the UUID of the victim's group would pass it. An attacker who can spoof mDNS
-can point a device at the port of a group the device leads, and an attacker
-who can spoof mDNS or ARP and forward TCP can redirect a connection to another
-endpoint of the same genuine device: its port 8009, or another group it leads.
-Traffic and credentials stay end to end with that genuine device.
+authentication for any UUID. A cast group is only checked to be served by a
+genuine device, so an attacker who can spoof mDNS or ARP can redirect a group
+connection to any genuine device they own. An attacker who can spoof mDNS can
+point a device at the port of a group the device leads, and an attacker who can
+also forward TCP can redirect a connection to another endpoint of the same
+genuine device. Traffic and credentials stay end to end with the genuine
+device which answers.
 
 Thanks
 ------
