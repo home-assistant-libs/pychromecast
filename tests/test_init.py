@@ -43,13 +43,6 @@ def test_chromecast_device_auth(kwargs: dict[str, Any], device_auth: bool) -> No
     ] == pychromecast.DeviceAuthSettings(enabled=device_auth, expected_uuid=TEST_UUID)
 
 
-def test_chromecast_device_auth_result() -> None:
-    """Test Chromecast exposes the socket client's device auth result."""
-    with patch("pychromecast.socket_client.SocketClient") as socket_client:
-        cast = pychromecast.Chromecast(_cast_info())
-    assert cast.device_auth_result is socket_client.return_value.device_auth_result
-
-
 @pytest.mark.parametrize("device_auth", [True, False])
 def test_get_chromecast_from_cast_info(device_auth: bool) -> None:
     """Test get_chromecast_from_cast_info passes device_auth."""

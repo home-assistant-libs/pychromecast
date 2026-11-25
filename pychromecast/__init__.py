@@ -29,12 +29,7 @@ from .dial import get_cast_type
 from .const import CAST_TYPE_CHROMECAST, REQUEST_TIMEOUT
 from .controllers.media import STREAM_TYPE_BUFFERED, MediaController  # noqa: F401
 from .controllers.receiver import CastStatus, CastStatusListener
-from .device_auth import (  # noqa: F401
-    DeviceAuthFailureClass,
-    DeviceAuthResult,
-    DeviceAuthSettings,
-    DeviceAuthStatus,
-)
+from .device_auth import DeviceAuthSettings
 from .error import NotConnected, RequestTimeout
 from .models import CastInfo, HostServiceInfo, MDNSServiceInfo
 from .response_handler import WaitResponse
@@ -415,11 +410,6 @@ class Chromecast(CastStatusListener):
                 and not self.ignore_cec
             )
         )
-
-    @property
-    def device_auth_result(self) -> DeviceAuthResult | None:
-        """Returns the device authentication result of the last connection attempt."""
-        return self.socket_client.device_auth_result
 
     @property
     def uuid(self) -> UUID:

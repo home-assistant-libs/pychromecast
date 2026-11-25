@@ -200,20 +200,19 @@ When a device fails authentication, the connection status ``FAILED_AUTH``
 (``pychromecast.socket_client.CONNECTION_STATUS_FAILED_AUTH``) is reported
 rather than ``FAILED``, so listeners treating only ``FAILED`` as a failure
 need updating. The reason is in ``ConnectionStatus.device_auth``, a
-``pychromecast.DeviceAuthResult``, and the connection is retried with the
-same backoff as network failures. If no retries are left,
+``pychromecast.device_auth.DeviceAuthResult``, and the connection is retried
+with the same backoff as network failures. If no retries are left,
 ``pychromecast.DeviceAuthenticationError``, a ``ChromecastConnectionError``
-carrying the result, is raised. The result of the last connection attempt is
-available as ``Chromecast.device_auth_result``. ``DeviceAuthResult.verified``
-and ``DeviceAuthResult.failure_class``, a
-``pychromecast.DeviceAuthFailureClass``, are the stable interface. The
+carrying the result, is raised. ``DeviceAuthResult.verified`` and
+``DeviceAuthResult.failure_class``, a
+``pychromecast.device_auth.DeviceAuthFailureClass``, are the stable interface. The
 ``DeviceAuthStatus`` values and the ``detail`` texts are diagnostics, which may
 change between releases.
 
 A failure describes whoever answered at the device's address, which can
 change: for example after an IP address change another genuine device may
 answer for a while. Such failures are of class
-``pychromecast.DeviceAuthFailureClass.WRONG_IDENTITY``, and consumers should
+``pychromecast.device_auth.DeviceAuthFailureClass.WRONG_IDENTITY``, and consumers should
 apply a grace period before surfacing them. A failure of class ``CLOCK`` comes
 from a genuine device whose certificates are not valid at the current time:
 the system clock is wrong, or the device needs a firmware update. A failure of
